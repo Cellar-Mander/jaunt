@@ -21,6 +21,7 @@ public class ChatCaptureTests
     {
         // Pins what leaves the game: a new field must be added here on purpose. The sender's name,
         // content ID and home world must never appear.
+        // revert-check: not revert-sensitive (pins the field set against future additions)
         using var json = JsonDocument.Parse(JsonLinesWriter<CapturedChatLine>.ToJsonLine(Line()));
 
         var names = json.RootElement.EnumerateObject().Select(p => p.Name).Order().ToArray();
