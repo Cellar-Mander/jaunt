@@ -1,0 +1,22 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # The release workflow dispatches this for its repo.json PR, which can't trigger it otherwise
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read  # Buildingway.Build and Buildingway.Tools from GitHub Packages
+
+jobs:
+
+  # Only the game-independent projects; the plugin itself needs a Dalamud install to build.
+  # Its revert-check job informs only: keep it out of required checks.
+  test:
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/test.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0
+    with:
+      test-project: Jaunt.Core.Tests

@@ -1,0 +1,20 @@
+name: Changelog
+
+# A PR that changes the plugin's code should say what changed for users in CHANGELOG.md.
+# Informs only: keep this job out of required checks. Label a PR no-changelog when the change
+# isn't user-facing; Dependabot's PRs are skipped, as package bumps don't change behaviour users see.
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, labeled, unlabeled ]
+
+permissions:
+  contents: read
+
+jobs:
+
+  changelog:
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/changelog.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0
+    with:
+      # The trailing slashes keep Jaunt.Core.Tests out
+      paths: Jaunt/ Jaunt.Core/

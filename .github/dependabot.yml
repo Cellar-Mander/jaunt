@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # NuGet packages, including the packages.lock.json files
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait before proposing newly published versions
+    cooldown:
+      default-days: 7
+    ignore:
+      # The SDK major version is the Dalamud API level; it must match the installed Dalamud, so bump it by hand
+      - dependency-name: Dalamud.NET.Sdk
+        update-types: ["version-update:semver-major"]
+    groups:
+      nuget:
+        patterns: ["*"]
+
+  # Action versions used in .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

@@ -1,0 +1,28 @@
+name: Mutation
+
+# Would the Core tests catch plausible faults? Stryker.NET mutates Jaunt.Core and reruns them.
+# Informs only: no score threshold, and keep this workflow out of required checks.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  # PRs only test mutants in code or tests changed against the base branch. The "mutation" label asks
+  # for a full run instead, e.g. when tests were deleted.
+  pull_request:
+    types: [ opened, synchronize, reopened, labeled ]
+    paths:
+      - 'Jaunt.Core/**'
+      - 'Jaunt.Core.Tests/**'
+      - '.github/workflows/mutation.yml'
+
+permissions:
+  contents: read
+  packages: read  # Buildingway.Build and Buildingway.Tools from GitHub Packages
+
+jobs:
+
+  # Settings live in Jaunt.Core.Tests/stryker-config.json
+  mutation:
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/mutation.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0
+    with:
+      test-project: Jaunt.Core.Tests

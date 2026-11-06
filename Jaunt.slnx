@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Jaunt.Core.Tests/Jaunt.Core.Tests.csproj" />
+  <Project Path="Jaunt.Core/Jaunt.Core.csproj" />
+  <Project Path="Jaunt/Jaunt.csproj">
+    <Platform Project="x64" />
+  </Project>
+</Solution>

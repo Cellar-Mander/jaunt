@@ -1,0 +1,20 @@
+name: Workflow lint
+
+# actionlint and zizmor; accepted zizmor findings live in the shared workflow. See "Checking
+# workflows" in CONTRIBUTING.md.
+# No path filter: a required check that a filter skips never reports, which blocks the PR.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # The release workflow dispatches this for its repo.json PR, which can't trigger it otherwise
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  lint:
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/workflow-lint.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0

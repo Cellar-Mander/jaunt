@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <Sdk Name="Buildingway.Build" />
+
+  <PropertyGroup>
+    <Version>0.0.0.1</Version>
+    <!-- Manifest fields (see https://github.com/goatcorp/DalamudPackager/blob/827d88dc/DalamudPackager/DalamudPackager.cs#L420) -->
+    <Author>Cellar Mander</Author>
+    <Name>Jaunt</Name>
+    <Punchline>Find venues that are open now and travel to them from one list.</Punchline>
+    <Description>Lists venues advertised in Party Finder and other sources, with their address, opening times and website, so you can copy the address or travel there from the list.</Description>
+    <RepoUrl>https://github.com/Cellar-Mander/jaunt</RepoUrl>
+    <!-- At the release tag: repo installs never read images/icon.png from the package -->
+    <IconUrl>https://raw.githubusercontent.com/Cellar-Mander/jaunt/v$(Version)/Jaunt/images/icon.png</IconUrl>
+    <Tags>venues;roleplay;party finder;travel;housing</Tags>
+    <!-- Release builds pass the version's CHANGELOG section as plain text (release.yml); the installer shows it under Changelogs -->
+    <Changelog Condition="'$(ChangelogFile)' != ''">$([System.IO.File]::ReadAllText('$(ChangelogFile)').Trim())</Changelog>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Add a square PNG (at least 64x64) here before the first release -->
+    <Content Include="images\icon.png" CopyToOutputDirectory="PreserveNewest" Condition="Exists('images\icon.png')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Jaunt.Core\Jaunt.Core.csproj" />
+  </ItemGroup>
+</Project>

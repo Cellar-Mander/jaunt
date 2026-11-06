@@ -1,0 +1,45 @@
+name: Release
+
+# See "Releasing" in CONTRIBUTING.md for the whole process, and the comments in buildingway-ci's
+# release.yml for what each step guards against.
+# Run this workflow on main (Actions > Release > Run workflow, or `dotnet buildingway release
+# publish`) to publish main's <Version>. The stable channel tags v<Version>; the testing channel tags
+# v<Version>-rc1, a prerelease offered only to installs that receive testing versions. Each
+# testing build needs its own <Version>, since Dalamud only updates to a higher one.
+# Pushing a tag by hand publishes that commit directly: v0.1.0.0 as stable, v0.1.0.0-rc1 as testing.
+# Main only takes PRs, so a release pushes repo.json to the release/repo-json branch and opens a PR
+# (or updates the open one); installs see the release once you merge it. This needs "Allow GitHub
+# Actions to create and approve pull requests" on in Settings > Actions > General.
+# A test tag, e.g. v0.1.0.0-test1, makes a prerelease and pushes repo.json to the release-test
+# branch instead of main; delete both afterwards:
+#   gh release delete v0.1.0.0-test1 --cleanup-tag --yes && git push origin --delete release-test
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Channel to publish main's <Version> to
+        type: choice
+        options: [ testing, stable ]
+        default: testing
+
+# One release at a time, so two runs can't race to update repo.json
+concurrency: release
+
+permissions: {}
+
+jobs:
+
+  release:
+    permissions:
+      actions: write        # dispatches the required checks on the repo.json PR
+      contents: write       # pushes the tag, the release and the repo.json branch
+      packages: read        # Buildingway.Build from GitHub Packages for the build
+      pull-requests: write  # opens the repo.json PR
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/release.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0
+    with:
+      plugin: Jaunt
+      channel: ${{ inputs.channel }}
+      # Every required check's workflow; each accepts workflow_dispatch
+      checks: test.yml workflow-lint.yml pr-build.yml

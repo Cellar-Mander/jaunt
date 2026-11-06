@@ -1,0 +1,19 @@
+name: PR build
+
+on:
+  pull_request:
+    branches: [ main ]
+  # The release workflow dispatches this for its repo.json PR, which can't trigger it otherwise
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read  # Buildingway.Build from GitHub Packages
+
+jobs:
+
+  # Builds against the Dalamud pinned in .github/dalamud.env
+  pr-build:
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/pr-build.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0
+    with:
+      plugin: Jaunt
