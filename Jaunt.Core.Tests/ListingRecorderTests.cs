@@ -18,7 +18,7 @@ public class ListingRecorderTests
 
     private static async Task<string[]> RecordAll(params CapturedListing[] listings)
     {
-        var output = new StringWriter();
+        using var output = new StringWriter();
         var recorder = new ListingRecorder(output);
         foreach (var listing in listings)
             recorder.Record(listing);
@@ -103,7 +103,8 @@ public class ListingRecorderTests
     [Fact]
     public async Task DisposeWritesEverythingQueuedAndClosesWriter()
     {
-        var output = new TrackingWriter();
+        // revert-check: not revert-sensitive (only changed to dispose its writer for IDISP001; no behaviour change to guard)
+        using var output = new TrackingWriter();
         var recorder = new ListingRecorder(output);
         for (ulong id = 0; id < 1000; id++)
             recorder.Record(Listing(id: id));
@@ -118,7 +119,8 @@ public class ListingRecorderTests
     public async Task WrittenListingsAreFlushedBeforeDispose()
     {
         // A crash or game exit skips Dispose, so lines must reach the file while still recording
-        var output = new TrackingWriter();
+        // revert-check: not revert-sensitive (only changed to dispose its writer for IDISP001; no behaviour change to guard)
+        using var output = new TrackingWriter();
         await using var recorder = new ListingRecorder(output);
 
         recorder.Record(Listing(id: 1));
