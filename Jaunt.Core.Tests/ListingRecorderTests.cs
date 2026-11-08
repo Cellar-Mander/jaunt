@@ -103,6 +103,7 @@ public class ListingRecorderTests
     [Fact]
     public async Task DisposeWritesEverythingQueuedAndClosesWriter()
     {
+        // revert-check: not revert-sensitive (only changed to dispose its writer for IDISP001; no behaviour change to guard)
         using var output = new TrackingWriter();
         var recorder = new ListingRecorder(output);
         for (ulong id = 0; id < 1000; id++)
@@ -118,6 +119,7 @@ public class ListingRecorderTests
     public async Task WrittenListingsAreFlushedBeforeDispose()
     {
         // A crash or game exit skips Dispose, so lines must reach the file while still recording
+        // revert-check: not revert-sensitive (only changed to dispose its writer for IDISP001; no behaviour change to guard)
         using var output = new TrackingWriter();
         await using var recorder = new ListingRecorder(output);
 
