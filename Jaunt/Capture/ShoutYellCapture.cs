@@ -80,10 +80,11 @@ internal sealed class ShoutYellCapture : IDisposable
     {
         chatGui.ChatMessage -= OnChatMessage;
 
-        // Blocks unload briefly to write what's still queued; worth it for a dev-only capture
         try
         {
+#pragma warning disable VSTHRD002 // Blocks unload briefly to write what's still queued; worth it for a dev-only capture
             writer.DisposeAsync().AsTask().GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
         }
         catch (Exception e)
         {

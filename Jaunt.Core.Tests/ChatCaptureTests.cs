@@ -35,7 +35,7 @@ public class ChatCaptureTests
     public async Task RepeatedLinesAreAllWritten()
     {
         // Unlike PF listings, how often an ad is shouted is part of what the spike measures
-        var output = new StringWriter();
+        using var output = new StringWriter();
         var writer = new JsonLinesWriter<CapturedChatLine>(output);
         Assert.True(writer.TryWrite(Line()));
         Assert.True(writer.TryWrite(Line()));

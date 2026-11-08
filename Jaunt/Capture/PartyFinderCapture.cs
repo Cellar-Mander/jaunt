@@ -62,10 +62,11 @@ internal sealed class PartyFinderCapture : IDisposable
     {
         partyFinderGui.ReceiveListing -= OnReceiveListing;
 
-        // Blocks unload briefly to write what's still queued; worth it for a dev-only capture
         try
         {
+#pragma warning disable VSTHRD002 // Blocks unload briefly to write what's still queued; worth it for a dev-only capture
             recorder.DisposeAsync().AsTask().GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
         }
         catch (Exception e)
         {
