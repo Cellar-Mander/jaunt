@@ -37,16 +37,24 @@ were replaced in `text` and labels with invented ones of the same shape, and tho
 ```
 
 `text` is the ad as the game sends it, with its private-use glyphs. Labels describe what a reader of
-the rendered ad understands:
-- Boxed letters and digits (`U+E071`–`U+E08A`, `U+E08F`–`U+E098`) read as plain letters and digits.
-- Time glyphs read as words: `U+E0D1` ServerTimeEn = ST, `U+E06D`/`U+E06E` = AM/PM.
+the rendered ad understands. That reading of the glyphs is `Jaunt.Core.Text.PartyFinderText`, and
+`PartyFinderTextCorpusTests` checks every labelled name against it:
+- Boxed letters and digits read as plain letters and digits, including BoxedNumber10–31
+  (`U+E099`–`U+E0AE`) and the boxed E `U+E0B0`. A digit followed by a two-digit glyph is a time:
+  "7" then boxed 30 reads 7:30.
+- Some glyphs are letters inside a word and decoration elsewhere: Circle `U+E04A` and Buff `U+E05C`
+  as O, `U+E05F` (an x in a box) as X, and `U+E032` (a V-shaped chevron) as V. GlamouredDyed
+  `U+E04E` reads as +.
+- Time glyphs read as words: `U+E06D`/`U+E06E` = AM/PM, `U+E0D0`–`U+E0D2` = LT/ST/ET.
   Some ads use `U+E06B` (LevelDe, which looks like "St") for ST, and `U+E0D2` (EorzeaTimeEn) for
   US Eastern.
+- Other glyphs, stars, hearts, notes, arrows and bullets are decoration; ArrowDown `U+E035` is a
+  line break.
 
 | Field | Meaning |
 |---|---|
 | `kind` | `venue` (a venue or a night at one), `event` (a one-off not tied to a named venue), `housing` (a house to look round, no staffed opening), `shop`, `recruiting` (FC, staff, members), `other` |
-| `name` | `{raw, normalised}` or null. `raw` is the name as written, with boxed letters decoded. It is the span the ad marks as the name (brackets, quotes, boxed letters). Without such marks, it is the noun phrase, including a generic word written as part of it ("Cafe Canopy", "酒処桜い"). Event titles, DJ names and tags are not names. `normalised` is NFKC, case-folded, `&` read as "and", punctuation removed and a leading "the" dropped (so "LEATHER&LACE" matches FFXIV Venues' "Leather and Lace"). |
+| `name` | `{raw, normalised}` or null. `raw` is the name as written, with glyphs decoded as above. It is the span the ad marks as the name (brackets, quotes, boxed letters). Without such marks, it is the noun phrase, including a generic word written as part of it ("Cafe Canopy", "酒処桜い"). Event titles, DJ names and tags are not names. `normalised` is NFKC, case-folded, `&` read as "and", each punctuation mark turned into a space ("Warden's" → "warden s") and a leading "the" dropped (so "LEATHER&LACE" matches FFXIV Venues' "Leather and Lace"). |
 | `addresses[]` | `world`, `worldFrom`, `district`, `ward`, `plot`, `subdivision`, `apartment`, `room`. `world` is null when the text names none; `worldFrom` is then `listing` and the world is the one the ad is listed on (`listedOn`). `subdivision` is true or false only when the text says so. `room` is a private chamber or room inside a house; `apartment` is a room number in an apartment building. |
 | `times[]` | `now` (open now), `always` (24/7), `day` (`today`, `tomorrow`, `mon`–`sun` or an ISO date), `start`, `end` (24-hour `HH:MM`, as the ad means them; "8-12" in a venue ad is 20:00–00:00), `zone` (as written, e.g. `ST`, `EST`, `AEDT`; null when not stated, and the region default from `aca1be81` applies) |
 | `urls[]` | each URL exactly as it appears in `text`, including broken ones |

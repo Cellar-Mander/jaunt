@@ -11,11 +11,11 @@ import json
 import random
 import sys
 
-GLYPHS = {  # Dalamud SeIconChar, the ones that matter for reading venue ads
-    0xE031: "Clock", 0xE033: "ItemLevel", 0xE034: "Sprout", 0xE035: "ArrowDown", 0xE03A: "EurekaLevel",
+GLYPHS = {  # Dalamud SeIconChar, the ones that matter for reading venue ads; "?" = not in SeIconChar
+    0xE031: "Clock", 0xE032: "V-chevron?", 0xE033: "ItemLevel", 0xE034: "Sprout", 0xE035: "ArrowDown", 0xE03A: "EurekaLevel",
     0xE03C: "HQ", 0xE03E: "Dice", 0xE048: "Hyadelyn", 0xE049: "Gil", 0xE04A: "Circle", 0xE04B: "Square",
-    0xE04C: "Cross", 0xE04D: "Triangle", 0xE04E: "GlamouredDyed", 0xE05B: "Debuff", 0xE05C: "Buff",
-    0xE05D: "CrossWorld", 0xE06A: "Lv", 0xE06B: "St (LevelDe)", 0xE06C: "Nv (LevelFr)", 0xE06D: "AM",
+    0xE04C: "Cross", 0xE04D: "Triangle", 0xE04E: "GlamouredDyed (+)", 0xE05B: "Debuff", 0xE05C: "Buff",
+    0xE05D: "CrossWorld", 0xE05A: "Dots?", 0xE05F: "BoxedX?", 0xE06A: "Lv", 0xE06B: "St (LevelDe)", 0xE06C: "Nv (LevelFr)", 0xE06D: "AM",
     0xE06E: "PM", 0xE06F: "ArrowRight", 0xE0AF: "BoxedPlus", 0xE0C0: "BoxedStar",
     0xE0D0: "LT", 0xE0D1: "ST", 0xE0D2: "ET (Eorzea)",
 }
@@ -29,6 +29,10 @@ def boxed(o):
         return str(o - 0xE060)
     if 0xE08F <= o <= 0xE0AE:  # BoxedNumber0..31
         return str(o - 0xE08F)
+    if 0xE0E0 <= o <= 0xE0E9:  # BoxedOutlinedNumber0..9
+        return str(o - 0xE0E0)
+    if o == 0xE0B0:  # a boxed E, not in SeIconChar
+        return "E"
     return None
 
 
