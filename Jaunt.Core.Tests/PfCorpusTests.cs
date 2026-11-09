@@ -64,12 +64,8 @@ public partial class PfCorpusTests
                 yield return $"{id}: URL {url} is not in the text";
         }
 
-        // Optional until every entry is labelled (c6c85bbf lands in two PRs).
-        if (labels.TryGetProperty("people", out var people))
-        {
-            foreach (var problem in CheckPeople(id, text, people))
-                yield return problem;
-        }
+        foreach (var problem in CheckPeople(id, text, labels.GetProperty("people")))
+            yield return problem;
 
         foreach (var a in labels.GetProperty("addresses").EnumerateArray())
         {
