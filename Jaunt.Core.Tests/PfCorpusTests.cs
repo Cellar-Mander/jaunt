@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Tests;
 
@@ -12,6 +13,7 @@ public partial class PfCorpusTests
 {
     private static readonly string[] Kinds = ["venue", "event", "housing", "shop", "recruiting", "other"];
     private static readonly string[] Districts = ["Mist", "Lavender Beds", "Goblet", "Shirogane", "Empyreum"];
+    private static readonly string[] Roles = ["performer", "host", "unknown"];
 
     [GeneratedRegex(@"^([01]\d|2[0-3]):[0-5]\d$")]
     private static partial Regex HourMinute();
@@ -62,6 +64,9 @@ public partial class PfCorpusTests
                 yield return $"{id}: URL {url} is not in the text";
         }
 
+        foreach (var problem in CheckPeople(id, text, labels.GetProperty("people")))
+            yield return problem;
+
         foreach (var a in labels.GetProperty("addresses").EnumerateArray())
         {
             var fromText = a.GetProperty("world").ValueKind == JsonValueKind.String;
@@ -86,4 +91,33 @@ public partial class PfCorpusTests
             }
         }
     }
+
+    // Names are matched against the normalised text with spacing ignored, like
+    // PartyFinderTextCorpusTests does for venue names, so glyph-written names still count.
+    private static IEnumerable<string> CheckPeople(string? id, string text, JsonElement people)
+    {
+        var normalised = NoSpaces(PartyFinderText.Normalise(text).Text);
+
+        foreach (var person in people.EnumerateArray())
+        {
+            if (!Roles.Contains(person.GetProperty("role").GetString()))
+                yield return $"{id}: unknown role {person.GetProperty("role")}";
+
+            var name = person.GetProperty("name");
+            var twitch = person.GetProperty("twitch");
+            if (name.ValueKind != JsonValueKind.String && twitch.ValueKind != JsonValueKind.String)
+                yield return $"{id}: a person has neither a name nor a Twitch handle";
+
+            if (name.ValueKind == JsonValueKind.String
+                && !normalised.Contains(NoSpaces(PartyFinderText.Normalise(name.GetString()!).Text), StringComparison.OrdinalIgnoreCase))
+                yield return $"{id}: person \"{name}\" is not in the normalised text";
+
+            // The whole handle, so a truncated one ("0xsabrie" for "0xsabrieln") fails.
+            if (twitch.ValueKind == JsonValueKind.String
+                && !Regex.IsMatch(text, $@"twitch\.tv/{Regex.Escape(twitch.GetString()!)}(?![A-Za-z0-9_])", RegexOptions.IgnoreCase))
+                yield return $"{id}: no twitch.tv/{twitch} link in the text";
+        }
+    }
+
+    private static string NoSpaces(string s) => string.Concat(s.Where(c => !char.IsWhiteSpace(c)));
 }
