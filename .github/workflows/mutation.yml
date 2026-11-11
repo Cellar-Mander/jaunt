@@ -18,11 +18,12 @@ on:
 permissions:
   contents: read
   packages: read  # Buildingway.Build and Buildingway.Tools from GitHub Packages
+  actions: read   # kill-report reads the Tests run's revert-check verdicts
 
 jobs:
 
   # Settings live in Jaunt.Core.Tests/stryker-config.json
   mutation:
-    uses: Cellar-Mander/buildingway-ci/.github/workflows/mutation.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/mutation.yml@f9368131721c090fc548fb3f9200a0bc0339a11d # v0.6.0
     with:
       test-project: Jaunt.Core.Tests
