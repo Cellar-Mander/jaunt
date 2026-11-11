@@ -14,7 +14,7 @@ permissions:
 jobs:
 
   changelog:
-    uses: Cellar-Mander/buildingway-ci/.github/workflows/changelog.yml@0898a4c49caaae87443d8905c28841e52e10c381 # v0.5.0
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/changelog.yml@f9368131721c090fc548fb3f9200a0bc0339a11d # v0.6.0
     with:
       # The trailing slashes keep Jaunt.Core.Tests out
       paths: Jaunt/ Jaunt.Core/
