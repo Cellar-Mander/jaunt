@@ -17,4 +17,4 @@ permissions:
 jobs:
 
   lint:
-    uses: Cellar-Mander/buildingway-ci/.github/workflows/workflow-lint.yml@f9368131721c090fc548fb3f9200a0bc0339a11d # v0.6.0
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/workflow-lint.yml@2dc2514507e9a7a69c2cdd457483ce346095a244 # v0.7.0
