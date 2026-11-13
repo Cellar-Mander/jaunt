@@ -2,10 +2,12 @@ namespace Jaunt.Core.Text;
 
 /// <summary>
 /// Reads opening times from <see cref="PartyFinderText.Normalise">normalised</see> Party Finder ad
-/// text: single times and ranges, closing times, written time zones, and Japanese 時 and 〆 forms.
+/// text: 24/7, days, dates, single times and ranges, closing times, written time zones, and Japanese
+/// 時 and 〆 forms.
 /// </summary>
 /// <remarks>
-/// Works on tokens with no regex, so the cost stays linear in the ad's length. Bare hours from 1 to 11 with no AM or PM read as evening,
+/// Works on tokens in one pass each for dates, times and days, with no regex, so the cost stays
+/// linear in the ad's length. Bare hours from 1 to 11 with no AM or PM read as evening,
 /// as venue ads mean them ("8-12" is 20:00 to 00:00), except in ads with Japanese text, which use
 /// the 24-hour clock.
 /// </remarks>
@@ -17,21 +19,39 @@ public static partial class OpeningTimes
 
     /// <summary>Reads the openings in one ad.</summary>
     /// <param name="text">The ad's text after <see cref="PartyFinderText.Normalise"/>.</param>
-    public static IReadOnlyList<OpeningTime> Parse(string text)
+    /// <param name="seen">The date the ad was seen, which picks the year and reading of a date like 7/11.</param>
+    public static IReadOnlyList<OpeningTime> Parse(string text, DateOnly seen)
     {
         var tokens = Tokenise(text);
+        var used = new bool[tokens.Count];
         var twentyFourHour = tokens.Any(t => t.Kind == Kind.Cjk);
-        var spans = FindSpans(text, tokens);
+
+        var always = FindAlways(tokens, used);
+        var date = FindDate(tokens, used, seen);
+        var spans = FindSpans(text, tokens, used);
+        var (adDay, weekdays) = FindDays(text, tokens, spans);
 
         var result = new List<OpeningTime>();
+        if (always)
+            result.Add(new OpeningTime(false, true, OpeningDay.None, null, null, null, null, null));
+
         foreach (var span in spans.Where(s => s.Start is not null))
         {
+            var (day, weekday) = date is not null ? (OpeningDay.Date, (DayOfWeek?)null)
+                : weekdays.TryGetValue(span, out var w) ? (OpeningDay.Weekday, w)
+                : (adDay, null);
             var (start, end) = To24(span.Start!.Value, span.End, twentyFourHour);
-            result.Add(new OpeningTime(false, false, OpeningDay.None, null, null, start, end, span.Zone));
+            result.Add(new OpeningTime(false, false, day, weekday, date, start, end, span.Zone));
         }
 
         foreach (var span in spans.Where(s => s.Start is null))
-            result.Add(new OpeningTime(false, false, OpeningDay.None, null, null, null, Single(span.End!.Value, twentyFourHour), span.Zone));
+        {
+            var day = date is not null ? OpeningDay.Date : adDay;
+            result.Add(new OpeningTime(false, false, day, null, date, null, Single(span.End!.Value, twentyFourHour), span.Zone));
+        }
+
+        if (result.Count == 0 && (date is not null || adDay != OpeningDay.None))
+            result.Add(new OpeningTime(false, false, date is not null ? OpeningDay.Date : adDay, null, date, null, null, null));
 
         return result;
     }

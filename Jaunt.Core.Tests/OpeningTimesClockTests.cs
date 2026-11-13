@@ -5,7 +5,9 @@ namespace Jaunt.Core.Tests;
 /// <summary>Times, ranges, closing times and zones in <see cref="OpeningTimes.Parse"/>.</summary>
 public class OpeningTimesClockTests
 {
-    private static string P(string text) => OpeningTimesFormat.Describe(OpeningTimes.Parse(text));
+    private static readonly DateOnly Seen = new(2026, 11, 5);
+
+    private static string P(string text) => OpeningTimesFormat.Describe(OpeningTimes.Parse(text, Seen));
 
     [Theory]
     [InlineData("@ 9pm", "21:00-")]
