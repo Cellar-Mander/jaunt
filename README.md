@@ -16,7 +16,7 @@ Then find Jaunt in `/xlplugins` and install it.
 
 ## Using it
 
-`/jaunt` opens the settings.
+`/jaunt` or `/jaunt config` opens the settings: how often Jaunt fetches listings, how times and dates are shown, and the venues you have hidden. The plugin installer's settings button opens them too.
 
 ## Contributing
 

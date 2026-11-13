@@ -109,7 +109,9 @@ normalises it), in the order written. `WebLinksTests` checks every labelled corp
 
 ### Settings
 
-`RefreshPolicy` and `DisplayFormats` hold the rules behind the Settings window's controls.
+`ConfigurationBase` holds the settings; `Normalize` runs after every load. The window groups them
+in collapsible sections: Data, Display, Calendar (with the calendar feature), then Listings, all
+expanded until collapsed; which are expanded is saved too. Each change saves at once.
 
 - **Refresh cooldown** (`RefreshPolicy`), default 10 minutes, kept within 10 minutes to 24 hours.
   Opening the listing browser fetches each source unless that source was fetched within its
@@ -127,6 +129,7 @@ normalises it), in the order written. `WebLinksTests` checks every labelled corp
 - **Date format**: System, `Sat 14 Nov`, `Sat Nov 14` or `2026-11-14`, with English names. System
   is ISO when the locale writes the year first, month-day when it writes the month before the day,
   and day-month otherwise. Days are not zero-padded.
+- An unknown time or date format in a hand-edited config becomes System.
 
 ### Listing cache
 
@@ -137,14 +140,15 @@ sources is two listings), with its title, when it was last seen, whether it is a
 last fetch time, by source name; unknown names are dropped on load). An unreadable file is moved
 to `listings.json.bad` and the cache starts empty.
 
-- **Clear cached listings** removes every listing that is not favourited, visited or hidden and
-  says how many it removed.
+- **Clear cached listings** asks for confirmation, warning that rate-limited sources may not show
+  in the browser again for hours, then removes every listing that is not favourited, visited or
+  hidden and says how many it removed. Cancelling removes nothing.
 - **Expiry**: on load, a listing that is not favourited, visited or hidden is dropped once one
   calendar month has passed since it was last seen (last seen 14 Oct 20:00 → dropped from 14 Nov
   20:00). Marked recurring listings are kept however old. Marked one-offs expire the same way as
-  unmarked listings, since they can't reliably be matched to a later listing; the window Settings window
-  doesn't mention this. Clear still keeps marked one-offs.
-- **Hidden listings** are listed by title, case-insensitively.
+  unmarked listings, since they can't reliably be matched to a later listing; the window doesn't
+  mention this. Clear still keeps marked one-offs.
+- **Hidden venues** lists hidden listings by title, case-insensitively, each with an Un-hide button.
 
 ## Limits
 
@@ -154,4 +158,6 @@ Caps on user-configurable lists and text, and how input from other players or th
   a full world name when an address names none. Ads are at most a few hundred characters, so this stays small.
 - The listing cache is a dictionary keyed by source and ID, so recording a listing doesn't grow
   with the cache. Expiry bounds its size to the listings seen in the last month plus the marked recurring ones.
+- The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
+  `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.

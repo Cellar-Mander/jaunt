@@ -56,7 +56,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open the Jaunt settings"
+            HelpMessage = "Open the Jaunt settings. /jaunt config → open the settings"
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
@@ -89,7 +89,15 @@ public sealed class Plugin : IDalamudPlugin
 
     internal void SaveListingCache() => listingCacheStore.Save(ListingCache);
 
-    private void OnCommand(string command, string args) => ToggleConfigUi();
+    // Until the listing browser exists (cdd9e95f), plain /jaunt also opens the settings. "config"
+    // always opens them rather than toggling, so it never closes a window someone asked to see.
+    private void OnCommand(string command, string args)
+    {
+        if (args.Trim().Equals("config", StringComparison.OrdinalIgnoreCase))
+            ConfigWindow.IsOpen = true;
+        else
+            ToggleConfigUi();
+    }
 
     public void ToggleConfigUi() => ConfigWindow.Toggle();
 }
