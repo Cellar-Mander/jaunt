@@ -27,8 +27,8 @@ public sealed record OpeningWindow(bool Now, bool Always, DateOnly? Day, DateTim
     /// <summary>The same window with its times shown in <paramref name="zone"/>, such as the user's local zone.</summary>
     public OpeningWindow In(TimeZoneInfo zone) => this with
     {
-        Start = Start is { } s ? TimeZoneInfo.ConvertTime(s, zone) : null,
-        End = End is { } e ? TimeZoneInfo.ConvertTime(e, zone) : null,
+        Start = Start.HasValue ? TimeZoneInfo.ConvertTime(Start.Value, zone) : null,
+        End = End.HasValue ? TimeZoneInfo.ConvertTime(End.Value, zone) : null,
     };
 }
 
@@ -85,7 +85,8 @@ public static class OpeningTimeResolver
     /// <param name="language">The ad's language as an ISO 639-1 code ("de", "fr", "en"), or null if unknown.</param>
     public static TimeZoneInfo Zone(string? written, PartyFinderRegion region, string? language)
     {
-        if (written is not null && ZoneIds.TryGetValue(written, out var id))
+        var id = written is null ? null : ZoneIds.GetValueOrDefault(written);
+        if (id is not null)
             return Find(id);
         return Find(region switch
         {
@@ -129,28 +130,30 @@ public static class OpeningTimeResolver
             _ => null,
         };
 
-        if (time.Start is { } start)
+        if (time.Start is not null)
         {
+            var start = time.Start.Value;
             var date = day ?? today;
             // Yesterday's start is always before seen, so only its end needs checking.
-            if (day is null && time.End is { } e && e <= start && seen < Instant(today, e, zone))
+            if (day is null && time.End is not null && time.End.Value <= start && seen < Instant(today, time.End.Value, zone))
             {
                 date = today.AddDays(-1); // yesterday's overnight opening is still running
             }
 
             var opens = Instant(date, start, zone);
-            DateTimeOffset? closes = time.End is { } end
-                ? Instant(end <= start ? date.AddDays(1) : date, end, zone)
+            DateTimeOffset? closes = time.End is not null
+                ? Instant(time.End.Value <= start ? date.AddDays(1) : date, time.End.Value, zone)
                 : null;
             return new OpeningWindow(time.Now, time.Always, date, opens, closes);
         }
 
-        if (time.End is { } closing)
+        if (time.End is not null)
         {
+            var closing = time.End.Value;
             DateTimeOffset closes;
-            if (day is { } d)
+            if (day is not null)
             {
-                closes = Instant(closing < new TimeOnly(6, 0) ? d.AddDays(1) : d, closing, zone);
+                closes = Instant(closing < new TimeOnly(6, 0) ? day.Value.AddDays(1) : day.Value, closing, zone);
             }
             else
             {

@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Jaunt.Core.Text;
 
 /// <summary>
@@ -47,8 +49,9 @@ public static partial class OpeningTimes
 
         foreach (var span in spans.Where(s => s.Start is not null))
         {
+            var hasWeekday = weekdays.TryGetValue(span, out var w);
             var (day, weekday) = date is not null ? (OpeningDay.Date, (DayOfWeek?)null)
-                : weekdays.TryGetValue(span, out var w) ? (OpeningDay.Weekday, w)
+                : hasWeekday ? (OpeningDay.Weekday, w)
                 : (adDay, null);
             var (start, end) = To24(span.Start!.Value, span.End, twentyFourHour);
             result.Add(new OpeningTime(false, false, day, weekday, date, start, end, span.Zone));
@@ -65,7 +68,7 @@ public static partial class OpeningTimes
 
         return result;
 
-        TimeOnly? Time(Clock? c) => c is { } v ? Single(v, twentyFourHour) : null;
+        TimeOnly? Time(Clock? c) => c.HasValue ? Single(c.Value, twentyFourHour) : null;
     }
 
     private static List<Token> Tokenise(string text)
@@ -122,9 +125,11 @@ public static partial class OpeningTimes
 
     private static bool Adjacent(Token a, Token b) => a.End == b.Start;
 
-    private static bool IsSymbol(Token t, char c) => t.Kind == Kind.Symbol && t.Text[0] == c;
+    private static bool IsSymbol([NotNullWhen(true)] Token? t, char c) => t is { Kind: Kind.Symbol } && t.Value.Text[0] == c;
 
-    private static bool IsWord(Token t, string w) => t.Kind == Kind.Word && t.Text.Equals(w, StringComparison.OrdinalIgnoreCase);
+    private static bool IsWord([NotNullWhen(true)] Token? t, string w) => t is { Kind: Kind.Word } && t.Value.Text.Equals(w, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWordIn([NotNullWhen(true)] Token? t, HashSet<string> words) => t is { Kind: Kind.Word } && words.Contains(t.Value.Text);
 
     private static Token? At(List<Token> tokens, int i) => i >= 0 && i < tokens.Count ? tokens[i] : null;
 
@@ -134,8 +139,9 @@ public static partial class OpeningTimes
     /// </summary>
     private static bool JoinedToPrevious(List<Token> tokens, int i)
     {
-        if (At(tokens, i - 1) is not { } prev || !Adjacent(prev, tokens[i]))
+        if (i == 0 || !Adjacent(tokens[i - 1], tokens[i]))
             return false;
+        var prev = tokens[i - 1];
         return prev.Kind is Kind.Word or Kind.Number || (prev.Kind == Kind.Symbol && prev.Text[0] is ':' or '/' or '.');
     }
 }
