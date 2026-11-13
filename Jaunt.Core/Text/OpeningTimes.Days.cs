@@ -27,13 +27,15 @@ public static partial class OpeningTimes
         var found = false;
         for (var i = 0; i < tokens.Count; i++)
         {
-            if (tokens[i] is { Kind: Kind.Number, Text: "24" } && At(tokens, i + 1) is { } slash && IsSymbol(slash, '/')
-                && Adjacent(tokens[i], slash) && At(tokens, i + 2) is { Kind: Kind.Number, Text: "7" } seven && Adjacent(slash, seven))
+            var next = At(tokens, i + 1);
+            var afterNext = At(tokens, i + 2);
+            if (tokens[i] is { Kind: Kind.Number, Text: "24" } && IsSymbol(next, '/') && Adjacent(tokens[i], next.Value)
+                && afterNext is { Kind: Kind.Number, Text: "7" } && Adjacent(next.Value, afterNext.Value))
             {
                 used[i] = used[i + 1] = used[i + 2] = true;
                 found = true;
             }
-            else if (IsWord(tokens[i], "always") && At(tokens, i + 1) is { } open && IsWord(open, "open"))
+            else if (IsWord(tokens[i], "always") && IsWord(next, "open"))
             {
                 found = true;
             }
@@ -56,26 +58,33 @@ public static partial class OpeningTimes
                 continue;
             var t = tokens[i];
 
-            if (t.Kind == Kind.Number && NumberedDateAt(tokens, i, seen) is { } d)
-                return d;
+            var numbered = t.Kind == Kind.Number ? NumberedDateAt(tokens, i, seen) : null;
+            if (numbered is not null)
+                return numbered;
 
             if (t.Kind == Kind.Number && t.Text.Length <= 2)
             {
                 // 16th Nov
                 var j = i + 1;
-                if (At(tokens, j) is { Kind: Kind.Word } suffix && Adjacent(t, suffix) && suffix.Text.ToLowerInvariant() is "st" or "nd" or "rd" or "th")
+                var suffix = At(tokens, j);
+                if (suffix is { Kind: Kind.Word } && Adjacent(t, suffix.Value) && suffix.Value.Text.ToLowerInvariant() is "st" or "nd" or "rd" or "th")
                     j++;
-                if (At(tokens, j) is { Kind: Kind.Word } month && Month(month.Text) is { } m && Day(m, t, seen) is { } named)
+                var month = MonthOf(At(tokens, j));
+                var named = month is not null ? Day(month.Value, t, seen) : null;
+                if (named is not null)
                     return named;
             }
 
-            if (t.Kind == Kind.Word && Month(t.Text) is { } mo)
+            var mo = MonthOf(t);
+            if (mo is not null)
             {
                 // Nov 5th, Nov. 5
                 var j = i + 1;
-                if (At(tokens, j) is { } dot && IsSymbol(dot, '.'))
+                if (IsSymbol(At(tokens, j), '.'))
                     j++;
-                if (At(tokens, j) is { Kind: Kind.Number } n && n.Text.Length <= 2 && Day(mo, n, seen) is { } monthFirst)
+                var n = At(tokens, j);
+                var monthFirst = n is { Kind: Kind.Number } && n.Value.Text.Length <= 2 ? Day(mo.Value, n.Value, seen) : null;
+                if (monthFirst is not null)
                     return monthFirst;
             }
         }
@@ -91,34 +100,39 @@ public static partial class OpeningTimes
     private static DateOnly? NumberedDateAt(List<Token> tokens, int i, DateOnly seen)
     {
         var a = tokens[i];
-        if (JoinedToPrevious(tokens, i) || At(tokens, i + 1) is not { } sep || !Adjacent(a, sep)
-            || !(IsSymbol(sep, '/') || IsSymbol(sep, '.')) || At(tokens, i + 2) is not { Kind: Kind.Number } b || !Adjacent(sep, b))
+        var sep = At(tokens, i + 1);
+        var b = At(tokens, i + 2);
+        if (JoinedToPrevious(tokens, i) || !(IsSymbol(sep, '/') || IsSymbol(sep, '.')) || !Adjacent(a, sep.Value)
+            || b is not { Kind: Kind.Number } || !Adjacent(sep.Value, b.Value))
         {
             return null;
         }
 
+        var second = b.Value;
         var trailingDot = false;
-        if (At(tokens, i + 3) is { } after && Adjacent(b, after))
+        var after = At(tokens, i + 3);
+        if (after is not null && Adjacent(second, after.Value))
         {
-            if (after.Kind != Kind.Symbol || IsSymbol(after, '/') || IsSymbol(after, ':'))
+            if (after.Value.Kind != Kind.Symbol || IsSymbol(after, '/') || IsSymbol(after, ':'))
                 return null;
             if (IsSymbol(after, '.'))
             {
-                if (At(tokens, i + 4) is { Kind: Kind.Number } more && Adjacent(after, more))
+                var more = At(tokens, i + 4);
+                if (more is { Kind: Kind.Number } && Adjacent(after.Value, more.Value))
                     return null;
                 trailingDot = true;
             }
         }
 
-        if (IsSymbol(sep, '.') && b.Text.Length != 2 && !trailingDot)
+        if (IsSymbol(sep, '.') && second.Text.Length != 2 && !trailingDot)
             return null;
-        if (IsSymbol(sep, '.') && !trailingDot && At(tokens, i + 3) is { Kind: Kind.Word } w && w.Start - b.End <= 1
-            && w.Text.ToUpperInvariant() is "AM" or "PM")
+        if (IsSymbol(sep, '.') && !trailingDot && after is { Kind: Kind.Word } && after.Value.Start - second.End <= 1
+            && after.Value.Text.ToUpperInvariant() is "AM" or "PM")
         {
             return null; // 10.30 pm is a time
         }
 
-        return NumberedDate(int.Parse(a.Text, CultureInfo.InvariantCulture), int.Parse(b.Text, CultureInfo.InvariantCulture), seen);
+        return NumberedDate(int.Parse(a.Text, CultureInfo.InvariantCulture), int.Parse(second.Text, CultureInfo.InvariantCulture), seen);
     }
 
     private static int? Month(string word)
@@ -132,6 +146,8 @@ public static partial class OpeningTimes
         var full = CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(index + 1).ToLowerInvariant();
         return lower.Length == 3 || full == lower || (lower == "sept") ? index + 1 : null;
     }
+
+    private static int? MonthOf(Token? t) => t is { Kind: Kind.Word } ? Month(t.Value.Text) : null;
 
     private static DateOnly? Day(int month, Token day, DateOnly seen) =>
         Nearest(month, int.Parse(day.Text, CultureInfo.InvariantCulture), seen);
@@ -207,9 +223,9 @@ public static partial class OpeningTimes
                 {
                     day = day == OpeningDay.None ? OpeningDay.Tomorrow : day;
                 }
-                else if (rest is [var first, '曜', ..] && JapaneseWeekdays.IndexOf(first, StringComparison.Ordinal) is var k and >= 0)
+                else if (JapaneseWeekday(rest) >= 0)
                 {
-                    weekday = (DayOfWeek)k;
+                    weekday = (DayOfWeek)JapaneseWeekday(rest);
                     after = i + 2;
                     if (At(tokens, after) is { Kind: Kind.Cjk, Text: "日" })
                         after++;
@@ -220,7 +236,7 @@ public static partial class OpeningTimes
                 continue;
 
             // Skip up to two of . , @ - between the weekday and its time.
-            for (var skipped = 0; skipped < 2 && At(tokens, after) is { } s && (IsSymbol(s, '.') || IsSymbol(s, ',') || IsSymbol(s, '@') || IsSymbol(s, '-')); skipped++)
+            for (var skipped = 0; skipped < 2 && IsDaySeparator(At(tokens, after)); skipped++)
                 after++;
             if (spanAt.TryGetValue(after, out var span))
                 weekdays.TryAdd(span, weekday.Value);
@@ -228,4 +244,10 @@ public static partial class OpeningTimes
 
         return (day, weekdays);
     }
+
+    /// <summary>The weekday of 金曜 and the like at the start of <paramref name="rest"/>, in DayOfWeek order, or -1.</summary>
+    private static int JapaneseWeekday(ReadOnlySpan<char> rest) =>
+        rest is [_, '曜', ..] ? JapaneseWeekdays.IndexOf(rest[0], StringComparison.Ordinal) : -1;
+
+    private static bool IsDaySeparator(Token? t) => IsSymbol(t, '.') || IsSymbol(t, ',') || IsSymbol(t, '@') || IsSymbol(t, '-');
 }

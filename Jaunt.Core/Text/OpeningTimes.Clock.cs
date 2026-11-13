@@ -34,7 +34,7 @@ public static partial class OpeningTimes
             if (IsRangeSeparator(At(tokens, next1)))
             {
                 var j = next1 + 1;
-                while (At(tokens, j) is { } more && IsSymbol(more, '-'))
+                while (IsSymbol(At(tokens, j), '-'))
                     j++;
                 var second = At(tokens, j) is { Kind: Kind.Number } && !used[j] ? ReadClock(tokens, j) : null;
                 if (second is not null && (Qualified(c1, z1, ji1) || Qualified(second.Value.Clock, second.Value.Zone, second.Value.Ji)))
@@ -74,21 +74,22 @@ public static partial class OpeningTimes
     /// <summary>"until 11pm", "till", "--2am", "~17:00", "〆14:00".</summary>
     private static bool EndPrefix(List<Token> tokens, int i)
     {
-        if (At(tokens, i - 1) is not { } prev)
+        if (i == 0)
             return false;
+        var prev = tokens[i - 1];
         if (IsWord(prev, "until") || IsWord(prev, "till") || IsWord(prev, "til"))
             return true;
         if ((IsSymbol(prev, '~') || prev is { Kind: Kind.Cjk, Text: "〆" }) && Adjacent(prev, tokens[i]))
             return true;
-        return IsSymbol(prev, '-') && At(tokens, i - 2) is { } prev2 && IsSymbol(prev2, '-') && Adjacent(prev2, prev);
+        return IsSymbol(prev, '-') && IsSymbol(At(tokens, i - 2), '-') && Adjacent(tokens[i - 2], prev);
     }
 
     /// <summary>"18時〆", "16時close", "23時くらいまで", "~17:00〆".</summary>
     private static bool EndSuffix(string text, List<Token> tokens, int next)
     {
-        if (At(tokens, next) is not { } t)
+        if (next >= tokens.Count)
             return false;
-        var rest = text.AsSpan(t.Start);
+        var rest = text.AsSpan(tokens[next].Start);
         return rest.StartsWith("〆", StringComparison.Ordinal) || rest.StartsWith("まで", StringComparison.Ordinal)
             || rest.StartsWith("くらいまで", StringComparison.Ordinal) || rest.StartsWith("close", StringComparison.OrdinalIgnoreCase);
     }
@@ -107,19 +108,22 @@ public static partial class OpeningTimes
         var dotted = false;
         var next = i + 1;
 
-        if (At(tokens, i + 1) is { } sep && (IsSymbol(sep, ':') || IsSymbol(sep, '.')) && Adjacent(h, sep)
-            && At(tokens, i + 2) is { Kind: Kind.Number, Text.Length: 2 } m && Adjacent(sep, m))
+        var sep = At(tokens, i + 1);
+        var m = At(tokens, i + 2);
+        if ((IsSymbol(sep, ':') || IsSymbol(sep, '.')) && Adjacent(h, sep.Value)
+            && m is { Kind: Kind.Number, Text.Length: 2 } && Adjacent(sep.Value, m.Value))
         {
-            var value = int.Parse(m.Text, CultureInfo.InvariantCulture);
+            var value = int.Parse(m.Value.Text, CultureInfo.InvariantCulture);
             if (value <= 59)
             {
                 minute = value;
-                dotted = sep.Text[0] == '.';
+                dotted = sep.Value.Text[0] == '.';
                 next = i + 3;
             }
         }
 
-        if (At(tokens, next) is { Kind: Kind.Cjk, Text: "時" } ji && Adjacent(tokens[next - 1], ji))
+        var after = At(tokens, next);
+        if (after is { Kind: Kind.Cjk, Text: "時" } && Adjacent(tokens[next - 1], after.Value))
         {
             if (hour > 30 || minute is not null)
                 return null;
@@ -130,8 +134,9 @@ public static partial class OpeningTimes
 
         char? meridiem = null;
         string? zone = null;
-        if (At(tokens, next) is { Kind: Kind.Word } w && w.Start - tokens[next - 1].End <= 1)
+        if (after is { Kind: Kind.Word } && after.Value.Start - tokens[next - 1].End <= 1)
         {
+            var w = after.Value;
             var joined = Adjacent(tokens[next - 1], w);
             var upper = w.Text.ToUpperInvariant();
             if (joined && minute is null && w.Text == "st" && hour is 1 or 21)
@@ -145,17 +150,22 @@ public static partial class OpeningTimes
             {
                 meridiem = upper[0];
                 next++;
-                if (At(tokens, next) is { Kind: Kind.Word } z && z.Start - w.End <= 1 && Zones.Contains(z.Text.ToUpperInvariant()))
+                var z = At(tokens, next);
+                if (z is { Kind: Kind.Word } && z.Value.Start - w.End <= 1 && Zones.Contains(z.Value.Text.ToUpperInvariant()))
                 {
-                    zone = z.Text.ToUpperInvariant();
+                    zone = z.Value.Text.ToUpperInvariant();
                     next++;
                 }
             }
-            else if (joined && SplitMeridiem(upper) is var (mer, z2))
+            else if (joined)
             {
-                meridiem = mer;
-                zone = z2;
-                next++;
+                var split = SplitMeridiem(upper);
+                if (split is not null)
+                {
+                    meridiem = split.Value.Meridiem;
+                    zone = split.Value.Zone;
+                    next++;
+                }
             }
         }
 
@@ -187,8 +197,9 @@ public static partial class OpeningTimes
     /// <summary>A start and optional end on the 24-hour clock, filling in AM/PM where only one side says.</summary>
     private static (TimeOnly Start, TimeOnly? End) To24(Clock start, Clock? end, bool twentyFourHour)
     {
-        if (end is not { } e)
+        if (end is null)
             return (Single(start, twentyFourHour), null);
+        var e = end.Value;
 
         if (start.Meridiem is null && e.Meridiem is not null && !Literal(start, twentyFourHour))
         {
@@ -207,8 +218,8 @@ public static partial class OpeningTimes
     private static TimeOnly Single(Clock c, bool twentyFourHour)
     {
         var minute = c.Minute ?? 0;
-        if (c.Meridiem is { } m)
-            return new TimeOnly((c.Hour % 12) + (m == 'P' ? 12 : 0), minute);
+        if (c.Meridiem is not null)
+            return new TimeOnly((c.Hour % 12) + (c.Meridiem == 'P' ? 12 : 0), minute);
         if (Literal(c, twentyFourHour))
             return new TimeOnly(c.Hour % 24, minute);
         return new TimeOnly(c.Hour == 12 ? 12 : c.Hour + 12, minute);

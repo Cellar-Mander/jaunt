@@ -34,9 +34,11 @@ public static partial class OpeningTimes
 
         for (var i = 0; i < tokens.Count; i++)
         {
+            var prev = At(tokens, i - 1);
+            var next = At(tokens, i + 1);
             if (IsWord(tokens[i], "now")
-                && !(At(tokens, i - 1) is { } p && (IsWord(p, "starts") || IsWord(p, "start")))
-                && !(At(tokens, i + 1) is { Kind: Kind.Word } n && NotNowAfterNow.Contains(n.Text)))
+                && !(IsWord(prev, "starts") || IsWord(prev, "start"))
+                && !IsWordIn(next, NotNowAfterNow))
             {
                 return true;
             }
@@ -44,24 +46,23 @@ public static partial class OpeningTimes
             if (!IsWord(tokens[i], "open"))
                 continue;
 
-            var next = At(tokens, i + 1);
-            var whenFollows = next is { Kind: Kind.Word } nw && nw.Text.ToLowerInvariant() is "from" or "tonight" or "tonite" or "today" or "tomorrow";
+            var whenFollows = next is { Kind: Kind.Word } && next.Value.Text.ToLowerInvariant() is "from" or "tonight" or "tonite" or "today" or "tomorrow";
             if (whenFollows)
                 continue;
 
-            if (At(tokens, i - 1) is { } before && IsWord(before, "is"))
+            if (IsWord(prev, "is"))
                 return true;
-            if (At(tokens, i - 1) is { } prev && (IsWord(prev, "always") || spanLast.Contains(i - 1)))
+            if (IsWord(prev, "always") || spanLast.Contains(i - 1))
                 continue;
 
             var j = i + 1;
-            if (At(tokens, j) is { } at && IsSymbol(at, '@'))
+            if (IsSymbol(next, '@'))
                 j++;
             if (spanFirst.Contains(j))
                 continue;
-            if (next is { Kind: Kind.Word } w && NotNowAfterOpen.Contains(w.Text))
+            if (IsWordIn(next, NotNowAfterOpen))
                 continue;
-            if (next is { } colon && IsSymbol(colon, ':'))
+            if (IsSymbol(next, ':'))
                 continue;
             if (next is { Kind: Kind.Number, Text: "24" })
                 continue;
