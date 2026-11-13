@@ -6,8 +6,9 @@ namespace Jaunt.Core.Text;
 /// </summary>
 /// <remarks>
 /// Finds each ward and plot first, since numbers are the part ads write most consistently, then reads
-/// the district and world from the words just before it. Each step looks at a bounded number of
-/// tokens, so the cost is linear in the ad's length.
+/// the district and world from the words just before it, or failing that just after it. Each step
+/// looks at a bounded number of tokens; only the full-name fallback reads the whole ad, once per
+/// address that names no world. Ads are short, so that bound is enough.
 /// </remarks>
 public sealed class AddressParser(Gazetteer gazetteer)
 {
@@ -17,6 +18,12 @@ public sealed class AddressParser(Gazetteer gazetteer)
     /// <summary>Words skipped between an address and its district or world, and between those two.</summary>
     private const int DistrictReach = 6;
     private const int WorldReach = 3;
+    private const int ForwardReach = 2;
+
+    /// <summary>Tokens read after a plot for its room, apartment or subdivision.</summary>
+    private const int TailReach = 8;
+    private const int MaxBracketTokens = 10;
+    private const int MaxRoomCodeLength = 4;
 
     private static readonly HashSet<string> TimeWords =
     [
@@ -48,6 +55,9 @@ public sealed class AddressParser(Gazetteer gazetteer)
         public int? Plot { get; set; }
         public int? SecondPlot { get; set; }
         public bool WardExplicit { get; set; }
+        public bool? Subdivision { get; set; }
+        public int? Apartment { get; set; }
+        public string? Room { get; set; }
     }
 
     private sealed class Run(Gazetteer g, List<Token> t, string? listedOn)
@@ -86,7 +96,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
             return WardFirst(i) ?? PlotFirst(i);
         }
 
-        /// <summary>"Mist 8-32", "ゴブ第23区32番地", "Gob28 P5".</summary>
+        /// <summary>"Mist 8-32", "ゴブ第23区32番地", "エンピ2区52号室", "Gob28 P5", "ミスト20-アパ51".</summary>
         private Core? DistrictLed(int i, int length, District district)
         {
             var core = new Core { Start = i, District = district };
@@ -121,9 +131,9 @@ public sealed class AddressParser(Gazetteer gazetteer)
                     k++;
             }
 
-            core.End = k;
-            // A bare number after a district is not a ward on its own.
-            return core.Plot is null && !core.WardExplicit ? null : core;
+            core.End = Tail(k, core);
+            // A bare number after a district is a ward only when an apartment follows it.
+            return core.Plot is null && !core.WardExplicit && core.Apartment is null ? null : core;
         }
 
         /// <summary>"Ifrit/6-51": a world, then a ward and plot with a dash, and no district.</summary>
@@ -134,11 +144,11 @@ public sealed class AddressParser(Gazetteer gazetteer)
                 || !IsDash(t[k + 1].Gap) || Is(k + 2, Gazetteer.Keyword.RoomSuffix) || LooksLikeTime(k + 2))
                 return null;
             var core = new Core { Start = i, World = world, Ward = ward, Plot = plot };
-            core.End = k + 2;
+            core.End = Tail(k + 2, core);
             return core;
         }
 
-        /// <summary>"W20 P28", "Ward 27 Plot 44", "W2/30", "P29/30", "Ward 2".</summary>
+        /// <summary>"W20 P28", "Ward 27 Plot 44", "W2/30", "P29/30", "W 22 Apt 28", "Ward 2".</summary>
         private Core? WardFirst(int i)
         {
             if (WardSpec(i) is not ({ } ward, var k))
@@ -160,7 +170,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
                 k++;
             }
 
-            core.End = k;
+            core.End = Tail(k, core);
             return core;
         }
 
@@ -170,7 +180,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
             if (PlotMarker(i) is not { } plot || WardSpec(i + 2) is not ({ } ward, var k))
                 return null;
             var core = new Core { Start = i, Ward = ward, Plot = plot, WardExplicit = true };
-            core.End = k;
+            core.End = Tail(k, core);
             return core;
         }
 
@@ -189,6 +199,124 @@ public sealed class AddressParser(Gazetteer gazetteer)
         private int? PlotMarker(int j) =>
             Word(j) is "p" or "plot" && Number(j + 1) is int plot and >= 1 and <= MaxPlot && IsMarkerGap(t[j + 1].Gap) ? plot : null;
 
+        /// <summary>
+        /// Reads what follows a ward or plot: a subdivision, an apartment, a room. A room number after a
+        /// ward with no plot is an apartment.
+        /// </summary>
+        private int Tail(int k, Core core)
+        {
+            var apartmentBuilding = false;
+            for (var steps = 0; k < t.Count && steps < TailReach; steps++)
+            {
+                if (OpensBracket(t[k].Gap))
+                {
+                    var close = ClosingBracket(k);
+                    if (close < 0)
+                        break;
+                    Bracketed(k, close, core);
+                    k = close;
+                    continue;
+                }
+
+                var m = MatchAt(k);
+                switch (m.Keyword)
+                {
+                    case Gazetteer.Keyword.Subdivision:
+                        core.Subdivision = true;
+                        k += m.Length;
+                        continue;
+                    case Gazetteer.Keyword.MainDivision:
+                        core.Subdivision = false;
+                        k += m.Length;
+                        continue;
+                    case Gazetteer.Keyword.Building:
+                        apartmentBuilding = true;
+                        k += m.Length;
+                        continue;
+                    case Gazetteer.Keyword.Apartment:
+                        k = ApartmentNumber(k + m.Length, core);
+                        continue;
+                    case Gazetteer.Keyword.Room when Number(k + 1) is >= 0 && IsMarkerGap(t[k + 1].Gap):
+                        RoomNumber(k + 1, core, apartmentBuilding);
+                        k += 2;
+                        continue;
+                }
+
+                if (Number(k) is >= 0 && Is(k + 1, Gazetteer.Keyword.RoomSuffix) && t[k + 1].Gap.Length == 0)
+                {
+                    RoomNumber(k, core, apartmentBuilding);
+                    k += 2;
+                    continue;
+                }
+
+                break;
+            }
+
+            return k;
+        }
+
+        /// <summary>"アパ61号室", "Apt 28", "アパ1- 24" (building 1, room 24).</summary>
+        private int ApartmentNumber(int k, Core core)
+        {
+            if (Number(k) is not (int first and >= 0))
+                return k;
+            core.Apartment = first;
+            k++;
+            if (Number(k) is int second and >= 0 && IsDash(t[k].Gap))
+            {
+                core.Apartment = second;
+                k++;
+            }
+
+            return Is(k, Gazetteer.Keyword.RoomSuffix) ? k + 1 : k;
+        }
+
+        private void RoomNumber(int k, Core core, bool apartmentBuilding)
+        {
+            if (apartmentBuilding || core.Plot is null)
+                core.Apartment = t[k].Value;
+            else
+                core.Room = t[k].Raw;
+        }
+
+        /// <summary>"(拡張街南東)" marks a subdivision; "【B1】" right after a plot is a room.</summary>
+        private void Bracketed(int open, int close, Core core)
+        {
+            var touching = Enumerable.Range(open + 1, close - open - 1).All(j => t[j].Gap.Length == 0);
+            var code = string.Concat(t.Skip(open).Take(close - open).Select(x => x.Raw));
+            if (core.Plot is not null && core.Room is null && touching && code.Length <= MaxRoomCodeLength
+                && code.Any(char.IsAsciiDigit) && code.All(char.IsAsciiLetterOrDigit))
+            {
+                core.Room = code;
+                return;
+            }
+
+            for (var j = open; j < close; j++)
+            {
+                if (MatchAt(j).Keyword == Gazetteer.Keyword.Subdivision)
+                    core.Subdivision = true;
+                else if (MatchAt(j).Keyword == Gazetteer.Keyword.MainDivision)
+                    core.Subdivision = false;
+            }
+        }
+
+        private int ClosingBracket(int open)
+        {
+            for (var j = open + 1; j < t.Count && j <= open + MaxBracketTokens; j++)
+            {
+                if (t[j].Gap.AsSpan().IndexOfAny(")]】」』》〕}") >= 0)
+                    return j;
+            }
+
+            return -1;
+        }
+
+        private static bool OpensBracket(string gap)
+        {
+            var open = gap.AsSpan().LastIndexOfAny("([【「『《〔{");
+            return open >= 0 && gap.AsSpan(open).IndexOfAny(")]】」』》〕}") < 0;
+        }
+
         // ---- Finding the district and world ----
 
         private void Resolve(Core core, int lower)
@@ -197,12 +325,22 @@ public sealed class AddressParser(Gazetteer gazetteer)
             var world = core.World;
             if (world is null)
                 ScanBack(core.Start - 1, lower, ref district, ref world);
-            if (district is null && core.Plot is null)
+            if (district is null || world is null)
+                ScanForward(core.End, ref district, ref world);
+            if (district is null && core.Plot is null && core.Apartment is null)
                 return; // "Ward 2" alone is not an address
 
-            var address = world is null
-                ? new HousingAddress(listing?.Name ?? listedOn, WorldSource.Listing, district, core.Ward, core.Plot)
-                : new HousingAddress(world.Name, WorldSource.Text, district, core.Ward, core.Plot);
+            var source = WorldSource.Text;
+            var worldName = world?.Name
+                ?? found.LastOrDefault(a => a.WorldFrom == WorldSource.Text)?.World
+                ?? FullNameAnywhere()?.Name;
+            if (worldName is null)
+            {
+                worldName = listing?.Name ?? listedOn;
+                source = WorldSource.Listing;
+            }
+
+            var address = new HousingAddress(worldName, source, district, core.Ward, core.Plot, core.Subdivision, core.Apartment, core.Room);
             found.Add(address);
             if (core.SecondPlot is { } second)
                 found.Add(address with { Plot = second }); // "P29/30": two adjoining plots
@@ -241,6 +379,43 @@ public sealed class AddressParser(Gazetteer gazetteer)
                 if (++skipped > reach)
                     return;
             }
+        }
+
+        /// <summary>Walks forward from an address for a missing district or world: "W8 P45 Mist Sagi".</summary>
+        private void ScanForward(int k, ref District? district, ref GameWorld? world)
+        {
+            var skipped = 0;
+            while (k < t.Count && skipped <= ForwardReach && (district is null || world is null))
+            {
+                var m = MatchAt(k);
+                if (district is null && m.District is { } d)
+                {
+                    district = d;
+                    k += m.Length;
+                    continue;
+                }
+
+                if (world is null && m.World is { } w)
+                {
+                    world = w;
+                    k += m.Length;
+                    continue;
+                }
+
+                k += Math.Max(m.Length, 1);
+                skipped++;
+            }
+        }
+
+        private GameWorld? FullNameAnywhere()
+        {
+            for (var i = 0; i < t.Count; i++)
+            {
+                if (MatchAt(i) is { FullName: true, World: { } w })
+                    return w;
+            }
+
+            return null;
         }
 
         // ---- Token matching ----
