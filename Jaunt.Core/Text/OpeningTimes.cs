@@ -2,7 +2,7 @@ namespace Jaunt.Core.Text;
 
 /// <summary>
 /// Reads opening times from <see cref="PartyFinderText.Normalise">normalised</see> Party Finder ad
-/// text: single times with AM/PM, minutes or a written time zone, and Japanese 時 times.
+/// text: single times and ranges, closing times, written time zones, and Japanese 時 and 〆 forms.
 /// </summary>
 /// <remarks>
 /// Works on tokens with no regex, so the cost stays linear in the ad's length. Bare hours from 1 to 11 with no AM or PM read as evening,
@@ -21,8 +21,19 @@ public static partial class OpeningTimes
     {
         var tokens = Tokenise(text);
         var twentyFourHour = tokens.Any(t => t.Kind == Kind.Cjk);
-        return [.. FindSpans(tokens).Select(s => new OpeningTime(
-            false, false, OpeningDay.None, null, null, Single(s.Start, twentyFourHour), null, s.Zone))];
+        var spans = FindSpans(text, tokens);
+
+        var result = new List<OpeningTime>();
+        foreach (var span in spans.Where(s => s.Start is not null))
+        {
+            var (start, end) = To24(span.Start!.Value, span.End, twentyFourHour);
+            result.Add(new OpeningTime(false, false, OpeningDay.None, null, null, start, end, span.Zone));
+        }
+
+        foreach (var span in spans.Where(s => s.Start is null))
+            result.Add(new OpeningTime(false, false, OpeningDay.None, null, null, null, Single(span.End!.Value, twentyFourHour), span.Zone));
+
+        return result;
     }
 
     private static List<Token> Tokenise(string text)
@@ -80,6 +91,8 @@ public static partial class OpeningTimes
     private static bool Adjacent(Token a, Token b) => a.End == b.Start;
 
     private static bool IsSymbol(Token t, char c) => t.Kind == Kind.Symbol && t.Text[0] == c;
+
+    private static bool IsWord(Token t, string w) => t.Kind == Kind.Word && t.Text.Equals(w, StringComparison.OrdinalIgnoreCase);
 
     private static Token? At(List<Token> tokens, int i) => i >= 0 && i < tokens.Count ? tokens[i] : null;
 
