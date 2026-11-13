@@ -2,12 +2,12 @@ namespace Jaunt.Core.Text;
 
 /// <summary>
 /// Reads opening times from <see cref="PartyFinderText.Normalise">normalised</see> Party Finder ad
-/// text: 24/7, days, dates, single times and ranges, closing times, written time zones, and Japanese
+/// text: "open now", 24/7, days, dates, single times and ranges, written time zones, and Japanese
 /// 時 and 〆 forms.
 /// </summary>
 /// <remarks>
-/// Works on tokens in one pass each for dates, times and days, with no regex, so the cost stays
-/// linear in the ad's length. Bare hours from 1 to 11 with no AM or PM read as evening,
+/// Works on tokens in one pass each for dates, times, days and "open now", with no regex, so the
+/// cost stays linear in the ad's length. Bare hours from 1 to 11 with no AM or PM read as evening,
 /// as venue ads mean them ("8-12" is 20:00 to 00:00), except in ads with Japanese text, which use
 /// the 24-hour clock.
 /// </remarks>
@@ -30,8 +30,18 @@ public static partial class OpeningTimes
         var date = FindDate(tokens, used, seen);
         var spans = FindSpans(text, tokens, used);
         var (adDay, weekdays) = FindDays(text, tokens, spans);
+        var now = FindNow(text, tokens, spans);
 
         var result = new List<OpeningTime>();
+        var endOnly = spans.Where(s => s.Start is null).ToList();
+        if (now)
+        {
+            var closing = endOnly.FirstOrDefault();
+            if (closing is not null)
+                endOnly.Remove(closing);
+            result.Add(new OpeningTime(true, false, OpeningDay.None, null, null, null, Time(closing?.End), closing?.Zone));
+        }
+
         if (always)
             result.Add(new OpeningTime(false, true, OpeningDay.None, null, null, null, null, null));
 
@@ -44,7 +54,7 @@ public static partial class OpeningTimes
             result.Add(new OpeningTime(false, false, day, weekday, date, start, end, span.Zone));
         }
 
-        foreach (var span in spans.Where(s => s.Start is null))
+        foreach (var span in endOnly)
         {
             var day = date is not null ? OpeningDay.Date : adDay;
             result.Add(new OpeningTime(false, false, day, null, date, null, Single(span.End!.Value, twentyFourHour), span.Zone));
@@ -54,6 +64,8 @@ public static partial class OpeningTimes
             result.Add(new OpeningTime(false, false, date is not null ? OpeningDay.Date : adDay, null, date, null, null, null));
 
         return result;
+
+        TimeOnly? Time(Clock? c) => c is { } v ? Single(v, twentyFourHour) : null;
     }
 
     private static List<Token> Tokenise(string text)
