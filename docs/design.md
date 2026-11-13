@@ -107,6 +107,24 @@ normalises it), in the order written. `WebLinksTests` checks every labelled corp
 - Each link keeps the text as written and gets a URI to open: always http or https, https when the
   ad gives no scheme. A link that can't form a valid URI ("canvas..site") is left out.
 
+### Settings
+
+`RefreshPolicy` and `DisplayFormats` hold the rules behind the Settings window's controls.
+
+- **Refresh cooldown** (`RefreshPolicy`), default 10 minutes, kept within 10 minutes to 24 hours.
+  Opening the listing browser fetches each source unless that source was fetched within its
+  cooldown; Refresh obeys it too, and inside it the browser shows cached listings. A source's
+  cooldown is the setting or its own minimum, whichever is longer: xivpf 10 minutes (so the setting
+  alone), FFXIV Venues, Partake and the FFXIV RP Event Calendar 8 hours. The in-game Party Finder is
+  never fetched, so it has no cooldown: its listings are recorded as the game sends them. A cooldown
+  has passed once exactly that long has gone by. A source never fetched is fetched; one whose last
+  fetch time is after now (the clock moved back) is fetched too, rather than left stuck.
+- **Time format**: System, 12-hour (`8:05 PM`) or 24-hour (`20:05`). System is 12-hour when the
+  locale's short time pattern has AM/PM.
+- **Date format**: System, `Sat 14 Nov`, `Sat Nov 14` or `2026-11-14`, with English names. System
+  is ISO when the locale writes the year first, month-day when it writes the month before the day,
+  and day-month otherwise. Days are not zero-padded.
+
 ## Limits
 
 Caps on user-configurable lists and text, and how input from other players or the game is bounded.
