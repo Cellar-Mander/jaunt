@@ -1,9 +1,12 @@
+using System;
 using System.Reflection;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Jaunt.Core.Listings;
+using Jaunt.Listings;
 using Jaunt.Windows;
 
 namespace Jaunt;
@@ -28,6 +31,10 @@ public sealed class Plugin : IDalamudPlugin
 
     public Configuration Configuration { get; init; }
 
+    /// <summary>Listings kept between sessions; use from the game thread and save with <see cref="SaveListingCache"/>.</summary>
+    internal ListingCache ListingCache { get; }
+    private readonly ListingCacheStore listingCacheStore;
+
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
 
@@ -35,6 +42,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Normalize();
+
+        listingCacheStore = new ListingCacheStore(PluginInterface.ConfigDirectory.FullName, Log);
+        ListingCache = listingCacheStore.Load();
+        if (ListingCache.RemoveExpired(DateTimeOffset.UtcNow) > 0)
+            SaveListingCache();
 
         // Commit hash included, to check which checkout's build the game has loaded
         Log.Information($"Jaunt {typeof(Plugin).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion} loaded");
@@ -72,7 +84,10 @@ public sealed class Plugin : IDalamudPlugin
 
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
+        listingCacheStore.Dispose();
     }
+
+    internal void SaveListingCache() => listingCacheStore.Save(ListingCache);
 
     private void OnCommand(string command, string args) => ToggleConfigUi();
 

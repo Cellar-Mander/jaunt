@@ -119,11 +119,32 @@ normalises it), in the order written. `WebLinksTests` checks every labelled corp
   never fetched, so it has no cooldown: its listings are recorded as the game sends them. A cooldown
   has passed once exactly that long has gone by. A source never fetched is fetched; one whose last
   fetch time is after now (the clock moved back) is fetched too, rather than left stuck.
+- **Last fetched**: the listing cache records when each fetched source was last requested,
+  whether or not the request succeeded, and saves it with the listings. It is used only for the
+  cooldown, never shown, and survives Clear cached listings, expiry and reloads.
 - **Time format**: System, 12-hour (`8:05 PM`) or 24-hour (`20:05`). System is 12-hour when the
   locale's short time pattern has AM/PM.
 - **Date format**: System, `Sat 14 Nov`, `Sat Nov 14` or `2026-11-14`, with English names. System
   is ISO when the locale writes the year first, month-day when it writes the month before the day,
   and day-month otherwise. Days are not zero-padded.
+
+### Listing cache
+
+`ListingCache` keeps every listing seen, keyed by source and the source's ID (the same ID in two
+sources is two listings), with its title, when it was last seen, whether it is a one-off event
+(as the source last said) and the favourited, visited and hidden marks. It is saved as
+`listings.json` in the plugin's config folder, as `listings` plus `lastFetched` (each source's
+last fetch time, by source name; unknown names are dropped on load). An unreadable file is moved
+to `listings.json.bad` and the cache starts empty.
+
+- **Clear cached listings** removes every listing that is not favourited, visited or hidden and
+  says how many it removed.
+- **Expiry**: on load, a listing that is not favourited, visited or hidden is dropped once one
+  calendar month has passed since it was last seen (last seen 14 Oct 20:00 → dropped from 14 Nov
+  20:00). Marked recurring listings are kept however old. Marked one-offs expire the same way as
+  unmarked listings, since they can't reliably be matched to a later listing; the window Settings window
+  doesn't mention this. Clear still keeps marked one-offs.
+- **Hidden listings** are listed by title, case-insensitively.
 
 ## Limits
 
@@ -131,4 +152,6 @@ Caps on user-configurable lists and text, and how input from other players or th
 
 - Address parsing reads a bounded number of words around each address, plus one pass over the ad for
   a full world name when an address names none. Ads are at most a few hundred characters, so this stays small.
+- The listing cache is a dictionary keyed by source and ID, so recording a listing doesn't grow
+  with the cache. Expiry bounds its size to the listings seen in the last month plus the marked recurring ones.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
