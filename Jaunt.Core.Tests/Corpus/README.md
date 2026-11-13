@@ -10,7 +10,7 @@ the performer spike (`fe1b7d02`) measures against the people labels.
 
 Captured 2026-11-05 to 2026-11-07 from two sources:
 - xivpf polls every 10 minutes (`spikes/pf-vs-venues/poll.sh`), all regions
-- the plugin's dev-build capture (`pf-capture/*.jsonl`), NA only
+- the plugin's dev-build capture (`pf-capture/*.jsonl`), NA only. It was removed later; to capture again, restore `Jaunt/Capture/PartyFinderCapture.cs` and `Jaunt.Core/Capture/` from commit `15ef38a`
 
 `tools/corpus/select_pf.py` merges them and picks the ads with a fixed seed:
 - Two sightings are one ad when the text is identical. Capture time, listing ID and seconds
