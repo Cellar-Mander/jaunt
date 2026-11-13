@@ -35,4 +35,6 @@ internal static class TestGazetteer
     public static readonly Gazetteer Instance = new(
         DataCenters.SelectMany(dc => dc.Worlds.Select(w => new GameWorld(w, dc.DataCenter, dc.Region))),
         Districts);
+
+    public static readonly AddressParser Parser = new(Instance);
 }
