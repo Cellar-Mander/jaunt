@@ -89,9 +89,28 @@ previous address in the same ad, then a world's full name anywhere in the ad. Ab
 for this. Only then use the listing world, marked as lower confidence (`WorldSource.Listing`). An
 unknown listing world is passed through as written.
 
+### Links in ad text
+
+`WebLinks.Find` reads every website link in a Party Finder ad's text (after `PartyFinderText`
+normalises it), in the order written. `WebLinksTests` checks every labelled corpus ad
+(`Corpus/README.md`, `urls`).
+
+- A link is a run of ASCII letters, digits and `-._~:/?#@%&=+`, so brackets, parentheses, `|`,
+  glyphs and line breaks around it are not part of it. Leading punctuation and a trailing `.`, `:`
+  or `?` belong to the sentence; a trailing `/` or `#` stays.
+- It counts when it starts with `http://` or `https://` (also `https:` without the slashes), or with
+  `www.`, or when its host ends in a common web ending (`.com`, `.co`, `.gg`, `.tv`, `.club`,
+  `.site`, `.link`, `.gd`, ...). So `discord.gg/abc` and `venue.carrd.co` are links, and
+  "Lav.Beds", "p.m." and "Emp.W15" are not.
+- A host with `@` or `:` is an email address, handle or time, not a link. Other schemes
+  (`javascript:`, `ftp:`) are never links.
+- Each link keeps the text as written and gets a URI to open: always http or https, https when the
+  ad gives no scheme. A link that can't form a valid URI ("canvas..site") is left out.
+
 ## Limits
 
 Caps on user-configurable lists and text, and how input from other players or the game is bounded.
 
 - Address parsing reads a bounded number of words around each address, plus one pass over the ad for
   a full world name when an address names none. Ads are at most a few hundred characters, so this stays small.
+- Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
