@@ -6,7 +6,7 @@ public static partial class OpeningTimes
 {
     private readonly record struct Clock(int Hour, int? Minute, char? Meridiem, bool LeadingZero);
 
-    private sealed record Span(Clock? Start, Clock? End, string? Zone);
+    private sealed record Span(Clock? Start, Clock? End, string? Zone, int First, int Last);
 
     private static readonly string[] Zones =
     [
@@ -15,13 +15,13 @@ public static partial class OpeningTimes
         "AET", "AEST", "AEDT", "ACST", "ACDT", "AWST", "NZST", "NZDT", "JST",
     ];
 
-    private static List<Span> FindSpans(string text, List<Token> tokens)
+    private static List<Span> FindSpans(string text, List<Token> tokens, bool[] used)
     {
         var spans = new List<Span>();
         var i = 0;
         while (i < tokens.Count)
         {
-            var first = tokens[i].Kind == Kind.Number && !JoinedToPrevious(tokens, i) ? ReadClock(tokens, i) : null;
+            var first = !used[i] && tokens[i].Kind == Kind.Number && !JoinedToPrevious(tokens, i) ? ReadClock(tokens, i) : null;
             if (first is null)
             {
                 i++;
@@ -36,10 +36,10 @@ public static partial class OpeningTimes
                 var j = next1 + 1;
                 while (At(tokens, j) is { } more && IsSymbol(more, '-'))
                     j++;
-                var second = At(tokens, j) is { Kind: Kind.Number } ? ReadClock(tokens, j) : null;
+                var second = At(tokens, j) is { Kind: Kind.Number } && !used[j] ? ReadClock(tokens, j) : null;
                 if (second is not null && (Qualified(c1, z1, ji1) || Qualified(second.Value.Clock, second.Value.Zone, second.Value.Ji)))
                 {
-                    spans.Add(new Span(c1, second.Value.Clock, second.Value.Zone ?? z1));
+                    spans.Add(new Span(c1, second.Value.Clock, second.Value.Zone ?? z1, i, second.Value.Next - 1));
                     i = second.Value.Next;
                     continue;
                 }
@@ -48,7 +48,7 @@ public static partial class OpeningTimes
             var endOnly = EndPrefix(tokens, i) || EndSuffix(text, tokens, next1);
             if (endOnly || Qualified(c1, z1, ji1))
             {
-                spans.Add(endOnly ? new Span(null, c1, z1) : new Span(c1, null, z1));
+                spans.Add(endOnly ? new Span(null, c1, z1, i, next1 - 1) : new Span(c1, null, z1, i, next1 - 1));
                 i = next1;
                 continue;
             }
