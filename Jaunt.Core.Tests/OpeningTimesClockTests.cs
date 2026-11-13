@@ -89,6 +89,16 @@ public class OpeningTimesClockTests
     [InlineData("20時", "20:00-")]
     [InlineData("31時", "")] // beyond 30 is not an hour
     [InlineData("4・8 PM", "20:00-")] // the katakana middle dot is not Japanese text, so 8 PM is evening
+    [InlineData("喫茶 7:00~9:00", "07:00-09:00")] // Japanese text is on the 24-hour clock
+    [InlineData("喫茶 9-11 ST", "09:00-11:00 ST")]
+    [InlineData("21-30時", "21:00-06:00")]
+    [InlineData("ゴブ27-10 16時close", "-16:00")]
+    [InlineData("ラベ19-5 18時〆", "-18:00")]
+    [InlineData("4時〆", "-04:00")]
+    [InlineData("〆14:00", "-14:00")]
+    [InlineData("~17:00〆", "-17:00")]
+    [InlineData("23時くらいまで", "-23:00")]
+    [InlineData("18時まで", "-18:00")]
     public void JapaneseForms(string text, string expected) => Assert.Equal(expected, P(text));
 
     [Theory]
@@ -117,4 +127,43 @@ public class OpeningTimesClockTests
     [InlineData('')]
     [InlineData('ﬀ')]
     public void OtherCharactersDoNot(char c) => Assert.Equal("21:00- ST", P($"{c} 9 ST"));
+
+    [Theory]
+    [InlineData("7-11 PM EST", "19:00-23:00 EST")] // only the end says PM
+    [InlineData("2 - 6a", "02:00-06:00")] // only the end says AM
+    [InlineData("11-3 EST", "23:00-03:00 EST")] // neither: evening, then the end within 12 hours
+    [InlineData("8-12 ST", "20:00-00:00 ST")]
+    [InlineData("9:30-12:30 ET", "21:30-00:30 ET")]
+    [InlineData("8:30-11:00pm EST", "20:30-23:00 EST")]
+    [InlineData("9pm-12", "21:00-00:00")] // only the start says PM
+    [InlineData("12-4pm", "12:00-16:00")]
+    [InlineData("12p-8p EST", "12:00-20:00 EST")]
+    [InlineData("10p-3a EST", "22:00-03:00 EST")]
+    [InlineData("11 pm - 4 am EDT", "23:00-04:00 EDT")]
+    [InlineData("8PM EST to 11PM EST", "20:00-23:00 EST")]
+    [InlineData("FROM 11PM TIL 3AM EST", "23:00-03:00 EST")]
+    [InlineData("7–10 PM PT", "19:00-22:00 PT")] // en dash
+    [InlineData("7—10 PM PT", "19:00-22:00 PT")] // em dash
+    [InlineData("9pm--2am", "21:00-02:00")] // more than one dash
+    [InlineData("9pm till 2am", "21:00-02:00")]
+    [InlineData("9pm until 2am", "21:00-02:00")]
+    [InlineData("8PM PST to 11PM EST", "20:00-23:00 EST")] // the end's zone wins
+    [InlineData("17-2 ST", "17:00-02:00 ST")] // 24-hour start
+    [InlineData("1pm-2am", "13:00-02:00")] // AM on the end wins over the nearer reading, 14:00
+    [InlineData("10amEST-2pm", "10:00-14:00 EST")] // a joined AM and zone, then the range goes on
+    [InlineData("9pm til 2am", "21:00-02:00")]
+    [InlineData("8-8pm", "08:00-20:00")] // the same reading for both is a whole day, so the other wins
+    [InlineData("10pm-1amEST", "22:00-01:00 EST")]
+    [InlineData("8-11PST", "20:00-23:00 PST")] // PST is a zone, not P then ST
+    [InlineData("8-10p est", "20:00-22:00 EST")]
+    public void RangesFillInAmAndPm(string text, string expected) => Assert.Equal(expected, P(text));
+
+    [Theory]
+    [InlineData("until 11pm", "-23:00")]
+    [InlineData("till 11pm", "-23:00")]
+    [InlineData("til 2am", "-02:00")]
+    [InlineData("--2am EST", "-02:00 EST")]
+    [InlineData("-2am", "02:00-")] // one dash is not "until"
+    [InlineData("close 7.45", "")] // a dot without AM or PM is not minutes, and nothing after the hour is read
+    public void ClosingTimes(string text, string expected) => Assert.Equal(expected, P(text));
 }
