@@ -129,9 +129,9 @@ One-time setup:
    - Linux: `Z:\home\<you>\.xlcore\devPlugins\Jaunt\Jaunt.dll`
 2. `/xlplugins` → Dev Tools → Installed Dev Plugins → enable Jaunt.
 
-`/jaunt` (or the plugin installer's buttons) opens the settings window. `/xllog` shows the plugin log, which starts with the loaded build's commit, e.g. `Jaunt 0.0.0.1+60d7b0d… loaded`.
+`/jaunt` opens the venue list and `/jaunt config` (or the plugin installer's settings button) the settings window. `/xllog` shows the plugin log, which starts with the loaded build's commit, e.g. `Jaunt 0.0.0.1+60d7b0d… loaded`.
 
-[docs/smoke-test.md](docs/smoke-test.md) is the in-game checklist.
+[docs/smoke-test.md](docs/smoke-test.md) is the in-game checklist; its Self-tests section says which checks run from Dalamud's self-test window.
 
 ## Releasing
 

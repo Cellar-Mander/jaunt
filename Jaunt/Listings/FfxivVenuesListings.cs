@@ -30,10 +30,17 @@ internal sealed class FfxivVenuesListings : IDisposable
     private readonly IPluginLog log;
     private readonly Action save;
     private readonly HttpClient http;
+    private readonly TimeProvider time;
     private readonly CancellationTokenSource stopping = new();
     private Task fetching = Task.CompletedTask;
 
     public FfxivVenuesListings(ListingCache cache, Gazetteer gazetteer, Configuration configuration, IFramework framework, IPluginLog log, Action save)
+        : this(cache, gazetteer, configuration, framework, log, save, new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }, TimeProvider.System)
+    {
+    }
+
+    /// <summary>For the self-tests: a stand-in for the network and the clock, so a test never reaches FFXIV Venues.</summary>
+    internal FfxivVenuesListings(ListingCache cache, Gazetteer gazetteer, Configuration configuration, IFramework framework, IPluginLog log, Action save, HttpMessageHandler handler, TimeProvider time)
     {
         this.cache = cache;
         this.gazetteer = gazetteer;
@@ -41,15 +48,19 @@ internal sealed class FfxivVenuesListings : IDisposable
         this.framework = framework;
         this.log = log;
         this.save = save;
-        http = new HttpClient(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = Timeout };
+        this.time = time;
+        http = new HttpClient(handler) { Timeout = Timeout };
         var version = typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "0";
         http.DefaultRequestHeaders.UserAgent.ParseAdd($"Jaunt/{version} (+https://github.com/Cellar-Mander/jaunt)");
     }
 
+    /// <summary>The latest fetch, or a completed task if none has started.</summary>
+    internal Task Fetching => fetching;
+
     /// <summary>Starts a fetch if the cooldown has passed and none is running. Call on the game thread.</summary>
     public void FetchIfDue()
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = time.GetUtcNow();
         if (!fetching.IsCompleted || !cache.ShouldFetch(ListingSource.FfxivVenues, configuration.RefreshCooldownMinutes, now))
             return;
 
@@ -68,7 +79,7 @@ internal sealed class FfxivVenuesListings : IDisposable
             {
                 if (token.IsCancellationRequested)
                     return;
-                FfxivVenues.Record(cache, venues, DateTimeOffset.UtcNow);
+                FfxivVenues.Record(cache, venues, time.GetUtcNow());
                 save();
             }).ConfigureAwait(false);
             log.Information($"Fetched {venues.Count} venues from FFXIV Venues");

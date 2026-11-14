@@ -4,12 +4,20 @@ Run before merging anything that changes what the plugin does in-game. Each feat
 
 Setup: deploy with `dotnet buildingway dev-plugin deploy <task-ref>` (see "Testing in-game" in [CONTRIBUTING.md](../CONTRIBUTING.md)), log in, open `/xllog`. Release the dev folder with `dotnet buildingway dev-plugin release` when done.
 
+## Self-tests
+
+To run the checks that need no look at the screen and no click, open Dalamud's self-test window (`/xldev`, Dalamud menu, Open Self-Test), pick the `Jaunt` group and press play. Each check is its own step, so the table shows which passed or failed, and Jump runs any one on its own. Each step logs `Self-test PASS: <step>` or `Self-test FAIL: <step> (<detail>)`; on Linux, `grep 'Self-test' ~/.xlcore/logs/dalamud.log | tail` shows the result.
+
+The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
+
+Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* are covered only for the part named, so finish them by hand. Unmarked checks stay manual: how things look, clicks, reloading the plugin and the real network.
+
 ## Loading
 
 1. `/xllog` shows `Jaunt <version>+<commit> loaded`, with this checkout's commit.
-2. `/jaunt` opens the settings window; running it again closes it. `/jaunt config` opens it and leaves it open when run again.
+2. `/jaunt` opens the venue list; running it again closes it. `/jaunt config` opens the settings window and leaves it open when run again. *(self-test)*
 3. `/xlplugins` → Installed Plugins shows a settings button for the plugin, which opens the same window.
-4. Change a setting, disable and re-enable the plugin: the setting is kept.
+4. Change a setting, disable and re-enable the plugin: the setting is kept. *(self-test: Dalamud's save and load; the reload stays manual)*
 
 ## Settings
 
@@ -46,13 +54,14 @@ Loading the plugin rewrites `listings.json`, so copy the sample in again before 
 Then:
 
 1. **Expiry on load**: Hidden venues lists "Another hidden" then "Hidden lounge". "Hidden gala
-   (one-off)" is not listed: marked one-offs expire.
-2. **Clear**: confirm it. It reports "Removed 2 listings." Hidden venues is unchanged.
+   (one-off)" is not listed: marked one-offs expire. *(self-test: which listings expire; look at the list yourself)*
+2. **Clear**: confirm it. It reports "Removed 2 listings." Hidden venues is unchanged. *(self-test: the count)*
 3. **Un-hide**: press Un-hide on "Another hidden". Only "Hidden lounge" is left. Disable and
-   re-enable Jaunt: still only "Hidden lounge".
-4. **Clear again**: it reports "Removed 1 listing." (the venue just un-hidden).
+   re-enable Jaunt: still only "Hidden lounge". *(self-test: the cache after a save and reload; press Un-hide yourself)*
+4. **Clear again**: it reports "Removed 1 listing." (the venue just un-hidden). *(self-test: the count)*
 5. **Cache file**: `listings.json` still has `"FfxivVenues"` under `lastFetched`, and `/xllog`
-   shows no error saving it.
+   shows no error saving it. *(self-test)*
+6. **Unreadable file**: an unreadable `listings.json` is moved to `listings.json.bad` and Jaunt starts with an empty cache. *(self-test)*
 
 ## FFXIV Venues
 
@@ -61,17 +70,19 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `F
 1. **First fetch**: with no `FfxivVenues` time under `lastFetched` in `listings.json` (disable Jaunt,
    remove it, re-enable), open `/jaunt`. Within a few seconds the list fills with "FFXIV Venues" rows,
    and `/xllog` shows `Fetched … venues from FFXIV Venues`. The game doesn't stutter while it loads.
+   *(self-test: the request is recorded before it is sent and the venues after it, against a stand-in; the real site and the stutter stay manual)*
 2. **Cooldown**: close and reopen `/jaunt`. No second fetch is logged; the venues are still listed.
    Disable and re-enable Jaunt, then open `/jaunt`: still no fetch, as the time is saved.
+   *(self-test: no fetch a minute before the 8 h are up, one when they are; the reload stays manual)*
 3. **24/7**: at least one row shows "· open 24/7" (Nox Arcana or Splash Bathhouse, as of 2026-11).
 4. **Address**: on a venue, Copy address copies its world, district, ward and plot; Travel works with
-   Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark".
+   Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark". *(self-test: the Bismarck spelling)*
 5. **Links**: Open on a website and a Discord link opens the browser at the URI in the tooltip.
 6. **Scrolling**: scroll quickly through the whole list: rows don't jump or overlap, and the scrollbar
    reaches the last row.
 7. **Offline**: block the network (or set a bad DNS), clear the `FfxivVenues` fetch time as in 1, and
    open `/jaunt`. `/xllog` shows a warning "Couldn't fetch venues", the cached venues stay listed, and
-   reopening doesn't retry until the cooldown passes.
+   reopening doesn't retry until the cooldown passes. *(self-test: against a failing stand-in)*
 8. **Symbols in names**: no title shows `=` boxes. "꧁Tʜᴇ Aᴜʀᴏʀᴀ Tʜᴇᴀᴛᴇʀ꧂" (Mateus, Shirogane W26 P12)
    shows as "«The Aurora Theater»", "✦✦✦ 🌴 DESERT ROSE 🌴 ✦✦✦" as "◆◆◆ DESERT ROSE ◆◆◆", and
    "♥ Crafty Cafe ♥" and "☆KITSU☆" are unchanged.
