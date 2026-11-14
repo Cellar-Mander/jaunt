@@ -131,7 +131,7 @@ expanded until collapsed; which are expanded is saved too. Each change saves at 
   region, data-centre or server filter as of 2026-11) are fetched whole with one cooldown for all
   regions, and listings off the region's worlds are left out when recorded; after a switch to another
   region their listings arrive once that cooldown passes. Listings cached for another region are
-  never purged for it; they expire as usual.
+  never purged for it; they expire as usual, and the list doesn't show them (see "List").
   An in-game Party Finder ad on a world outside the region isn't recorded either; the game sends only
   the character's data centre, so this rarely drops one.
 - **Last fetched**: the listing cache records when each fetched source (each data centre, for a
@@ -371,7 +371,8 @@ two-pane browser (`cdd9e95f`) replaces this list.
   the first change since the last save, and on unload, not once per listing.
 - **List**: in-game and xivpf Party Finder listings with at least one parsed address, FFXIV
   Venues venues with an address, Partake events that haven't ended and FFXIV RP Event Calendar
-  events with an address or a location, not hidden, most recently seen first and then by title,
+  events with an address or a location, not hidden and in the travel region, most recently seen
+  first and then by title,
   each with its source ("Party Finder", "Party Finder (xivpf)", "FFXIV Venues", "Partake", or the
   calendar's credit). Partake events show their times and world on a second line (see "Partake").
   An xivpf ad the game has
@@ -381,6 +382,13 @@ two-pane browser (`cdd9e95f`) replaces this list.
   else "No upcoming dates"; then "validated 30 Aug 2025" (the date with its year) or "never
   validated"; then its location when it has no address. Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
   are spaced by their last drawn height and not drawn.
+- **Region in the list**: a listing is in the travel region by the same fields it is filtered on
+  when recorded (`TravelRegion.Includes`): the world it is listed on, or for a Partake event that
+  world or its data centre; an FFXIV Venues venue by its address's world as shown, misspellings
+  corrected. The list is rebuilt every second, so it follows a character switch within a second.
+  While no character is logged in (or its home world is unknown) it shows no listings, only "Log
+  in to a character to see the venues it can travel to." Nothing else in the window mentions the
+  region. Hidden venues in Settings lists every hidden listing, whatever its region.
 - **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
   apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
   ", Room B1". Districts use their English names. This is the shape Lifestream's address book reads.

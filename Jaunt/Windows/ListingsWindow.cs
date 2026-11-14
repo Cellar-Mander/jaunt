@@ -33,6 +33,7 @@ internal sealed class ListingsWindow : Window
     private readonly INotificationManager notifications;
     private readonly Configuration configuration;
     private readonly Action fetchSources;
+    private readonly Func<TravelRegion?> region;
 
     // Parsed once per ad text or event location and world, and derived once per venue's fields, so
     // drawing doesn't re-parse every frame
@@ -43,6 +44,7 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
     private DateTimeOffset nextRebuild;
     private bool showsPartake;
+    private bool loggedOut;
 
     /// <summary>
     /// One row: the listing, its title as shown, its addresses and links, whether it is open 24/7, and
@@ -66,9 +68,13 @@ internal sealed class ListingsWindow : Window
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
-    public ListingsWindow(ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources)
+    /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
+    public ListingsWindow(
+        ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
+        Func<TravelRegion?> region)
         : base("Jaunt###JauntListings")
     {
+        this.region = region;
         this.fetchSources = fetchSources;
         this.cache = cache;
         this.gazetteer = gazetteer;
@@ -94,6 +100,12 @@ internal sealed class ListingsWindow : Window
         {
             Rebuild(now);
             nextRebuild = now + RebuildInterval;
+        }
+
+        if (loggedOut)
+        {
+            ImGui.TextWrapped("Log in to a character to see the venues it can travel to.");
+            return;
         }
 
         if (rows.Count == 0)
@@ -288,7 +300,7 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// Lists the visible listings that have an address, Partake events that haven't ended and RP
+    /// Lists the visible listings on worlds the character can travel to that have an address, Partake events that haven't ended and RP
     /// calendar events with an address or location, newest first and then by title, parsing only ad
     /// text, locations and venue and event fields that changed. An xivpf ad the game has also sent
     /// shows once, as the in-game copy.
@@ -297,9 +309,12 @@ internal sealed class ListingsWindow : Window
     {
         var next = new List<Row>();
         showsPartake = false;
-        foreach (var listing in cache.Listings)
+        var travel = region();
+        loggedOut = travel is null;
+        foreach (var listing in travel is null ? [] : cache.Listings)
         {
-            if (listing.Hidden)
+            // A venue's world is checked once it is shown, as that corrects misspellings
+            if (listing.Hidden || (listing.Source != ListingSource.FfxivVenues && !travel!.Includes(listing)))
                 continue;
 
             if (listing.Source == ListingSource.FfxivVenues)
@@ -313,7 +328,7 @@ internal sealed class ListingsWindow : Window
                 }
 
                 var shown = venue.Shown;
-                if (shown.Address is { } address)
+                if (shown.Address is { } address && travel!.Includes(shown))
                     next.Add(new Row(listing, shown.Title, new ListingDetails([address], WebLinks(shown.Links)), shown.AlwaysOpen));
 
                 continue;

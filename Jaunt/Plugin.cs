@@ -65,7 +65,7 @@ public sealed class Plugin : IDalamudPlugin
         ffxivVenuesListings = FetchedListings.FfxivVenues(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
         partakeListings = FetchedListings.Partake(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
         rpEventCalendarListings = FetchedListings.RpEventCalendar(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
-        ListingsWindow = new ListingsWindow(ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources);
+        ListingsWindow = new ListingsWindow(ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, region.Get);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
