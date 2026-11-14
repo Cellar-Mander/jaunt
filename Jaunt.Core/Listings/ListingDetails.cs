@@ -23,6 +23,10 @@ public sealed record ListingDetails(IReadOnlyList<HousingAddress> Addresses, IRe
         var lineEnd = text.IndexOf('\n', StringComparison.Ordinal);
         // Stryker disable once Equality : normalised text is trimmed, so it never starts with a line break and lineEnd is never 0
         var line = lineEnd < 0 ? text : text[..lineEnd];
-        return line.Length <= MaxTitleLength ? line : line[..(MaxTitleLength - 1)].TrimEnd() + "…";
+        return Shorten(line);
     }
+
+    /// <summary>A title cut to <see cref="MaxTitleLength"/> characters, with "…" at the end when longer.</summary>
+    internal static string Shorten(string title) =>
+        title.Length <= MaxTitleLength ? title : title[..(MaxTitleLength - 1)].TrimEnd() + "…";
 }

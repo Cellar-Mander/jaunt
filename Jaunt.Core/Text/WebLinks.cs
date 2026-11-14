@@ -44,6 +44,10 @@ public static class WebLinks
         return links;
     }
 
+    /// <summary>Whether a URI is an absolute http or https address, the only kind Jaunt opens.</summary>
+    public static bool IsWeb(Uri? uri) =>
+        uri is { IsAbsoluteUri: true } && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+
     private static bool IsUrlChar(char c) => char.IsAsciiLetterOrDigit(c) || c == '_' || UrlPunctuation.Contains(c);
 
     /// <summary>Reads one run of URL characters as a link, or returns null when it isn't one.</summary>

@@ -150,6 +150,24 @@ to `listings.json.bad` and the cache starts empty.
   mention this. Clear still keeps marked one-offs.
 - **Hidden venues** lists hidden listings by title, case-insensitively, each with an Un-hide button.
 
+### FFXIV Venues
+
+`FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue`, every venue in one response, and
+records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with its address.
+
+- **Title**: the venue's name, first line only, trimmed and cut to 60 characters like an ad's.
+- **Address**: from the venue's location: the world, a district (`Mist`, `Lavender Beds`, `Goblet`,
+  `Shirogane`, `Empyreum`, with or without "The"), a ward of 1–30, then a plot of 1–60, or else an
+  apartment over 0 with the location's subdivision flag, and a room over 0. A plot wins over an
+  apartment. A world the game data doesn't know is corrected to the one world sharing its longest
+  beginning of at least 5 letters ("Bismark" → Bismarck), and otherwise kept as written. A venue with
+  no world, an unknown district or a ward outside 1–30 (such as one giving only a free-text location)
+  has no address.
+- **Links** kept in the cache are http or https only: on load, the cache drops any other saved link.
+- A venue without an ID, or marked not approved, is skipped; one whose fields have the wrong types
+  is skipped without failing the others. A response that isn't a JSON array is an error.
+- Only the fields above are read; others, such as managers' Discord IDs, are never stored.
+
 ### Venue list (MVP)
 
 `/jaunt` and the installer's Open button toggle the venue list; `/jaunt config` opens Settings. The
@@ -186,3 +204,4 @@ Caps on user-configurable lists and text, and how input from other players or th
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
+- An FFXIV Venues response is read in one pass over its venues, and titles are cut to 60 characters.
