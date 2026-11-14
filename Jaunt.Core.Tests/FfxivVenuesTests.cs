@@ -340,6 +340,32 @@ public class FfxivVenuesTests
     }
 
     [Fact]
+    public void AsksOnlyForApprovedVenuesOpeningWithinTheWeek()
+    {
+        var query = new Uri(FfxivVenues.Url).Query.TrimStart('?').Split('&');
+
+        Assert.Equal(["approved=true", "withinWeek=true"], query.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void AMarkedVenueLeftOutOfAFetchKeepsItsFieldsAndMarks()
+    {
+        // revert-check: not revert-sensitive (pins existing cache behaviour the within-week fetch relies on)
+        var cache = new ListingCache();
+        var fields = new FfxivVenues.Fields(new FfxivVenues.Location("Goblin", "Mist", 1, 2, 0, 0, false), "https://a.example.com", null, null);
+        FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", "A", fields)], Now.AddDays(-7));
+        cache.Find(ListingSource.FfxivVenues, "a")!.Favourite = true;
+
+        // A week with no opening: the response leaves it out
+        FfxivVenues.Record(cache, [new FfxivVenues.Venue("b", "B", fields)], Now);
+        cache.RemoveExpired(Now.AddYears(1));
+
+        var listing = Assert.Single(cache.Listings);
+        Assert.Equal(("a", fields, Now.AddDays(-7), true), (listing.Id, listing.Venue, listing.LastSeen, listing.Favourite));
+        Assert.NotNull(Show(listing).Address);
+    }
+
+    [Fact]
     public void AVenueThatLosesItsAddressAndLinksLosesThemInTheList()
     {
         var cache = new ListingCache();

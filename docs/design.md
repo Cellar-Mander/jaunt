@@ -182,7 +182,10 @@ On load:
 
 ### FFXIV Venues
 
-`FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue`, every venue in one response, and
+`FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue?approved=true&withinWeek=true` in one
+response: approved venues (the API's default, pinned) with an opening in the coming week, as the API
+works out from each venue's schedule. A venue left out stays in the cache with its fields and marks,
+and in the venue list, until it expires (see "Listing cache"). `FfxivVenues`
 records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
 the API sent them: its name as the title, and its location, website, Discord and schedule. The title,
 address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
@@ -395,6 +398,6 @@ Caps on user-configurable lists and text, and how input from other players or th
   is parsed once per text, like an ad; its title, world and links are worked out once per rebuild
   of the list (once a second), about 150 events.
 - An FFXIV Venues response is read in one pass over its venues, off the game thread; a venue's links
-  are at most two, and titles are cut to 60 characters when shown. The full list (about 1,400 venues,
-  2.5 MB) makes `listings.json` about 800 KB. The list derives a venue's title, address, links and
+  are at most two, and titles are cut to 60 characters when shown. The list (about 750 of 1,400 venues,
+  1.6 MB) keeps `listings.json` under about 800 KB. The list derives a venue's title, address, links and
   24/7 once per change to its cached fields, not per frame.
