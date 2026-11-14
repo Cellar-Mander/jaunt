@@ -115,6 +115,7 @@ public sealed class ListingCache
             if (listing is null || string.IsNullOrEmpty(listing.Id))
                 continue;
             listing.Title ??= "";
+            listing.Description ??= "";
             cache.listings[(listing.Source, listing.Id)] = listing;
         }
 

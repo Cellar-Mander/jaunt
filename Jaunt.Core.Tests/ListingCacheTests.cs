@@ -307,6 +307,30 @@ public class ListingCacheTests
         Assert.Equal("", ListingCache.FromJson(json).Find(ListingSource.Xivpf, "5")!.Title);
     }
 
+    [Theory]
+    [InlineData("""{"listings": [{"source": 0, "id": "5"}]}""")]
+    [InlineData("""{"listings": [{"source": 0, "id": "5", "description": null}]}""")]
+    public void AMissingOrNullDescriptionLoadsAsEmpty(string json)
+    {
+        var listing = ListingCache.FromJson(json).Find(ListingSource.InGamePartyFinder, "5")!;
+        Assert.Equal("", listing.Description);
+        Assert.Null(listing.ListedOn);
+    }
+
+    [Fact]
+    public void AdTextAndListingWorldSurviveSaving()
+    {
+        var cache = new ListingCache();
+        var listing = cache.Seen(ListingSource.InGamePartyFinder, "123", "Café", Now);
+        listing.Description = "Café  Siren Mist W5 P12";
+        listing.ListedOn = "Siren";
+
+        var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.InGamePartyFinder, "123")!;
+
+        Assert.Equal("Café  Siren Mist W5 P12", back.Description);
+        Assert.Equal("Siren", back.ListedOn);
+    }
+
     [Fact]
     public void LoadingNullGivesAnEmptyCache() => Assert.Equal(0, ListingCache.FromJson("null").Count);
 

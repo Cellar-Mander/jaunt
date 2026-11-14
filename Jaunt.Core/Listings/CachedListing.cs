@@ -10,6 +10,12 @@ public sealed class CachedListing
 
     public string Title { get; set; } = "";
 
+    /// <summary>The ad's text as the source last sent it, glyphs included, for the parsers.</summary>
+    public string Description { get; set; } = "";
+
+    /// <summary>The world the source last listed it on, if it says; addresses that name no world use it.</summary>
+    public string? ListedOn { get; set; }
+
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }
 
