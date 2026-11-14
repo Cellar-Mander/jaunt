@@ -25,8 +25,17 @@ public class FfxivVenuesTests
          "hiring":false,"sfw":true,"schedule":{{schedule}},"scheduleOverrides":[],"managers":["1"],"tags":["Bar"],"approved":{{approved}}}
         """;
 
-    private static FfxivVenues.Venue Single(string venueJson) =>
-        Assert.Single(FfxivVenues.Parse($"[{venueJson}]", TestGazetteer.Instance));
+    /// <summary>Reads one venue, records it in a new cache and derives what the list shows for it.</summary>
+    private static FfxivVenues.Shown Single(string venueJson) => Show(Cached(venueJson));
+
+    private static CachedListing Cached(string venueJson)
+    {
+        var cache = new ListingCache();
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{venueJson}]"), Now);
+        return Assert.Single(cache.Listings);
+    }
+
+    private static FfxivVenues.Shown Show(CachedListing listing) => FfxivVenues.Show(listing, TestGazetteer.Instance);
 
     private static string Opening(int day, string start, string end, int type = 0, int argument = 1, bool nextDay = false) =>
         $$"""
@@ -42,8 +51,7 @@ public class FfxivVenuesTests
     {
         var venue = Single(VenueJson());
 
-        Assert.Equal("abc123", venue.Id);
-        Assert.Equal("The Test Lounge", venue.Name);
+        Assert.Equal("The Test Lounge", venue.Title);
         Assert.Equal(new HousingAddress("Cuchulainn", WorldSource.Text, District.Mist, 14, 33, Subdivision: true), venue.Address);
         Assert.Equal([new Uri("https://lounge.carrd.co/"), new Uri("https://discord.gg/lounge")], venue.Links);
         Assert.False(venue.AlwaysOpen);
@@ -103,7 +111,7 @@ public class FfxivVenuesTests
         var venue = Single(VenueJson(location: location));
 
         Assert.Null(venue.Address);
-        Assert.Equal("The Test Lounge", venue.Name);
+        Assert.Equal("The Test Lounge", venue.Title);
     }
 
     [Theory]
@@ -254,8 +262,7 @@ public class FfxivVenuesTests
     public void AMalformedVenueIsSkippedAndTheRestRead()
     {
         var venues = FfxivVenues.Parse(
-            $"[{VenueJson(id: "a")}, {VenueJson(id: "b", location: """{"world":"Goblin","ward":"fourteen"}""")}, 42, null, {VenueJson(id: "c")}]",
-            TestGazetteer.Instance);
+            $"[{VenueJson(id: "a")}, {VenueJson(id: "b", location: """{"world":"Goblin","ward":"fourteen"}""")}, 42, null, {VenueJson(id: "c")}]");
 
         Assert.Equal(["a", "c"], venues.Select(v => v.Id));
     }
@@ -269,7 +276,7 @@ public class FfxivVenuesTests
     {
         var json = VenueJson(approved: approved).Replace("\"id\":\"abc123\"", $"\"id\":{id}", StringComparison.Ordinal);
 
-        Assert.Empty(FfxivVenues.Parse($"[{json}]", TestGazetteer.Instance));
+        Assert.Empty(FfxivVenues.Parse($"[{json}]"));
     }
 
     [Fact]
@@ -277,7 +284,7 @@ public class FfxivVenuesTests
     {
         var json = VenueJson().Replace(",\"approved\":true", "", StringComparison.Ordinal);
 
-        Assert.Single(FfxivVenues.Parse($"[{json}]", TestGazetteer.Instance));
+        Assert.Single(FfxivVenues.Parse($"[{json}]"));
     }
 
     [Theory]
@@ -285,7 +292,7 @@ public class FfxivVenuesTests
     [InlineData("\"venues\"")]
     [InlineData("<html>Too many requests</html>")]
     public void AResponseThatIsntAListOfVenuesIsAnError(string json) =>
-        Assert.ThrowsAny<JsonException>(() => FfxivVenues.Parse(json, TestGazetteer.Instance));
+        Assert.ThrowsAny<JsonException>(() => FfxivVenues.Parse(json));
 
     [Theory]
     [InlineData("  The Test Lounge  ", "The Test Lounge")]
@@ -293,42 +300,107 @@ public class FfxivVenuesTests
     [InlineData("The Test Lounge \r\nBar", "The Test Lounge")]
     [InlineData("A very long venue name that goes on and on past sixty characters", "A very long venue name that goes on and on past sixty chara…")]
     public void TitlesAreTheNamesFirstLineCutToSixtyCharacters(string name, string title) =>
-        Assert.Equal(title, Single(VenueJson(name: name)).Name);
+        Assert.Equal(title, Single(VenueJson(name: name)).Title);
 
     [Fact]
     public void AVenueWithNoNameHasAnEmptyTitle()
     {
         var json = VenueJson().Replace("\"name\":\"The Test Lounge\"", "\"name\":null", StringComparison.Ordinal);
 
-        Assert.Equal("", Single(json).Name);
+        Assert.Equal("", Single(json).Title);
+    }
+
+    [Fact]
+    public void ReadsTheIdAndKeepsTheFieldsAsSent()
+    {
+        var venue = Assert.Single(FfxivVenues.Parse($"[{VenueJson(name: " Lounge\nBar ", location: """
+            {"world":"Bismark","district":"The Goblet","ward":31,"plot":61,"apartment":0,"room":0,"subdivision":false}
+            """, website: "\"javascript:alert(1)\"")}]"));
+
+        Assert.Equal("abc123", venue.Id);
+        Assert.Equal(" Lounge\nBar ", venue.Name);
+        Assert.Equal(new FfxivVenues.Location("Bismark", "The Goblet", 31, 61, 0, 0, false), venue.Fields.Location);
+        Assert.Equal(("javascript:alert(1)", "https://discord.gg/lounge"), (venue.Fields.Website, venue.Fields.Discord));
+        Assert.Empty(venue.Fields.Schedule!);
     }
 
     [Fact]
     public void RecordingUpdatesAVenueAlreadyCachedAndKeepsItsMarks()
     {
         var cache = new ListingCache();
-        var address = new HousingAddress("Goblin", WorldSource.Text, District.Mist, 1, 2);
+        var fields = new FfxivVenues.Fields(new FfxivVenues.Location("Goblin", "Mist", 1, 2, 0, 0, false), "https://a.example.com", null, null);
         cache.Seen(ListingSource.FfxivVenues, "a", "Old name", Now.AddDays(-1)).Favourite = true;
 
-        FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", "New name", address, [new Uri("https://a.example.com")], AlwaysOpen: true)], Now);
+        FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", "New name\nsecond line", fields)], Now);
 
         var listing = Assert.Single(cache.Listings);
         Assert.Equal(
-            (ListingSource.FfxivVenues, "New name", address, true, Now, true, false),
-            (listing.Source, listing.Title, listing.Address, listing.AlwaysOpen, listing.LastSeen, listing.Favourite, listing.OneOff));
-        Assert.Equal([new Uri("https://a.example.com")], listing.Links);
+            (ListingSource.FfxivVenues, "New name\nsecond line", "New name", fields, Now, true, false),
+            (listing.Source, listing.Title, listing.ShownTitle, listing.Venue, listing.LastSeen, listing.Favourite, listing.OneOff));
     }
 
     [Fact]
-    public void AVenueThatLosesItsAddressAndLinksLosesThemInTheCache()
+    public void AVenueThatLosesItsAddressAndLinksLosesThemInTheList()
     {
         var cache = new ListingCache();
-        var address = new HousingAddress("Goblin", WorldSource.Text, District.Mist, 1, 2);
-        FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", "A", address, [new Uri("https://a.example.com")], AlwaysOpen: true)], Now.AddDays(-1));
+        var fields = new FfxivVenues.Fields(new FfxivVenues.Location("Goblin", "Mist", 1, 2, 0, 0, false), "https://a.example.com", null, null);
+        FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", "A", fields)], Now.AddDays(-1));
 
-        FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", "A", null, [], AlwaysOpen: false)], Now);
+        FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", null, new FfxivVenues.Fields(null, null, null, null))], Now);
 
-        var listing = Assert.Single(cache.Listings);
-        Assert.Equal((null, 0, false), (listing.Address, listing.Links.Count, listing.AlwaysOpen));
+        var shown = Show(Assert.Single(cache.Listings));
+        Assert.Equal(("", null, 0, false), (shown.Title, shown.Address, shown.Links.Count, shown.AlwaysOpen));
+    }
+
+    [Fact]
+    public void AVenueReloadedFromTheCacheShowsTheSame()
+    {
+        var schedule = Week(day => Opening(day, "00:00", "23:59"));
+        var cache = new ListingCache();
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(name: "Lounge\nBar", schedule: schedule)}]"), Now);
+
+        var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.FfxivVenues, "abc123")!;
+
+        var shown = Show(back);
+        Assert.Equal("Lounge", shown.Title);
+        Assert.Equal(new HousingAddress("Cuchulainn", WorldSource.Text, District.Mist, 14, 33, Subdivision: true), shown.Address);
+        Assert.Equal([new Uri("https://lounge.carrd.co/"), new Uri("https://discord.gg/lounge")], shown.Links);
+        Assert.True(shown.AlwaysOpen);
+    }
+
+    [Fact]
+    public void AVenueCachedWithAMisspeltWorldIsCorrectedWhenShown()
+    {
+        const string json = """
+            {"listings": [{"source": 2, "id": "5", "title": "Bar", "venue": {"location": {"world": "Bismark", "district": "Mist", "ward": 3, "plot": 4}}}]}
+            """;
+
+        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
+
+        Assert.Equal("Bismarck", Show(listing).Address!.World);
+    }
+
+    [Fact]
+    public void AHandEditedCacheCantMakeAVenueLinkAnythingButAWebsite()
+    {
+        const string json = """
+            {"listings": [{"source": 2, "id": "5", "venue": {"website": "javascript:alert(1)", "discord": "file:///C:/x"}}]}
+            """;
+
+        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
+
+        Assert.Empty(Show(listing).Links);
+    }
+
+    [Theory]
+    [InlineData("""{"listings": [{"source": 2, "id": "5", "title": "Bar"}]}""")]
+    [InlineData("""{"listings": [{"source": 2, "id": "5", "title": "Bar", "venue": null}]}""")]
+    [InlineData("""{"listings": [{"source": 2, "id": "5", "title": "Bar", "address": {"world": "Goblin"}, "links": ["https://a.example.com/"], "alwaysOpen": true}]}""")]
+    public void AVenueCachedWithoutItsFieldsShowsNoAddressUntilFetchedAgain(string json)
+    {
+        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
+
+        var shown = Show(listing);
+        Assert.Equal(("Bar", null, 0, false), (shown.Title, shown.Address, shown.Links.Count, shown.AlwaysOpen));
     }
 }

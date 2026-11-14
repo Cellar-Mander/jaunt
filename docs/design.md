@@ -154,8 +154,11 @@ to `listings.json.bad` and the cache starts empty.
 ### FFXIV Venues
 
 `FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue`, every venue in one response, and
-records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with its address, links
-and whether it is open 24/7. Opening the venue list fetches it, unless the source is within its
+records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
+the API sent them: its name as the title, and its location, website, Discord and schedule. The title,
+address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
+to how they are read applies to cached venues without fetching again. A venue cached without them
+shows no address until the next fetch. Opening the venue list fetches it, unless the source is within its
 cooldown (8 hours, or the Settings cooldown if longer); the request is recorded before it is sent,
 so a failed one counts too. Download and parsing run off the game thread.
 
@@ -168,8 +171,8 @@ so a failed one counts too. Download and parsing run off the game thread.
   no world, an unknown district or a ward outside 1–30 (such as one giving only a free-text location)
   has no address and isn't in the venue list.
 - **Links**: the website then the Discord, http or https only. One without a scheme is read like a
-  link in ad text (`discord.gg/abc` opens as https); any other scheme is dropped. The same link twice
-  is kept once. On load, the cache drops any saved link that isn't http or https.
+  link in ad text (`discord.gg/abc` opens as https); any other scheme is dropped, including in a
+  hand-edited cache. The same link twice is kept once.
 - **Open 24/7**: every day of the week (days 0–6) has an opening that repeats every week (interval
   type 0, every 1 week) and lasts at least 23 h 59 min, end minus start plus a day when the end is the
   next day. The site's form can't end at 24:00, so venues open around the clock enter 00:00–23:59.
@@ -178,7 +181,7 @@ so a failed one counts too. Download and parsing run off the game thread.
 - A venue without an ID, or marked not approved, is skipped; one whose fields have the wrong types
   is skipped without failing the others. A response that isn't a JSON array fails the fetch, which is
   logged, and the cached venues stay.
-- Only the fields above are read; others, such as managers' Discord IDs, are never stored.
+- Only the fields above are read and stored; others, such as managers' Discord IDs, never are.
 
 ### xivpf
 
@@ -299,5 +302,6 @@ Caps on user-configurable lists and text, and how input from other players or th
   game thread, keeping about 150 ads; their text is at most a few hundred characters. Checking
   whether the game also sent an ad is one cache lookup.
 - An FFXIV Venues response is read in one pass over its venues, off the game thread; a venue's links
-  are at most two, and titles are cut to 60 characters. The full list (about 1,400 venues, 2.5 MB)
-  makes `listings.json` about 600 KB.
+  are at most two, and titles are cut to 60 characters when shown. The full list (about 1,400 venues,
+  2.5 MB) makes `listings.json` about 800 KB. The list derives a venue's title, address, links and
+  24/7 once per change to its cached fields, not per frame.

@@ -24,24 +24,30 @@ internal sealed class ListingsWindow : Window
     private static readonly TimeSpan RebuildInterval = TimeSpan.FromSeconds(1);
 
     private readonly ListingCache cache;
+    private readonly Gazetteer gazetteer;
     private readonly AddressParser parser;
     private readonly Lifestream lifestream;
     private readonly INotificationManager notifications;
     private readonly Action fetchSources;
 
-    // Parsed once per ad text, so drawing doesn't re-parse every frame
+    // Parsed once per ad text, and derived once per venue's fields, so drawing doesn't re-parse every frame
     private readonly Dictionary<(ListingSource, string), (string Description, ListingDetails Details)> parsed = [];
-    private List<(CachedListing Listing, ListingDetails Details)> rows = [];
+    private readonly Dictionary<string, (string Name, FfxivVenues.Fields? Fields, FfxivVenues.Shown Shown)> shownVenues = [];
+    private List<Row> rows = [];
     private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
     private DateTimeOffset nextRebuild;
 
+    /// <summary>One row: the listing, its title as shown, its addresses and links, and whether it is open 24/7.</summary>
+    private sealed record Row(CachedListing Listing, string Title, ListingDetails Details, bool AlwaysOpen);
+
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
-    public ListingsWindow(ListingCache cache, AddressParser parser, Lifestream lifestream, INotificationManager notifications, Action fetchSources)
+    public ListingsWindow(ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Action fetchSources)
         : base("Jaunt###JauntListings")
     {
         this.fetchSources = fetchSources;
         this.cache = cache;
-        this.parser = parser;
+        this.gazetteer = gazetteer;
+        parser = new AddressParser(gazetteer);
         this.lifestream = lifestream;
         this.notifications = notifications;
         Size = new Vector2(520, 560);
@@ -72,9 +78,10 @@ internal sealed class ListingsWindow : Window
 
         var travelAvailable = lifestream.Available;
         var lineHeight = ImGui.GetTextLineHeightWithSpacing();
-        foreach (var (listing, details) in rows)
+        foreach (var row in rows)
         {
             // FFXIV Venues alone lists over a thousand venues, so rows out of view are only spaced, not drawn
+            var (listing, _, details, _) = row;
             var key = (listing.Source, listing.Id);
             var top = ImGui.GetCursorPosY();
             var lines = 1 + details.Addresses.Count + details.Links.Count;
@@ -87,7 +94,7 @@ internal sealed class ListingsWindow : Window
                 continue;
             }
 
-            DrawRow(listing, details, now, travelAvailable);
+            DrawRow(row, now, travelAvailable);
             rowHeights[key] = (lines, ImGui.GetCursorPosY() - top);
         }
 
@@ -95,13 +102,14 @@ internal sealed class ListingsWindow : Window
         ImGui.Dummy(Vector2.Zero);
     }
 
-    private void DrawRow(CachedListing listing, ListingDetails details, DateTimeOffset now, bool travelAvailable)
+    private void DrawRow(Row row, DateTimeOffset now, bool travelAvailable)
     {
+        var (listing, title, details, alwaysOpen) = row;
         using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
-        ImGui.TextUnformatted(ShownText.Title(listing.Title));
+        ImGui.TextUnformatted(ShownText.Title(title));
         ImGui.SameLine();
         ImGui.TextDisabled(SourceName(listing.Source));
-        if (listing.AlwaysOpen)
+        if (alwaysOpen)
         {
             ImGui.SameLine();
             ImGui.TextDisabled("· open 24/7");
@@ -177,11 +185,12 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// Lists the visible listings that have an address, newest first and then by title, parsing only
-    /// ad text that changed. An xivpf ad the game has also sent shows once, as the in-game copy.
+    /// ad text and venue fields that changed. An xivpf ad the game has also sent shows once, as the
+    /// in-game copy.
     /// </summary>
     private void Rebuild()
     {
-        var next = new List<(CachedListing, ListingDetails)>();
+        var next = new List<Row>();
         foreach (var listing in cache.Listings)
         {
             if (listing.Hidden)
@@ -189,8 +198,21 @@ internal sealed class ListingsWindow : Window
 
             if (listing.Source == ListingSource.FfxivVenues)
             {
-                if (listing.Address is { } address)
-                    next.Add((listing, new ListingDetails([address], [.. listing.Links.Select(uri => new WebLink(uri.OriginalString, uri))])));
+                // Recording a fetch assigns new name and field objects, so a reference check finds every change
+                if (!shownVenues.TryGetValue(listing.Id, out var venue)
+                    || !ReferenceEquals(venue.Name, listing.Title) || !ReferenceEquals(venue.Fields, listing.Venue))
+                {
+                    venue = (listing.Title, listing.Venue, FfxivVenues.Show(listing, gazetteer));
+                    shownVenues[listing.Id] = venue;
+                }
+
+                var shown = venue.Shown;
+                if (shown.Address is { } address)
+                {
+                    var details = new ListingDetails([address], [.. shown.Links.Select(uri => new WebLink(uri.OriginalString, uri))]);
+                    next.Add(new Row(listing, shown.Title, details, shown.AlwaysOpen));
+                }
+
                 continue;
             }
 
@@ -205,16 +227,22 @@ internal sealed class ListingsWindow : Window
             }
 
             if (entry.Details.Addresses.Count > 0)
-                next.Add((listing, entry.Details));
+                next.Add(new Row(listing, listing.Title, entry.Details, AlwaysOpen: false));
         }
 
-        rows = [.. next.OrderByDescending(r => r.Item1.LastSeen).ThenBy(r => r.Item1.Title, StringComparer.CurrentCultureIgnoreCase)];
+        rows = [.. next.OrderByDescending(r => r.Listing.LastSeen).ThenBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
 
-        // Forget ads the cache no longer holds (cleared or expired)
+        // Forget ads and venues the cache no longer holds (cleared or expired)
         if (parsed.Count > cache.Count)
         {
             foreach (var key in parsed.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
                 parsed.Remove(key);
+        }
+
+        if (shownVenues.Count > cache.Count)
+        {
+            foreach (var key in shownVenues.Keys.Where(k => cache.Find(ListingSource.FfxivVenues, k) is null).ToList())
+                shownVenues.Remove(key);
         }
 
         if (rowHeights.Count > cache.Count)

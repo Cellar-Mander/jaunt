@@ -166,7 +166,6 @@ public class PartakeTests
         Assert.Equal("Light", listing.DataCentre);
         Assert.Equal("Lavender Beds, Ward 20, Plot 28", listing.Location);
         Assert.Equal(item.LinkTexts, listing.LinkTexts);
-        Assert.Empty(listing.Links);
         Assert.Equal("", listing.Description);
     }
 

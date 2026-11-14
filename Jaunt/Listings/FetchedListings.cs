@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Plugin.Services;
 using Jaunt.Core.Listings;
-using Jaunt.Core.Text;
 
 namespace Jaunt.Listings;
 
@@ -69,13 +68,13 @@ internal sealed class FetchedListings : IDisposable
 
     /// <summary>The venue list from FFXIV Venues.</summary>
     public static FetchedListings FfxivVenues(
-        ListingCache cache, Gazetteer gazetteer, Configuration configuration, IFramework framework, IPluginLog log, Action save,
+        ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
         HttpMessageHandler? handler = null, TimeProvider? time = null) =>
         new(
             ListingSource.FfxivVenues, Core.Listings.FfxivVenues.Url, "FFXIV Venues", "venues",
             json =>
             {
-                var venues = Core.Listings.FfxivVenues.Parse(json, gazetteer);
+                var venues = Core.Listings.FfxivVenues.Parse(json);
                 return new Recording(venues.Count, (c, now) => Core.Listings.FfxivVenues.Record(c, venues, now));
             },
             cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
