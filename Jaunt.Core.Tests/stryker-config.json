@@ -1,7 +1,12 @@
 {
   "stryker-config": {
     "project": "Jaunt.Core.csproj",
-    "reporters": [ "progress", "html", "markdown", "json" ],
+    "reporters": [
+      "progress",
+      "html",
+      "markdown",
+      "json"
+    ],
     "thresholds": {
       "high": 80,
       "low": 60,
@@ -9,7 +14,11 @@
     },
     "since": {
       "enabled": false,
-      "ignore-changes-in": [ "**/Fixtures/**", "**/Corpus/**" ]
-    }
+      "ignore-changes-in": [
+        "**/Fixtures/**",
+        "**/Corpus/**"
+      ]
+    },
+    "additional-timeout": 1000
   }
 }
