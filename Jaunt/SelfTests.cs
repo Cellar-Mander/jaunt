@@ -263,7 +263,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 
     private IEnumerable<object?> FirstFetch()
     {
-        using var rig = new VenueRig(gazetteer);
+        using var rig = new VenueRig();
         var start = rig.Time.Now;
         rig.Listings.FetchIfDue();
         Check(rig.Cache.LastFetched(ListingSource.FfxivVenues) == start, "the request wasn't recorded before it was sent");
@@ -273,13 +273,14 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         Check(rig.Handler.Requests == 1, $"{rig.Handler.Requests} requests, not 1");
         Check(rig.Cache.Count == 2, $"{rig.Cache.Count} venues recorded, not 2");
         var bar = rig.Cache.Find(ListingSource.FfxivVenues, "st-2");
-        Check(bar?.Address?.World == "Bismarck", $"the venue on Bismark has world \"{bar?.Address?.World}\"");
+        var world = bar is null ? null : FfxivVenues.Show(bar, gazetteer).Address?.World;
+        Check(world == "Bismarck", $"the venue on Bismark has world \"{world}\"");
         Check(rig.Saves >= 2, $"saved {rig.Saves} times, not after the request and again after the venues");
     }
 
     private IEnumerable<object?> Cooldown()
     {
-        using var rig = new VenueRig(gazetteer);
+        using var rig = new VenueRig();
         var start = rig.Time.Now;
         rig.Listings.FetchIfDue();
         foreach (var wait in WaitFor(rig.Listings.Fetching, "the first fetch"))
@@ -300,7 +301,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 
     private IEnumerable<object?> FailedFetch()
     {
-        using var rig = new VenueRig(gazetteer);
+        using var rig = new VenueRig();
         rig.Listings.FetchIfDue();
         foreach (var wait in WaitFor(rig.Listings.Fetching, "the first fetch"))
             yield return wait;
@@ -381,8 +382,8 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         public FetchedListings Listings { get; }
         public int Saves { get; private set; }
 
-        public VenueRig(Gazetteer gazetteer) =>
-            Listings = FetchedListings.FfxivVenues(Cache, gazetteer, new Configuration(), Plugin.Framework, Plugin.Log, () => Saves++, Handler, Time);
+        public VenueRig() =>
+            Listings = FetchedListings.FfxivVenues(Cache, new Configuration(), Plugin.Framework, Plugin.Log, () => Saves++, Handler, Time);
 
         // Also disposes Handler, through the fetcher's HttpClient
         public void Dispose() => Listings.Dispose();

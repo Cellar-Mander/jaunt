@@ -1,4 +1,4 @@
-using Jaunt.Core.Text;
+using System.Text.Json.Serialization;
 
 namespace Jaunt.Core.Listings;
 
@@ -10,7 +10,12 @@ public sealed class CachedListing
     /// <summary>The listing's ID within its source.</summary>
     public required string Id { get; init; }
 
+    /// <summary>The title, or for FFXIV Venues the venue's name as sent, which <see cref="ShownTitle"/> reads.</summary>
     public string Title { get; set; } = "";
+
+    /// <summary>The title as the windows show and sort it, derived from <see cref="Title"/> for sources that send raw names.</summary>
+    [JsonIgnore]
+    public string ShownTitle => Source == ListingSource.FfxivVenues ? FfxivVenues.Title(Title) : Title;
 
     /// <summary>The ad's text as the source last sent it, glyphs included, for the parsers.</summary>
     public string Description { get; set; } = "";
@@ -19,16 +24,10 @@ public sealed class CachedListing
     public string? ListedOn { get; set; }
 
     /// <summary>
-    /// The address the source gives as data, for sources with structured addresses (FFXIV Venues).
-    /// Null for ads, whose addresses are parsed from <see cref="Description"/>.
+    /// A venue's fields as FFXIV Venues last sent them, which <see cref="FfxivVenues.Show"/> reads;
+    /// null for other sources.
     /// </summary>
-    public HousingAddress? Address { get; set; }
-
-    /// <summary>The website and Discord links the source gives as data, http or https only.</summary>
-    public IReadOnlyList<Uri> Links { get; set; } = [];
-
-    /// <summary>Open around the clock, as inferred from the source's schedule.</summary>
-    public bool AlwaysOpen { get; set; }
+    public FfxivVenues.Fields? Venue { get; set; }
 
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }
