@@ -44,15 +44,13 @@ internal sealed class PartyFinderListings : IDisposable
 
         try
         {
-            var description = listing.Description.TextValue;
             var now = DateTimeOffset.UtcNow;
-            var cached = cache.Seen(
+            cache.SeenAd(
                 ListingSource.InGamePartyFinder,
                 listing.Id.ToString(CultureInfo.InvariantCulture),
-                ListingDetails.Title(description),
+                listing.Description.TextValue,
+                listing.World.ValueNullable?.Name.ExtractText(),
                 now);
-            cached.Description = description;
-            cached.ListedOn = listing.World.ValueNullable?.Name.ExtractText();
             saveDue ??= now + SaveDelay;
         }
         catch (Exception e)

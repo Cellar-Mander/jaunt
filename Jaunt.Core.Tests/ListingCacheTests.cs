@@ -22,6 +22,37 @@ public class ListingCacheTests
     }
 
     [Fact]
+    public void AnAdIsTitledFromItsTextAndKeepsItsTextAndWorld()
+    {
+        const string ad = "Moonlit Lounge  Mist W14 P33\nmoonlit.carrd.co";
+        var cache = new ListingCache();
+
+        var listing = cache.SeenAd(ListingSource.InGamePartyFinder, "7", ad, "Cuchulainn", Now);
+
+        Assert.Same(listing, cache.Find(ListingSource.InGamePartyFinder, "7"));
+        Assert.Equal(ListingDetails.Title(ad), listing.Title);
+        Assert.Equal(ad, listing.Description);
+        Assert.Equal("Cuchulainn", listing.ListedOn);
+        Assert.Equal(Now, listing.LastSeen);
+        Assert.False(listing.OneOff);
+    }
+
+    [Fact]
+    public void SeeingAnAdAgainReplacesItsTextAndWorldAndKeepsMarks()
+    {
+        var cache = new ListingCache();
+        cache.SeenAd(ListingSource.InGamePartyFinder, "7", "Old text", "Cuchulainn", Now.AddHours(-1)).Favourite = true;
+
+        var listing = cache.SeenAd(ListingSource.InGamePartyFinder, "7", "New text", null, Now);
+
+        Assert.Equal(1, cache.Count);
+        Assert.Equal("New text", listing.Title);
+        Assert.Equal("New text", listing.Description);
+        Assert.Null(listing.ListedOn);
+        Assert.True(listing.Favourite);
+    }
+
+    [Fact]
     public void TheSameIdFromAnotherSourceIsAnotherListing()
     {
         var cache = new ListingCache();
