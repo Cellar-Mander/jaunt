@@ -71,7 +71,7 @@ public sealed partial class ListingCache
         return files;
     }
 
-    /// <summary>Counts everything as changed, so the next <see cref="TakeChanges"/> writes every file.</summary>
+    /// <summary>Counts everything as changed, so the next <see cref="TakeChanges"/> writes every file, as for a full copy.</summary>
     public void ChangedAll()
     {
         changedSources.UnionWith(Enum.GetValues<ListingSource>());
@@ -251,40 +251,6 @@ public sealed partial class ListingCache
         return file;
     }
 
-    /// <summary>
-    /// Reads the single <c>listings.json</c> earlier versions saved, listings with their marks and
-    /// fetch times together. Listings without an ID are dropped, and a repeated one keeps the last
-    /// copy. Fetch times for sources this version doesn't know, or that are never fetched, are dropped.
-    /// Call <see cref="ChangedAll"/> to write it out as the current files.
-    /// </summary>
-    /// <exception cref="JsonException">The text is not a saved cache.</exception>
-    public static ListingCache FromLegacyJson(string json)
-    {
-        var cache = new ListingCache();
-        var saved = JsonSerializer.Deserialize<LegacyCache>(json, JsonOptions);
-        foreach (var listing in saved?.Listings ?? [])
-        {
-            if (listing is null || string.IsNullOrEmpty(listing.Id))
-                continue;
-            // Before the title, which an ad works out from its text
-            listing.Description ??= "";
-            listing.Title ??= "";
-            listing.LinkTexts = [.. (listing.LinkTexts ?? []).Where(text => text is not null)];
-            listing.Openings = [.. (listing.Openings ?? []).Where(o => o is not null && o.End > o.Start)];
-            listing.Recorded = true;
-            listing.Owner = cache;
-            cache.Of(listing.Source)[listing.Id] = listing;
-        }
-
-        foreach (var (name, time) in saved?.LastFetched ?? [])
-        {
-            if (KnownSource(name) is { } source && RefreshPolicy.Minimum(source) is not null)
-                cache.lastFetched[source] = time;
-        }
-
-        return cache;
-    }
-
     private abstract class SavedFile
     {
         public int Version { get; set; } = FileVersion;
@@ -320,12 +286,5 @@ public sealed partial class ListingCache
         public bool Favourite { get; set; }
         public bool Visited { get; set; }
         public bool Hidden { get; set; }
-    }
-
-    // Listings were saved by source number in this file
-    private sealed class LegacyCache
-    {
-        public List<CachedListing?>? Listings { get; set; }
-        public Dictionary<string, DateTimeOffset>? LastFetched { get; set; }
     }
 }

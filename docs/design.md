@@ -165,9 +165,6 @@ On load:
 - A mark whose listing no source file holds still adds the listing, with the mark's title, so the
   hidden list shows it. It was last seen at no known time, so a marked one-off expires (see below).
   A listing whose title is empty takes the mark's title.
-- With neither marks file, a `listings.json` from an earlier version (listings, marks and fetch
-  times together) is read, written out as the files above and, once all are written, renamed to
-  `listings.json.old`. An unreadable one is moved to `listings.json.bad` and the cache starts empty.
 
 - **Clear cached listings** asks for confirmation, warning that rate-limited sources may not show
   in the browser again for hours, then removes every listing that is not favourited, visited or

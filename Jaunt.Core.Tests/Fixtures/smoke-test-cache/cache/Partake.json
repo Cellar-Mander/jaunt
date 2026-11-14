@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "listings": [
+    {
+      "lastSeen": "2000-01-01T00:00:00+00:00",
+      "sent": {
+        "id": "p-5", "title": "Hidden gala (one-off)", "startsAt": "2000-01-01T20:00:00+00:00", "endsAt": "2000-01-01T23:00:00+00:00",
+        "world": "Lich", "dataCentre": "Light", "location": null, "linkTexts": []
+      }
+    }
+  ]
+}

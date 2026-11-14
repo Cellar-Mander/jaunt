@@ -24,7 +24,12 @@
 
   <ItemGroup>
     <!-- The sample cache for the self-tests (SelfTests.cs); SmokeTestListingsTests keeps it in step with docs/smoke-test.md -->
-    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-listings.json" LogicalName="Jaunt.smoke-test-listings.json" />
+    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-cache\marks.json" LogicalName="Jaunt.smoke-test-cache/marks.json" />
+    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-cache\fetch-state.json" LogicalName="Jaunt.smoke-test-cache/fetch-state.json" />
+    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-cache\cache\Xivpf.json" LogicalName="Jaunt.smoke-test-cache/cache/Xivpf.json" />
+    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-cache\cache\FfxivVenues.json" LogicalName="Jaunt.smoke-test-cache/cache/FfxivVenues.json" />
+    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-cache\cache\Partake.json" LogicalName="Jaunt.smoke-test-cache/cache/Partake.json" />
+    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-cache\cache\RpEventCalendar.json" LogicalName="Jaunt.smoke-test-cache/cache/RpEventCalendar.json" />
   </ItemGroup>
 
   <ItemGroup>

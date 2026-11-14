@@ -13,9 +13,6 @@ namespace Jaunt.Listings;
 /// </summary>
 internal sealed class ListingCacheStore : IDisposable
 {
-    /// <summary>The single file earlier versions saved, moved to the current files once.</summary>
-    internal const string LegacyFile = "listings.json";
-
     private readonly string folder;
     private readonly IPluginLog log;
     private readonly object gate = new();
@@ -30,50 +27,9 @@ internal sealed class ListingCacheStore : IDisposable
     /// <summary>
     /// Reads the saved files, or an empty cache if there are none. An unreadable file is moved aside
     /// with <c>.bad</c> added to its name, so the next save doesn't overwrite marks someone could
-    /// still recover, and its part starts empty. With no marks file yet, an earlier version's
-    /// <c>listings.json</c> is read instead, saved as the current files and moved to <c>listings.json.old</c>.
+    /// still recover, and its part starts empty.
     /// </summary>
-    public ListingCache Load()
-    {
-        if (!File.Exists(FullPath(ListingCache.MarksFile)) && !File.Exists(FullPath(ListingCache.MarksBackupFile))
-            && File.Exists(FullPath(LegacyFile)) && Migrate() is { } migrated)
-            return migrated;
-
-        return ListingCache.Load(Read, MoveAside);
-    }
-
-    private ListingCache? Migrate()
-    {
-        ListingCache cache;
-        try
-        {
-            cache = ListingCache.FromLegacyJson(File.ReadAllText(FullPath(LegacyFile)));
-        }
-        catch (JsonException e)
-        {
-            MoveAside(LegacyFile, e);
-            return null;
-        }
-        catch (IOException e)
-        {
-            log.Warning(e, $"Couldn't read {FullPath(LegacyFile)}; started an empty cache");
-            return null;
-        }
-
-        // Kept until every file is written, so a failed write loses nothing on the next load
-        cache.ChangedAll();
-        var files = cache.TakeChanges();
-        Enqueue(() =>
-        {
-            var written = true;
-            foreach (var file in files)
-                written &= Write(file);
-            if (written)
-                TryMove(LegacyFile, LegacyFile + ".old");
-        });
-        log.Information($"Moving {FullPath(LegacyFile)} to the marks, fetch times and per-source cache files");
-        return cache;
-    }
+    public ListingCache Load() => ListingCache.Load(Read, MoveAside);
 
     /// <summary>Snapshots the files that changed now and writes them on a background task, after any earlier save.</summary>
     public void Save(ListingCache cache)
@@ -120,8 +76,7 @@ internal sealed class ListingCacheStore : IDisposable
         }
     }
 
-    /// <returns>Whether the file was written.</returns>
-    private bool Write(ListingFile file)
+    private void Write(ListingFile file)
     {
         // Write then rename, so a crash mid-write never leaves a half-written file
         var path = FullPath(file.Path);
@@ -134,13 +89,11 @@ internal sealed class ListingCacheStore : IDisposable
                 File.Replace(temp, path, FullPath(backup));
             else
                 File.Move(temp, path, overwrite: true);
-            return true;
         }
         catch (Exception e)
         {
             // Not only IO: an unexpected serialisation error must not stop the saves queued after it
             log.Error(e, $"Couldn't save {path}");
-            return false;
         }
     }
 

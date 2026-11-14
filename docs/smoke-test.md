@@ -39,19 +39,18 @@ expiry) are covered by `Jaunt.Core.Tests`.
 
 ### With the sample cache
 
-[`smoke-test-listings.json`](../Jaunt.Core.Tests/Fixtures/smoke-test-listings.json) holds eight listings: two unmarked, one
+[`smoke-test-cache`](../Jaunt.Core.Tests/Fixtures/smoke-test-cache) holds eight listings: two unmarked, one
 favourite and one visited, two hidden, plus an old unmarked listing and an old hidden one-off that
 expire on load. Its dates are 2000 or 2099, so the results below hold until 2099.
-`SmokeTestListingsTests` keeps the file and this list in step.
+`SmokeTestListingsTests` keeps the files and this list in step.
 
-The sample is in the single `listings.json` earlier versions saved, which loading moves to the
-current files once, so copy it in again before each run:
+Loading the plugin rewrites the cache files, so copy the sample in again before each run:
 
 1. Disable Jaunt in `/xlplugins`.
 2. In the plugin's config folder (`~/.xlcore/pluginConfigs/Jaunt/` on Linux,
    `%AppData%\XIVLauncher\pluginConfigs\Jaunt\` on Windows), move `marks.json`, `marks.json.bak`,
-   `fetch-state.json` and the `cache` folder somewhere safe if you want to keep them, then copy
-   `Jaunt.Core.Tests/Fixtures/smoke-test-listings.json` there as `listings.json`.
+   `fetch-state.json` and the `cache` folder somewhere safe if you want to keep them, then copy the
+   contents of `Jaunt.Core.Tests/Fixtures/smoke-test-cache/` there.
 3. Enable Jaunt and open Settings.
 
 Then:
@@ -62,9 +61,9 @@ Then:
 3. **Un-hide**: press Un-hide on "Another hidden". Only "Hidden lounge" is left. Disable and
    re-enable Jaunt: still only "Hidden lounge". *(self-test: the cache after a save and reload; press Un-hide yourself)*
 4. **Clear again**: it reports "Removed 1 listing." (the venue just un-hidden). *(self-test: the count)*
-5. **Cache files**: `listings.json` is now `listings.json.old`; `fetch-state.json` still has
-   `"FfxivVenues"` under `lastFetched`, `marks.json` lists only "Hidden lounge" and the favourite and
-   visited listings, and `/xllog` shows no error saving them. *(self-test: the move and the fetch time)*
+5. **Cache files**: `fetch-state.json` still has `"FfxivVenues"` under `lastFetched`, `marks.json`
+   lists only "Hidden lounge" and the favourite and visited listings, `marks.json.bak` holds the marks
+   from before the last change, and `/xllog` shows no error saving them. *(self-test: the fetch time and the backup)*
 6. **Unreadable files**: an unreadable `marks.json` is moved to `marks.json.bad` and the marks are read
    from `marks.json.bak`; an unreadable `cache/<source>.json` is moved to `cache/<source>.json.bad` and
    that source starts empty. *(self-test)*

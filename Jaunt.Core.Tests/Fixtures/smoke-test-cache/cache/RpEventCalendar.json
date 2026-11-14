@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "listings": [
+    {
+      "lastSeen": "2099-01-01T00:00:00+00:00",
+      "sent": {
+        "id": "r-7", "name": "Visited night", "server": null, "location": null, "rating": null,
+        "linkTexts": [], "openings": [], "oneOff": false, "lastValidated": null
+      }
+    }
+  ]
+}

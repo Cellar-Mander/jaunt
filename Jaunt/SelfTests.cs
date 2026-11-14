@@ -25,7 +25,12 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
     // Frames to wait for a background save or fetch: about 5 s at 60 fps
     private const int Timeout = 300;
 
-    private const string SampleResource = "Jaunt.smoke-test-listings.json";
+    // The sample cache's files, each embedded as Jaunt.smoke-test-cache/<path>
+    private static readonly string[] SampleFiles =
+    [
+        ListingCache.MarksFile, ListingCache.FetchTimesFile,
+        .. new[] { ListingSource.Xivpf, ListingSource.FfxivVenues, ListingSource.Partake, ListingSource.RpEventCalendar }.Select(ListingCache.SourceFile),
+    ];
 
     private static readonly DateTimeOffset SampleFetched = new(2026, 11, 14, 0, 0, 0, TimeSpan.Zero);
 
@@ -107,7 +112,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         new Step("/jaunt toggles the listings window", JauntToggles),
         new Step("/jaunt config opens Settings and keeps it open", JauntConfigOpens),
         new Step("Settings survive Dalamud's save and load", SettingsRoundTrip),
-        new Step("Sample cache: moving to the current files, expiry, Clear, Un-hide and a background save", SampleCacheRoundTrip),
+        new Step("Sample cache: expiry, Clear, Un-hide and a background save", SampleCacheRoundTrip),
         new Step("Unreadable files are moved aside, and marks come from the backup", UnreadableCache),
         new Step("FFXIV Venues: first fetch is recorded", FirstFetch),
         new Step("FFXIV Venues: no fetch inside the 8 h cooldown", Cooldown),
@@ -211,12 +216,18 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         return folder;
     }
 
-    private static string ReadSample()
+    private static void CopySample(string folder)
     {
-        using var stream = typeof(SelfTests).Assembly.GetManifestResourceStream(SampleResource)
-            ?? throw new SelfTestFailure($"the build has no {SampleResource}");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
+        foreach (var file in SampleFiles)
+        {
+            var resource = $"Jaunt.smoke-test-cache/{file}";
+            using var stream = typeof(SelfTests).Assembly.GetManifestResourceStream(resource)
+                ?? throw new SelfTestFailure($"the build has no {resource}");
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var path = Path.Combine(folder, file.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, reader.ReadToEnd());
+        }
     }
 
     // The same cases as "With the sample cache" in docs/smoke-test.md, on a scratch copy
@@ -225,9 +236,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         var folder = ScratchFolder();
         try
         {
-            // An earlier version's single file, which loading moves to the current files
-            var legacy = Path.Combine(folder, ListingCacheStore.LegacyFile);
-            File.WriteAllText(legacy, ReadSample());
+            CopySample(folder);
             using var store = new ListingCacheStore(folder, Plugin.Log);
             var cache = store.Load();
             Check(cache.Count == 8, $"loaded {cache.Count} listings, not 8");
@@ -244,8 +253,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
             store.Save(cache);
             foreach (var wait in WaitFor(store.Pending, "the background save"))
                 yield return wait;
-            Check(!File.Exists(legacy) && File.Exists(legacy + ".old"), "listings.json wasn't moved to listings.json.old");
-            Check(File.Exists(Path.Combine(folder, ListingCache.MarksFile)), "marks.json wasn't written");
+            Check(File.Exists(Path.Combine(folder, ListingCache.MarksBackupFile)), "the marks file before the save wasn't kept as marks.json.bak");
 
             var saved = new ListingCacheStore(folder, Plugin.Log).Load();
             var titles = string.Join(", ", saved.Listings.Select(l => l.Title).Order(StringComparer.Ordinal));

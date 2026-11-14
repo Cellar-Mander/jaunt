@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "marks": [
+    { "source": "Xivpf", "id": "1003", "title": "Favourite café", "oneOff": false, "favourite": true, "visited": false, "hidden": false },
+    { "source": "FfxivVenues", "id": "v-4", "title": "Hidden lounge", "oneOff": false, "favourite": false, "visited": false, "hidden": true },
+    { "source": "Partake", "id": "p-5", "title": "Hidden gala (one-off)", "oneOff": true, "favourite": false, "visited": false, "hidden": true },
+    { "source": "RpEventCalendar", "id": "r-7", "title": "Visited night", "oneOff": false, "favourite": false, "visited": true, "hidden": false },
+    { "source": "FfxivVenues", "id": "v-8", "title": "Another hidden", "oneOff": false, "favourite": false, "visited": false, "hidden": true }
+  ]
+}
