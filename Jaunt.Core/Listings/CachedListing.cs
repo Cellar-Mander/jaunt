@@ -27,6 +27,21 @@ public sealed class CachedListing
     /// <summary>The website and Discord links the source gives as data, http or https only.</summary>
     public IReadOnlyList<Uri> Links { get; set; } = [];
 
+    /// <summary>The data centre the source gives, for sources that say (Partake).</summary>
+    public string? DataCentre { get; set; }
+
+    /// <summary>
+    /// The free-text location the source gives as data (Partake), for the address parser. Null for
+    /// sources whose addresses are structured or in <see cref="Description"/>.
+    /// </summary>
+    public string? Location { get; set; }
+
+    /// <summary>When a dated event starts, for sources that list them (Partake).</summary>
+    public DateTimeOffset? StartsAt { get; set; }
+
+    /// <summary>When a dated event ends; always after <see cref="StartsAt"/> when both are set.</summary>
+    public DateTimeOffset? EndsAt { get; set; }
+
     /// <summary>Open around the clock, as inferred from the source's schedule.</summary>
     public bool AlwaysOpen { get; set; }
 

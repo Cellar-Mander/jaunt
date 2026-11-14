@@ -197,6 +197,10 @@ public class ListingCacheTests
     {
         var cache = new ListingCache();
         var listing = cache.Seen(ListingSource.Partake, "42", "ラベンダー Café", Now, oneOff: true);
+        listing.StartsAt = Now.AddHours(1);
+        listing.EndsAt = Now.AddHours(4);
+        listing.DataCentre = "Light";
+        listing.Location = "LB W19 P58";
         listing.Favourite = true;
         listing.Visited = true;
         cache.Seen(ListingSource.Xivpf, "7", "Hidden one", Now.AddDays(-3)).Hidden = true;
@@ -208,7 +212,12 @@ public class ListingCacheTests
         Assert.Equal("ラベンダー Café", back.Title);
         Assert.Equal(Now, back.LastSeen);
         Assert.True(back.OneOff);
+        Assert.Equal(Now.AddHours(1), back.StartsAt);
+        Assert.Equal(Now.AddHours(4), back.EndsAt);
+        Assert.Equal("Light", back.DataCentre);
+        Assert.Equal("LB W19 P58", back.Location);
         Assert.False(loaded.Find(ListingSource.Xivpf, "7")!.OneOff);
+        Assert.Null(loaded.Find(ListingSource.Xivpf, "7")!.StartsAt);
         Assert.True(back.Favourite);
         Assert.True(back.Visited);
         Assert.False(back.Hidden);

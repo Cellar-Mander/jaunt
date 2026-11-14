@@ -205,6 +205,31 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
 - Only the fields above are read; others, such as the recruiter's name and the party's jobs, are
   never stored.
 
+### Partake
+
+`Partake` reads FFXIV events from Partake's public GraphQL API, `POST https://api.partake.gg/` with
+no authentication, and records each in the listing cache as `Partake`, keyed by the event's ID, as a
+one-off.
+
+- **Query**: `events(game: "final-fantasy-xiv", startsBetween: {start}, sortBy: STARTS_AT_ASC)`
+  with `start` 24 hours before now, so events already under way are included. Pages of 200 (`limit`,
+  `offset`) until a page comes back with fewer, at most 5 pages per fetch. About 150 events are
+  listed at once, so one page is usual. Only the fields shown are asked for: `id`, `title`,
+  `startsAt`, `endsAt`, `location`, `server.name`, `dataCenter.name` and the host team's
+  `websiteUrl` and `discordUrl`. `server` and `dataCenter` work but aren't in Partake's docs.
+- **Title**: the event's title, trimmed and cut to 60 characters like an ad's.
+- **Times**: `startsAt` and `endsAt` (UTC).
+- **World**: `server.name`, corrected like an FFXIV Venues world, kept with the data centre. It is
+  the world for addresses in the location that name none.
+- **Location**: free text ("LB W19 P58", "57 plot, ward15 , lavender beds"), for the same address
+  parser as ad text.
+- **Links**: the host's website then Discord, read like FFXIV Venues links.
+- An event without an ID, a title, both times or a world, whose end is not after its start, or whose
+  fields have the wrong types is skipped without failing the others. A response with GraphQL
+  `errors` (Partake answers those with HTTP 200), without `data.events`, or that isn't JSON fails
+  the fetch, and the cached events stay.
+- Events that have ended by the time a fetch is recorded aren't recorded.
+
 ### Text the font can't draw
 
 Venue names and ad titles use characters the plugin's font lacks (ImGui draws those as a box). The
