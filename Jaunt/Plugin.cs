@@ -6,7 +6,6 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Jaunt.Core.Listings;
-using Jaunt.Core.Text;
 using Jaunt.Listings;
 using Jaunt.Text;
 using Jaunt.Travel;
@@ -59,8 +58,8 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.AddWindow(ConfigWindow);
         var gazetteer = GazetteerLoader.Load(DataManager);
         xivpfListings = FetchedListings.Xivpf(ListingCache, Configuration, Framework, Log, SaveListingCache);
-        ffxivVenuesListings = FetchedListings.FfxivVenues(ListingCache, gazetteer, Configuration, Framework, Log, SaveListingCache);
-        ListingsWindow = new ListingsWindow(ListingCache, new AddressParser(gazetteer), new Lifestream(PluginInterface, Log), NotificationManager, FetchSources);
+        ffxivVenuesListings = FetchedListings.FfxivVenues(ListingCache, Configuration, Framework, Log, SaveListingCache);
+        ListingsWindow = new ListingsWindow(ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, FetchSources);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 

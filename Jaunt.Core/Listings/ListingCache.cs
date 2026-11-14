@@ -1,6 +1,5 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Listings;
 
@@ -63,9 +62,9 @@ public sealed class ListingCache
 
     public CachedListing? Find(ListingSource source, string id) => listings.GetValueOrDefault((source, id));
 
-    /// <summary>Hidden listings, by title.</summary>
+    /// <summary>Hidden listings, by title as shown.</summary>
     public IReadOnlyList<CachedListing> HiddenListings() =>
-        [.. listings.Values.Where(l => l.Hidden).OrderBy(l => l.Title, StringComparer.CurrentCultureIgnoreCase)];
+        [.. listings.Values.Where(l => l.Hidden).OrderBy(l => l.ShownTitle, StringComparer.CurrentCultureIgnoreCase)];
 
     /// <summary>Removes every listing that is not favourite, visited or hidden.</summary>
     /// <returns>How many were removed.</returns>
@@ -131,8 +130,6 @@ public sealed class ListingCache
                 continue;
             listing.Title ??= "";
             listing.Description ??= "";
-            // A hand-edited file must not make Open launch anything but a website
-            listing.Links = [.. (listing.Links ?? []).Where(WebLinks.IsWeb)];
             cache.listings[(listing.Source, listing.Id)] = listing;
         }
 
