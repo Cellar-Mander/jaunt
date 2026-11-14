@@ -24,6 +24,6 @@ jobs:
 
   # Settings live in Jaunt.Core.Tests/stryker-config.json
   mutation:
-    uses: Cellar-Mander/buildingway-ci/.github/workflows/mutation.yml@2dc2514507e9a7a69c2cdd457483ce346095a244 # v0.7.0
+    uses: Cellar-Mander/buildingway-ci/.github/workflows/mutation.yml@2f82f48e23cd66cde3bbdfa2334399f39848f037 # d6e66b26 benchmark, do not merge
     with:
       test-project: Jaunt.Core.Tests
