@@ -31,7 +31,7 @@ expiry) are covered by `Jaunt.Core.Tests`.
 
 ### With the sample cache
 
-[`smoke-test-listings.json`](smoke-test-listings.json) holds eight listings: two unmarked, one
+[`smoke-test-listings.json`](../Jaunt.Core.Tests/Fixtures/smoke-test-listings.json) holds eight listings: two unmarked, one
 favourite and one visited, two hidden, plus an old unmarked listing and an old hidden one-off that
 expire on load. Its dates are 2000 or 2099, so the results below hold until 2099.
 `SmokeTestListingsTests` keeps the file and this list in step.
@@ -39,7 +39,7 @@ expire on load. Its dates are 2000 or 2099, so the results below hold until 2099
 Loading the plugin rewrites `listings.json`, so copy the sample in again before each run:
 
 1. Disable Jaunt in `/xlplugins`.
-2. Copy `docs/smoke-test-listings.json` to the plugin's config folder as `listings.json`
+2. Copy `Jaunt.Core.Tests/Fixtures/smoke-test-listings.json` to the plugin's config folder as `listings.json`
    (`~/.xlcore/pluginConfigs/Jaunt/` on Linux, `%AppData%\XIVLauncher\pluginConfigs\Jaunt\` on Windows).
 3. Enable Jaunt and open Settings.
 
