@@ -50,6 +50,16 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
           {"id":9100003,"title":"Self-test Nowhere","startsAt":"2026-11-14T21:00:00Z","endsAt":"2026-11-14T23:00:00Z","location":"TBA","server":null,"dataCenter":null,"team":null}]}}
         """;
 
+
+    // Three occurrences in the RP Event Calendar's shape: two of a housing event with a misspelt
+    // district, and an open-world one-off; each carries a contact that must not be kept
+    private const string RpCalendarJson = """
+        [{"uId":"st-a@google.com","eventName":"[M] Self-test Tavern","server":"Balmung","location":"Mists Ward 6, Plot 29","eventURL":"https://example.com/tavern","contacts":"Selftest#0001","description":"Contacts: Selftest#0001","startTimeUTC":"2026-11-15T01:00:00Z","endTimeUTC":"2026-11-15T04:00:00Z","isRecurring":true,"lastValidated":"2026-08-30T00:00:00"},
+         {"uId":"st-a@google.com","eventName":"[M] Self-test Tavern","server":"Balmung","location":"Mists Ward 6, Plot 29","eventURL":"https://example.com/tavern","contacts":"Selftest#0001","description":"Contacts: Selftest#0001","startTimeUTC":"2026-11-22T01:00:00Z","endTimeUTC":"2026-11-22T04:00:00Z","isRecurring":true,"lastValidated":"2026-08-30T00:00:00"},
+         {"uId":"st-b@google.com","eventName":"Self-test Market","server":"Mateus","location":"North Shroud, Hyrstmill","eventURL":"https://example.com/market","contacts":"Selftest#0002","description":"Contacts: Selftest#0002","startTimeUTC":"2026-11-16T01:00:00Z","endTimeUTC":"2026-11-16T03:00:00Z","isRecurring":false,"lastValidated":null}]
+        """;
+
+
     private sealed class SelfTestFailure(string message) : Exception(message);
 
     // One check: its body yields to wait a frame and throws SelfTestFailure to fail
@@ -104,6 +114,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         new Step("FFXIV Venues: a failed fetch counts and keeps venues", FailedFetch),
         new Step("xivpf: first fetch records None ads beside the game's", XivpfFirstFetch),
         new Step("Partake: first fetch records upcoming events, then waits 8 h", PartakeFirstFetch),
+        new Step("RP Event Calendar: first fetch records events, then waits 8 h", RpCalendarFirstFetch),
     ];
 
     private static void Check(bool condition, string detail)
@@ -383,6 +394,40 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         time.Now += RefreshPolicy.Minimum(ListingSource.Partake)!.Value - TimeSpan.FromMinutes(1);
         listings.FetchIfDue();
         Check(source.Requests == 1, "fetched again inside the 8 h cooldown");
+    }
+
+    private IEnumerable<object?> RpCalendarFirstFetch()
+    {
+        var parser = new AddressParser(gazetteer);
+        var time = new ManualTime();
+        var cache = new ListingCache();
+        var start = time.Now;
+        var saves = 0;
+        using var listings = FetchedListings.RpEventCalendar(cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, new FakeSource(RpCalendarJson), time);
+        listings.FetchIfDue();
+        Check(cache.LastFetched(ListingSource.RpEventCalendar) == start, "the request wasn't recorded before it was sent");
+        foreach (var wait in WaitFor(listings.Fetching, "the fetch"))
+            yield return wait;
+
+        var tavern = cache.Find(ListingSource.RpEventCalendar, "st-a@google.com");
+        Check(tavern is { Title: "[M] Self-test Tavern", ListedOn: "Balmung" }, "the tavern's name and server weren't kept as sent");
+        var shownTavern = RpEventCalendar.Show(tavern!, parser);
+        Check(
+            shownTavern.Address == new HousingAddress("Balmung", WorldSource.Text, District.Mist, 6, 29),
+            $"the tavern's address wasn't read from \"Mists Ward 6, Plot 29\" on Balmung ({shownTavern.Address})");
+        Check(shownTavern.Title == "Self-test Tavern", $"the [M] tag wasn't removed from the shown title (\"{shownTavern.Title}\")");
+        Check(tavern!.Openings.Count == 2 && tavern.LastValidated == new DateOnly(2026, 8, 30), "the tavern's two dates or validation weren't kept");
+        var market = cache.Find(ListingSource.RpEventCalendar, "st-b@google.com");
+        Check(market is { OneOff: true, LastValidated: null }, "the open-world market wasn't kept as a never-validated one-off");
+        Check(
+            RpEventCalendar.Show(market!, parser) is { Address: null, Location: "North Shroud, Hyrstmill" },
+            "the open-world market doesn't show its location as text");
+        Check(!cache.ToJson().Contains("Selftest#", StringComparison.Ordinal), "a contact was saved in the cache");
+        Check(saves >= 2, $"saved {saves} times, not after the request and again after the events");
+
+        time.Now += RefreshPolicy.Minimum(ListingSource.RpEventCalendar)!.Value - TimeSpan.FromMinutes(1);
+        listings.FetchIfDue();
+        Check(cache.LastFetched(ListingSource.RpEventCalendar) == start, "fetched again inside the 8 h minimum, with a 10 min setting");
     }
 
     private sealed class ManualTime : TimeProvider

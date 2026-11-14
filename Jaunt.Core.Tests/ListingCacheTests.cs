@@ -186,10 +186,12 @@ public class ListingCacheTests
         cache.Seen(ListingSource.Xivpf, "1", "zebra lounge", Now).Hidden = true;
         cache.Seen(ListingSource.Xivpf, "2", "Not hidden", Now);
         cache.Seen(ListingSource.FfxivVenues, "3", "Amber Room\nBar & Grill", Now).Hidden = true;
+        cache.Seen(ListingSource.RpEventCalendar, "4", "[M] Midnight Market", Now).Hidden = true;
 
         var hidden = cache.HiddenListings();
 
-        Assert.Equal(["Amber Room", "zebra lounge"], hidden.Select(l => l.ShownTitle));
+        // An RP calendar event sorts by its title as shown, without the rating tag
+        Assert.Equal(["Amber Room", "Midnight Market", "zebra lounge"], hidden.Select(l => l.ShownTitle));
     }
 
     [Fact]
@@ -383,6 +385,51 @@ public class ListingCacheTests
         var listing = ListingCache.FromJson(json).Find(ListingSource.Partake, "5")!;
 
         Assert.Equal(expected, listing.LinkTexts);
+    }
+
+    [Fact]
+    public void AnEventsLocationOpeningsAndValidationSurviveSaving()
+    {
+        var cache = new ListingCache();
+        var listing = cache.Seen(ListingSource.RpEventCalendar, "e1", "Market", Now);
+        var opening = new ListingOpening(Now, Now.AddHours(3));
+        listing.Location = "North Shroud, Hyrstmill";
+        listing.Openings = [opening];
+        listing.LastValidated = new DateOnly(2026, 8, 30);
+        listing.Rating = "Mature";
+
+        var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.RpEventCalendar, "e1")!;
+
+        Assert.Equal("Mature", back.Rating);
+        Assert.Equal("North Shroud, Hyrstmill", back.Location);
+        Assert.Equal([opening], back.Openings);
+        Assert.Equal(new DateOnly(2026, 8, 30), back.LastValidated);
+    }
+
+    [Theory]
+    [InlineData("""{"listings": [{"source": 4, "id": "5"}]}""")]
+    [InlineData("""{"listings": [{"source": 4, "id": "5", "openings": null, "location": null, "lastValidated": null}]}""")]
+    public void AListingSavedWithoutEventFieldsLoadsWithout(string json)
+    {
+        var listing = ListingCache.FromJson(json).Find(ListingSource.RpEventCalendar, "5")!;
+
+        Assert.Equal((null, 0, null), (listing.Location, listing.Openings.Count, listing.LastValidated));
+    }
+
+    [Fact]
+    public void LoadingDropsOpeningsThatDontEndAfterTheyStart()
+    {
+        const string json = """
+            {"listings": [{"source": 4, "id": "5", "openings": [
+              {"start": "2026-11-14T20:00:00+00:00", "end": "2026-11-14T23:00:00+00:00"},
+              null,
+              {"start": "2026-11-15T20:00:00+00:00", "end": "2026-11-15T20:00:00+00:00"},
+              {"start": "2026-11-16T20:00:00+00:00", "end": "2026-11-16T19:00:00+00:00"}]}]}
+            """;
+
+        var listing = ListingCache.FromJson(json).Find(ListingSource.RpEventCalendar, "5")!;
+
+        Assert.Equal([new ListingOpening(Now, Now.AddHours(3))], listing.Openings);
     }
 
     [Fact]

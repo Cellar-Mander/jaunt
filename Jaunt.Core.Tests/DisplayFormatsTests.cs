@@ -74,4 +74,16 @@ public class DisplayFormatsTests
         Assert.Equal("Mon 2 Nov", DisplayFormats.FormatDate(date, DateFormat.DayMonth, Us));
         Assert.Equal("Mon Nov 2", DisplayFormats.FormatDate(date, DateFormat.MonthDay, Us));
     }
+
+    [Theory]
+    [InlineData(DateFormat.DayMonth, "en-US", "3 Aug 2025")]
+    [InlineData(DateFormat.MonthDay, "en-GB", "Aug 3 2025")]
+    [InlineData(DateFormat.Iso, "en-US", "2025-08-03")]
+    [InlineData(DateFormat.System, "en-US", "Aug 3 2025")]
+    [InlineData(DateFormat.System, "en-GB", "3 Aug 2025")]
+    [InlineData(DateFormat.System, "ja-JP", "2025-08-03")]
+    public void DatesWithAYearFollowTheFormatAndLocale(DateFormat format, string locale, string expected)
+    {
+        Assert.Equal(expected, DisplayFormats.FormatDateWithYear(new DateOnly(2025, 8, 3), format, CultureInfo.GetCultureInfo(locale)));
+    }
 }

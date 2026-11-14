@@ -46,7 +46,7 @@ from, a district, a ward and optionally a plot, subdivision, apartment and room.
 district's name in English, German, French and Japanese, read from the game's data
 (`Jaunt/Text/GazetteerLoader.cs`). A built-in community table adds Japanese world names and their
 short forms (パンデモ, ゆに, 槍), the abbreviations `Exl` (Excalibur) and `Gobby` (Goblin or Goblet),
-district shorthand (`LB`, `Lav`, `Gob`, `Shiro`, `Emp`, `Em`, ラベ, ゴブ, エンピ…) and data-centre
+district shorthand (`LB`, `Lav`, `Gob`, `Shiro`, `Emp`, `Em`, the misspelling `Emperyum`, ラベ, ゴブ, エンピ…) and data-centre
 shorthand (`Dyn`, `Cry`, `Pri`, マナ, メテオ…). Names are matched case-insensitively and may span
 several words separated by spaces, `.` or `・`. Any word of three or more letters that starts exactly one
 world's name in the listing world's region is that world ("Krak", "Sagi"). When no world in that region
@@ -138,7 +138,8 @@ sources is two listings), with its title, when it was last seen, whether it is a
 (as the source last said) and the favourited, visited and hidden marks. It is saved as
 `listings.json` in the plugin's config folder, as `listings` plus `lastFetched` (each source's
 last fetch time, by source name; unknown names are dropped on load). An unreadable file is moved
-to `listings.json.bad` and the cache starts empty.
+to `listings.json.bad` and the cache starts empty. On load, a saved opening that doesn't end after
+it starts is dropped.
 
 - **Clear cached listings** asks for confirmation, warning that rate-limited sources may not show
   in the browser again for hours, then removes every listing that is not favourited, visited or
@@ -207,6 +208,46 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
   and the cached ads stay.
 - Only the fields above are read; others, such as the recruiter's name and the party's jobs, are
   never stored.
+
+### FFXIV RP Event Calendar
+
+`RpEventCalendar` reads `https://api.ffxiv-rp.org/api/Events/GetWeekTranslatableEvents`, about three
+weeks of events with one row per occurrence, and records each event in the listing cache as
+`RpEventCalendar`, keyed by its calendar ID (`uId`, trimmed), which its occurrences share. Opening
+the venue list fetches it, unless the source is within its cooldown (8 hours, or the Settings
+cooldown if longer, so at most 3 fetches a day); the request is recorded before it is sent, so a
+failed one counts too. Download and parsing run off the game thread.
+
+**Stored as sent**: the cache keeps `eventName` (as the listing's title), `server` (as the world
+it is listed on), `location`, `esrbRating` and `eventURL` exactly as the calendar sent them, an empty title when
+the name is missing. The title, address, location and rating below are derived from those when
+shown, never stored, so a change to how they are read reaches cached events without fetching
+again. The list derives them once per change to those fields, not every frame.
+
+- **Title**: the event's name without a leading rating tag (`[T]`, `[M]` or `[AO]`, any case),
+  which is metadata rather than part of the name; then first line only, trimmed and cut to 60
+  characters like a venue's. A tag anywhere else, or another bracketed word, is kept. Hidden
+  venues shows and sorts by this title too.
+- **Rating**: `esrbRating`, trimmed; when it is missing or blank, the rating the removed tag stands
+  for (Teen, Mature, Adults Only); otherwise none. For filtering; not shown.
+- **Address**: the first housing address the ad-text parser (see "Addresses in ad text") reads from
+  the trimmed location, so typos (`Mists`, `Emperyum`) and a plot written before the ward still
+  parse. A location that names no world is on the event's server (trimmed), which counts as
+  written, not as a listing world. Without a server, the address has no world.
+- **Location**: a location with no housing address ("North Shroud, Hyrstmill", "See URL") is shown
+  as text, trimmed; an empty one is neither.
+- **Links**: `eventURL`, stored as sent; shown only if http or https, read like FFXIV Venues' links.
+- **Openings**: each occurrence's `startTimeUTC` and `endTimeUTC`, earliest first, the same one
+  kept once. An occurrence without both, or that doesn't end after it starts, is skipped; the
+  event keeps its other occurrences. Each fetch replaces an event's openings.
+- **One-off**: an event whose `isRecurring` is `false`.
+- **Validated**: the day part of `lastValidated`, or none when it is missing or unreadable.
+- A row without an ID, or whose fields have the wrong types, is skipped without failing the others.
+  A response that isn't a JSON array fails the fetch, which is logged, and the cached events stay.
+- Only the fields above are read. `contacts` and `description` (which repeats the contacts) hold
+  Discord handles and are never stored or shown.
+- **Credit**: the calendar's listings are CC BY-SA 4.0, so each of its rows shows "FFXIV RP Event
+  Calendar", opening `https://ffxiv-rp.org/`, and "CC BY-SA 4.0", opening the licence.
 
 ### Partake
 
@@ -280,11 +321,16 @@ two-pane browser (`cdd9e95f`) replaces this list.
   normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
   the first change since the last save, and on unload, not once per listing.
 - **List**: in-game and xivpf Party Finder listings with at least one parsed address, FFXIV
-  Venues venues with an address and Partake events that haven't ended, not hidden, most recently
-  seen first and then by title, each with its source ("Party Finder", "Party Finder (xivpf)", "FFXIV
-  Venues" or "Partake"). Events show their times and world on a second line (see "Partake"). An xivpf ad the game has
+  Venues venues with an address, Partake events that haven't ended and FFXIV RP Event Calendar
+  events with an address or a location, not hidden, most recently seen first and then by title,
+  each with its source ("Party Finder", "Party Finder (xivpf)", "FFXIV Venues", "Partake", or the
+  calendar's credit). Partake events show their times and world on a second line (see "Partake").
+  An xivpf ad the game has
   also sent shows once, as the in-game copy (see "xivpf"). Each row shows "open 24/7" when it is,
-  and "seen … ago". Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
+  and "seen … ago". A calendar event also shows, in local time and the Settings formats, "On now
+  until 23:00" for an opening in progress, else "Next Sat 15 Nov 20:00–23:00" for the next one,
+  else "No upcoming dates"; then "validated 30 Aug 2025" (the date with its year) or "never
+  validated"; then its location when it has no address. Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
   are spaced by their last drawn height and not drawn.
 - **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
   apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
