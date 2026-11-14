@@ -1,4 +1,15 @@
+using Jaunt.Core.Display;
+using Jaunt.Core.Listings;
+
 namespace Jaunt.Core;
+
+/// <summary>A collapsible group in the Settings window. Saved by number, so only ever append.</summary>
+public enum SettingsSection
+{
+    Data,
+    Display,
+    Listings,
+}
 
 /// <summary>
 /// The plugin's settings, kept free of Dalamud so their save and load can be tested here. The plugin's
@@ -11,15 +22,27 @@ namespace Jaunt.Core;
 /// </remarks>
 public abstract class ConfigurationBase
 {
-    public const int MinExampleValue = 0;
-    public const int MaxExampleValue = 100;
+    /// <summary>Settings → Data: the shortest time between fetches of any source (<see cref="RefreshPolicy"/>).</summary>
+    public int RefreshCooldownMinutes { get; set; } = RefreshPolicy.DefaultCooldownMinutes;
 
-    /// <summary>Replace with the plugin's first real setting.</summary>
-    public int ExampleValue { get; set; } = 50;
+    /// <summary>Settings → Display.</summary>
+    public TimeFormat TimeFormat { get; set; } = TimeFormat.System;
+
+    /// <summary>Settings → Display.</summary>
+    public DateFormat DateFormat { get; set; } = DateFormat.System;
+
+    /// <summary>Which Settings groups are expanded; null until <see cref="Normalize"/>, which opens them all.</summary>
+    public HashSet<SettingsSection>? ExpandedSections { get; set; }
 
     /// <summary>Fills in defaults and pulls hand-edited values back into range; call after loading.</summary>
     public void Normalize()
     {
-        ExampleValue = Math.Clamp(ExampleValue, MinExampleValue, MaxExampleValue);
+        RefreshCooldownMinutes = Math.Clamp(RefreshCooldownMinutes, RefreshPolicy.MinCooldownMinutes, RefreshPolicy.MaxCooldownMinutes);
+        if (!Enum.IsDefined(TimeFormat))
+            TimeFormat = TimeFormat.System;
+        if (!Enum.IsDefined(DateFormat))
+            DateFormat = DateFormat.System;
+        ExpandedSections ??= [.. Enum.GetValues<SettingsSection>()];
+        ExpandedSections.RemoveWhere(section => !Enum.IsDefined(section));
     }
 }

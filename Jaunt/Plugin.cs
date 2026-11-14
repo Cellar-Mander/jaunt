@@ -1,9 +1,12 @@
+using System;
 using System.Reflection;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Jaunt.Core.Listings;
+using Jaunt.Listings;
 using Jaunt.Windows;
 
 namespace Jaunt;
@@ -28,6 +31,10 @@ public sealed class Plugin : IDalamudPlugin
 
     public Configuration Configuration { get; init; }
 
+    /// <summary>Listings kept between sessions; use from the game thread and save with <see cref="SaveListingCache"/>.</summary>
+    internal ListingCache ListingCache { get; }
+    private readonly ListingCacheStore listingCacheStore;
+
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
 
@@ -35,6 +42,11 @@ public sealed class Plugin : IDalamudPlugin
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Normalize();
+
+        listingCacheStore = new ListingCacheStore(PluginInterface.ConfigDirectory.FullName, Log);
+        ListingCache = listingCacheStore.Load();
+        if (ListingCache.RemoveExpired(DateTimeOffset.UtcNow) > 0)
+            SaveListingCache();
 
         // Commit hash included, to check which checkout's build the game has loaded
         Log.Information($"Jaunt {typeof(Plugin).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion} loaded");
@@ -44,7 +56,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open the Jaunt settings"
+            HelpMessage = "Open the Jaunt settings. /jaunt config → open the settings"
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
@@ -72,9 +84,20 @@ public sealed class Plugin : IDalamudPlugin
 
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
+        listingCacheStore.Dispose();
     }
 
-    private void OnCommand(string command, string args) => ToggleConfigUi();
+    internal void SaveListingCache() => listingCacheStore.Save(ListingCache);
+
+    // Until the listing browser exists (cdd9e95f), plain /jaunt also opens the settings. "config"
+    // always opens them rather than toggling, so it never closes a window someone asked to see.
+    private void OnCommand(string command, string args)
+    {
+        if (args.Trim().Equals("config", StringComparison.OrdinalIgnoreCase))
+            ConfigWindow.IsOpen = true;
+        else
+            ToggleConfigUi();
+    }
 
     public void ToggleConfigUi() => ConfigWindow.Toggle();
 }

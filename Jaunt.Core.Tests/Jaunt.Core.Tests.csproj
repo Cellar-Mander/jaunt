@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <None Include="Corpus\*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Hand-made test data, such as the in-game smoke test's sample cache (SmokeTestListingsTests) -->
+    <None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
