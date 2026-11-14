@@ -2,6 +2,7 @@
   "stryker-config": {
     "project": "Jaunt.Core.csproj",
     "reporters": [ "progress", "html", "markdown", "json" ],
+    "additional-timeout": 1000,
     "thresholds": {
       "high": 80,
       "low": 60,
