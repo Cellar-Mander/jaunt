@@ -13,4 +13,5 @@ All notable changes to Jaunt. Versions match the plugin version shown in `/xlplu
 - Groundwork for copying addresses and travelling to venues: Jaunt can now write an address as text to copy and turn it into a Lifestream destination, and keeps each Party Finder ad's text in its listing cache. Nothing visible changes yet.
 - Groundwork for venues from FFXIV Venues: Jaunt can now read a venue's name and housing address from its venue list, correcting misspelt worlds. Nothing visible changes yet.
 - Groundwork for venue links and opening hours: Jaunt can now read a venue's website and Discord from FFXIV Venues, and tell when a venue is open 24/7. Nothing visible changes yet.
+- Groundwork for Party Finder ads from xivpf: Jaunt can now read the venue ads in xivpf's listings and tell when the game has sent the same ad. Nothing visible changes yet.
 - Groundwork for venue names with decorative characters: Jaunt can now rewrite text its font can't draw, such as small capitals or styled letters, into characters it can. Nothing visible changes yet.
