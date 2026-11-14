@@ -10,12 +10,17 @@ public sealed class CachedListing
     /// <summary>The listing's ID within its source.</summary>
     public required string Id { get; init; }
 
-    /// <summary>The title, or for FFXIV Venues the venue's name as sent, which <see cref="ShownTitle"/> reads.</summary>
+    /// <summary>The title, or for FFXIV Venues and Partake the name or title as sent, which <see cref="ShownTitle"/> reads.</summary>
     public string Title { get; set; } = "";
 
     /// <summary>The title as the windows show and sort it, derived from <see cref="Title"/> for sources that send raw names.</summary>
     [JsonIgnore]
-    public string ShownTitle => Source == ListingSource.FfxivVenues ? FfxivVenues.Title(Title) : Title;
+    public string ShownTitle => Source switch
+    {
+        ListingSource.FfxivVenues => FfxivVenues.Title(Title),
+        ListingSource.Partake => Partake.Title(Title),
+        _ => Title,
+    };
 
     /// <summary>The ad's text as the source last sent it, glyphs included, for the parsers.</summary>
     public string Description { get; set; } = "";
@@ -28,6 +33,27 @@ public sealed class CachedListing
     /// null for other sources.
     /// </summary>
     public FfxivVenues.Fields? Venue { get; set; }
+
+    /// <summary>
+    /// The links as the source wrote them, for sources whose links are checked only when shown
+    /// (Partake: <see cref="Partake.Show"/> keeps http and https ones). Empty for other sources.
+    /// </summary>
+    public IReadOnlyList<string> LinkTexts { get; set; } = [];
+
+    /// <summary>The data centre as the source gives it, for sources that say (Partake).</summary>
+    public string? DataCentre { get; set; }
+
+    /// <summary>
+    /// The free-text location as the source gives it (Partake), for the address parser. Null for
+    /// sources whose addresses are structured or in <see cref="Description"/>.
+    /// </summary>
+    public string? Location { get; set; }
+
+    /// <summary>When a dated event starts, for sources that list them (Partake).</summary>
+    public DateTimeOffset? StartsAt { get; set; }
+
+    /// <summary>When a dated event ends; always after <see cref="StartsAt"/> when both are set.</summary>
+    public DateTimeOffset? EndsAt { get; set; }
 
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }

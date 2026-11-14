@@ -130,6 +130,7 @@ public sealed class ListingCache
                 continue;
             listing.Title ??= "";
             listing.Description ??= "";
+            listing.LinkTexts = [.. (listing.LinkTexts ?? []).Where(text => text is not null)];
             cache.listings[(listing.Source, listing.Id)] = listing;
         }
 

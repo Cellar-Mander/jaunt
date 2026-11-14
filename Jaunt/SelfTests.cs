@@ -42,6 +42,14 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
          {"listing":{"id":9000003,"category":"HighEndDuty","description":{"en":"Self-test raid"},"created_world":{"name":"Cuchulainn"}}}]
         """;
 
+    // Three events in Partake's shape at the self-test clock's 20:00: one tonight, one that ended and one with no world
+    private const string PartakeJson = """
+        {"data":{"events":[
+          {"id":9100001,"title":"Self-test Gala","startsAt":"2026-11-14T21:00:00Z","endsAt":"2026-11-15T01:00:00Z","location":"LB W19 P58","server":{"name":"Lich"},"dataCenter":{"name":"Light"},"team":{"websiteUrl":"https://example.com/","discordUrl":null}},
+          {"id":9100002,"title":"Self-test Matinee","startsAt":"2026-11-14T12:00:00Z","endsAt":"2026-11-14T15:00:00Z","location":"Mist W1 P1","server":{"name":"Lich"},"dataCenter":{"name":"Light"},"team":null},
+          {"id":9100003,"title":"Self-test Nowhere","startsAt":"2026-11-14T21:00:00Z","endsAt":"2026-11-14T23:00:00Z","location":"TBA","server":null,"dataCenter":null,"team":null}]}}
+        """;
+
     private sealed class SelfTestFailure(string message) : Exception(message);
 
     // One check: its body yields to wait a frame and throws SelfTestFailure to fail
@@ -95,6 +103,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         new Step("FFXIV Venues: no fetch inside the 8 h cooldown", Cooldown),
         new Step("FFXIV Venues: a failed fetch counts and keeps venues", FailedFetch),
         new Step("xivpf: first fetch records None ads beside the game's", XivpfFirstFetch),
+        new Step("Partake: first fetch records upcoming events, then waits 8 h", PartakeFirstFetch),
     ];
 
     private static void Check(bool condition, string detail)
@@ -348,6 +357,34 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         Check(cache.LastFetched(ListingSource.Xivpf) == start, "fetched again inside the 10 min cooldown");
     }
 
+    private IEnumerable<object?> PartakeFirstFetch()
+    {
+        var time = new ManualTime();
+        var cache = new ListingCache();
+        var start = time.Now;
+        var saves = 0;
+#pragma warning disable IDISP001 // The fetcher's HttpClient disposes it
+        var source = new FakeSource(PartakeJson);
+#pragma warning restore IDISP001
+        using var listings = FetchedListings.Partake(cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, source, time);
+        listings.FetchIfDue();
+        Check(cache.LastFetched(ListingSource.Partake) == start, "the request wasn't recorded before it was sent");
+        foreach (var wait in WaitFor(listings.Fetching, "the fetch"))
+            yield return wait;
+
+        Check(source.Requests == 1 && source.LastMethod == HttpMethod.Post, $"sent {source.Requests} requests ({source.LastMethod}), not one POST for a short page");
+        var gala = cache.Find(ListingSource.Partake, "9100001");
+        Check(gala is { OneOff: true, ListedOn: "Lich", DataCentre: "Light", Location: "LB W19 P58" } && gala.StartsAt == start.AddHours(1),
+            "the upcoming event wasn't recorded with its world, location and times");
+        Check(cache.Find(ListingSource.Partake, "9100002") is null, "the event that ended was recorded");
+        Check(cache.Find(ListingSource.Partake, "9100003") is null, "the event with no world was recorded");
+        Check(saves >= 2, $"saved {saves} times, not after the request and again after the events");
+
+        time.Now += RefreshPolicy.Minimum(ListingSource.Partake)!.Value - TimeSpan.FromMinutes(1);
+        listings.FetchIfDue();
+        Check(source.Requests == 1, "fetched again inside the 8 h cooldown");
+    }
+
     private sealed class ManualTime : TimeProvider
     {
         public DateTimeOffset Now { get; set; } = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
@@ -364,8 +401,11 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 
         public volatile bool Fail;
 
+        public HttpMethod? LastMethod { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastMethod = request.Method;
             Interlocked.Increment(ref requests);
             if (Fail)
                 throw new HttpRequestException("self-test: no network");

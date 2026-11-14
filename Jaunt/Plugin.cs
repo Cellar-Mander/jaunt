@@ -34,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PartyFinderListings partyFinderListings;
     private readonly FetchedListings xivpfListings;
     private readonly FetchedListings ffxivVenuesListings;
+    private readonly FetchedListings partakeListings;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
@@ -59,7 +60,8 @@ public sealed class Plugin : IDalamudPlugin
         var gazetteer = GazetteerLoader.Load(DataManager);
         xivpfListings = FetchedListings.Xivpf(ListingCache, Configuration, Framework, Log, SaveListingCache);
         ffxivVenuesListings = FetchedListings.FfxivVenues(ListingCache, Configuration, Framework, Log, SaveListingCache);
-        ListingsWindow = new ListingsWindow(ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, FetchSources);
+        partakeListings = FetchedListings.Partake(ListingCache, Configuration, Framework, Log, SaveListingCache);
+        ListingsWindow = new ListingsWindow(ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
@@ -83,6 +85,7 @@ public sealed class Plugin : IDalamudPlugin
         partyFinderListings.Dispose();
         xivpfListings.Dispose();
         ffxivVenuesListings.Dispose();
+        partakeListings.Dispose();
 
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
@@ -95,6 +98,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         xivpfListings.FetchIfDue();
         ffxivVenuesListings.FetchIfDue();
+        partakeListings.FetchIfDue();
     }
 
     // "config" always opens the settings rather than toggling, so it never closes a window someone

@@ -208,6 +208,47 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
 - Only the fields above are read; others, such as the recruiter's name and the party's jobs, are
   never stored.
 
+### Partake
+
+`Partake` reads FFXIV events from Partake's public GraphQL API, `POST https://api.partake.gg/` with
+no authentication, and records each in the listing cache as `Partake`, keyed by the event's ID, as a
+one-off. Opening the venue list fetches it, unless the source is within its cooldown (8 hours, or
+the Settings cooldown if longer); the request is recorded before it is sent, so a failed one counts
+too. Download and parsing run off the game thread.
+
+- **Raw values**: the cache keeps the title, world, data centre, location and links exactly as
+  Partake sent them (links in `linkTexts`). The rules below for showing them run each time they
+  are shown, so a change to these rules or the address parser applies on the next plugin load,
+  not after the next fetch.
+- **Query**: `events(game: "final-fantasy-xiv", startsBetween: {start}, sortBy: STARTS_AT_ASC)`
+  with `start` 24 hours before now, so events already under way are included. Pages of 200 (`limit`,
+  `offset`) until a page comes back with fewer, at most 5 pages per fetch. About 150 events are
+  listed at once, so one page is usual. Only the fields shown are asked for: `id`, `title`,
+  `startsAt`, `endsAt`, `location`, `server.name`, `dataCenter.name` and the host team's
+  `websiteUrl` and `discordUrl`. `server` and `dataCenter` work but aren't in Partake's docs.
+- **Title**: shown trimmed and cut to 60 characters like an ad's.
+- **Times**: `startsAt` and `endsAt` (UTC), shown in local time in the chosen time and date formats,
+  "Sat 14 Nov 20:00–23:00", with the end's date too when it ends on a later day, and "on now" once
+  it has started.
+- **World**: `server.name`, shown trimmed and corrected like an FFXIV Venues world, with the data
+  centre trimmed (none when blank): "Lich (Light)". It is the world for addresses in the location
+  that name none.
+- **Location**: free text ("LB W19 P58", "57 plot, ward15 , lavender beds"), trimmed, for the same
+  address parser as ad text. When no address is read from it, the text is shown instead, without
+  Travel.
+- **Links**: the host's website then Discord, shown like FFXIV Venues links: http or https only. On
+  load, the cache drops missing link texts.
+- An event is skipped, without failing the others, when it lacks an ID or either time, its title
+  or world is missing or blank, its end is not after its start, or its fields have the wrong types.
+  A response with GraphQL `errors` (Partake answers those with HTTP 200), without `data.events`, or
+  that isn't JSON fails the fetch, which is logged, and the cached events stay.
+- Events that have ended by the time a fetch is recorded aren't recorded, and the list leaves out
+  cached events once they end.
+- **Credit**: while the list shows any Partake event it ends with "Events from Partake (partake.gg).
+  Jaunt is not affiliated with or endorsed by Partake.", as Partake's terms ask apps not to imply
+  endorsement. Each event's source reads "Partake". Hidden venues shows a hidden event's title as
+  the list does.
+
 ### Text the font can't draw
 
 Venue names and ad titles use characters the plugin's font lacks (ImGui draws those as a box). The
@@ -238,9 +279,10 @@ two-pane browser (`cdd9e95f`) replaces this list.
   included) and the world it is listed on (`listedOn`). Its title is the first line of the
   normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
   the first change since the last save, and on unload, not once per listing.
-- **List**: in-game and xivpf Party Finder listings with at least one parsed address and FFXIV
-  Venues venues with an address, not hidden, most recently seen first and then by title, each with
-  its source ("Party Finder", "Party Finder (xivpf)" or "FFXIV Venues"). An xivpf ad the game has
+- **List**: in-game and xivpf Party Finder listings with at least one parsed address, FFXIV
+  Venues venues with an address and Partake events that haven't ended, not hidden, most recently
+  seen first and then by title, each with its source ("Party Finder", "Party Finder (xivpf)", "FFXIV
+  Venues" or "Partake"). Events show their times and world on a second line (see "Partake"). An xivpf ad the game has
   also sent shows once, as the in-game copy (see "xivpf"). Each row shows "open 24/7" when it is,
   and "seen … ago". Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
   are spaced by their last drawn height and not drawn.
@@ -271,6 +313,9 @@ Caps on user-configurable lists and text, and how input from other players or th
 - An xivpf response (about 700 listings, 1.6 MB) is read in one pass over its listings, off the
   game thread, keeping about 150 ads; their text is at most a few hundred characters. Checking
   whether the game also sent an ad is one cache lookup.
+- A Partake fetch is at most 5 pages of 200 events, read off the game thread. Each event's location
+  is parsed once per text, like an ad; its title, world and links are worked out once per rebuild
+  of the list (once a second), about 150 events.
 - An FFXIV Venues response is read in one pass over its venues, off the game thread; a venue's links
   are at most two, and titles are cut to 60 characters when shown. The full list (about 1,400 venues,
   2.5 MB) makes `listings.json` about 800 KB. The list derives a venue's title, address, links and
