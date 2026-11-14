@@ -10,7 +10,10 @@ public sealed class CachedListing
     /// <summary>The listing's ID within its source.</summary>
     public required string Id { get; init; }
 
-    /// <summary>The title, or for FFXIV Venues and Partake the name or title as sent, which <see cref="ShownTitle"/> reads.</summary>
+    /// <summary>
+    /// The title, or for FFXIV Venues, Partake and the FFXIV RP Event Calendar the name or title as
+    /// sent, which <see cref="ShownTitle"/> reads for the first two.
+    /// </summary>
     public string Title { get; set; } = "";
 
     /// <summary>The title as the windows show and sort it, derived from <see cref="Title"/> for sources that send raw names.</summary>
@@ -44,8 +47,8 @@ public sealed class CachedListing
     public string? DataCentre { get; set; }
 
     /// <summary>
-    /// The free-text location as the source gives it (Partake), for the address parser. Null for
-    /// sources whose addresses are structured or in <see cref="Description"/>.
+    /// The free-text location as the source gives it (Partake, the FFXIV RP Event Calendar), for the
+    /// address parser. Null for sources whose addresses are structured or in <see cref="Description"/>.
     /// </summary>
     public string? Location { get; set; }
 
@@ -54,6 +57,21 @@ public sealed class CachedListing
 
     /// <summary>When a dated event ends; always after <see cref="StartsAt"/> when both are set.</summary>
     public DateTimeOffset? EndsAt { get; set; }
+
+    /// <summary>The times the source last said it is open, earliest first, for sources that list occurrences.</summary>
+    public IReadOnlyList<ListingOpening> Openings { get; set; } = [];
+
+    /// <summary>
+    /// The day the source's moderators last checked it, for sources that validate listings (the FFXIV
+    /// RP Event Calendar); null if never or for other sources.
+    /// </summary>
+    public DateOnly? LastValidated { get; set; }
+
+    /// <summary>
+    /// The content rating the source gives, as sent ("Teen", "Mature"); null if none. Kept for
+    /// filtering; not shown.
+    /// </summary>
+    public string? Rating { get; set; }
 
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }

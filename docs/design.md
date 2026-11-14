@@ -138,7 +138,8 @@ sources is two listings), with its title, when it was last seen, whether it is a
 (as the source last said) and the favourited, visited and hidden marks. It is saved as
 `listings.json` in the plugin's config folder, as `listings` plus `lastFetched` (each source's
 last fetch time, by source name; unknown names are dropped on load). An unreadable file is moved
-to `listings.json.bad` and the cache starts empty.
+to `listings.json.bad` and the cache starts empty. On load, a saved opening that doesn't end after
+it starts is dropped.
 
 - **Clear cached listings** asks for confirmation, warning that rate-limited sources may not show
   in the browser again for hours, then removes every listing that is not favourited, visited or
@@ -207,6 +208,31 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
   and the cached ads stay.
 - Only the fields above are read; others, such as the recruiter's name and the party's jobs, are
   never stored.
+
+### FFXIV RP Event Calendar
+
+`RpEventCalendar` reads `https://api.ffxiv-rp.org/api/Events/GetWeekTranslatableEvents`, about three
+weeks of events with one row per occurrence, and records each event in the listing cache as
+`RpEventCalendar`, keyed by its calendar ID (`uId`, trimmed), which its occurrences share. Opening
+the venue list fetches it, unless the source is within its cooldown (8 hours, or the Settings
+cooldown if longer, so at most 3 fetches a day); the request is recorded before it is sent, so a
+failed one counts too. Download and parsing run off the game thread.
+
+**Stored as sent**: the cache keeps `eventName` (as the listing's title), `server` (as the world
+it is listed on), `location`, `esrbRating` and `eventURL` exactly as the calendar sent them, an empty title when
+the name is missing. What is shown is derived from those, never stored, so a change to how they
+are read reaches cached events without fetching again.
+
+- **Links**: `eventURL`, stored as sent; shown only if http or https, read like FFXIV Venues' links.
+- **Openings**: each occurrence's `startTimeUTC` and `endTimeUTC`, earliest first, the same one
+  kept once. An occurrence without both, or that doesn't end after it starts, is skipped; the
+  event keeps its other occurrences. Each fetch replaces an event's openings.
+- **One-off**: an event whose `isRecurring` is `false`.
+- **Validated**: the day part of `lastValidated`, or none when it is missing or unreadable.
+- A row without an ID, or whose fields have the wrong types, is skipped without failing the others.
+  A response that isn't a JSON array fails the fetch, which is logged, and the cached events stay.
+- Only the fields above are read. `contacts` and `description` (which repeats the contacts) hold
+  Discord handles and are never stored or shown.
 
 ### Partake
 

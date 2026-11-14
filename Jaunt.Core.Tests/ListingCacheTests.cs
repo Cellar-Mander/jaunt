@@ -386,6 +386,51 @@ public class ListingCacheTests
     }
 
     [Fact]
+    public void AnEventsLocationOpeningsAndValidationSurviveSaving()
+    {
+        var cache = new ListingCache();
+        var listing = cache.Seen(ListingSource.RpEventCalendar, "e1", "Market", Now);
+        var opening = new ListingOpening(Now, Now.AddHours(3));
+        listing.Location = "North Shroud, Hyrstmill";
+        listing.Openings = [opening];
+        listing.LastValidated = new DateOnly(2026, 8, 30);
+        listing.Rating = "Mature";
+
+        var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.RpEventCalendar, "e1")!;
+
+        Assert.Equal("Mature", back.Rating);
+        Assert.Equal("North Shroud, Hyrstmill", back.Location);
+        Assert.Equal([opening], back.Openings);
+        Assert.Equal(new DateOnly(2026, 8, 30), back.LastValidated);
+    }
+
+    [Theory]
+    [InlineData("""{"listings": [{"source": 4, "id": "5"}]}""")]
+    [InlineData("""{"listings": [{"source": 4, "id": "5", "openings": null, "location": null, "lastValidated": null}]}""")]
+    public void AListingSavedWithoutEventFieldsLoadsWithout(string json)
+    {
+        var listing = ListingCache.FromJson(json).Find(ListingSource.RpEventCalendar, "5")!;
+
+        Assert.Equal((null, 0, null), (listing.Location, listing.Openings.Count, listing.LastValidated));
+    }
+
+    [Fact]
+    public void LoadingDropsOpeningsThatDontEndAfterTheyStart()
+    {
+        const string json = """
+            {"listings": [{"source": 4, "id": "5", "openings": [
+              {"start": "2026-11-14T20:00:00+00:00", "end": "2026-11-14T23:00:00+00:00"},
+              null,
+              {"start": "2026-11-15T20:00:00+00:00", "end": "2026-11-15T20:00:00+00:00"},
+              {"start": "2026-11-16T20:00:00+00:00", "end": "2026-11-16T19:00:00+00:00"}]}]}
+            """;
+
+        var listing = ListingCache.FromJson(json).Find(ListingSource.RpEventCalendar, "5")!;
+
+        Assert.Equal([new ListingOpening(Now, Now.AddHours(3))], listing.Openings);
+    }
+
+    [Fact]
     public void LoadingNullGivesAnEmptyCache() => Assert.Equal(0, ListingCache.FromJson("null").Count);
 
     [Fact]
