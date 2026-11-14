@@ -153,7 +153,8 @@ to `listings.json.bad` and the cache starts empty.
 ### FFXIV Venues
 
 `FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue`, every venue in one response, and
-records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with its address.
+records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with its address, links
+and whether it is open 24/7.
 
 - **Title**: the venue's name, first line only, trimmed and cut to 60 characters like an ad's.
 - **Address**: from the venue's location: the world, a district (`Mist`, `Lavender Beds`, `Goblet`,
@@ -163,7 +164,14 @@ records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, wit
   beginning of at least 5 letters ("Bismark" → Bismarck), and otherwise kept as written. A venue with
   no world, an unknown district or a ward outside 1–30 (such as one giving only a free-text location)
   has no address.
-- **Links** kept in the cache are http or https only: on load, the cache drops any other saved link.
+- **Links**: the website then the Discord, http or https only. One without a scheme is read like a
+  link in ad text (`discord.gg/abc` opens as https); any other scheme is dropped. The same link twice
+  is kept once. On load, the cache drops any saved link that isn't http or https.
+- **Open 24/7**: every day of the week (days 0–6) has an opening that repeats every week (interval
+  type 0, every 1 week) and lasts at least 23 h 59 min, end minus start plus a day when the end is the
+  next day. The site's form can't end at 24:00, so venues open around the clock enter 00:00–23:59.
+  An opening with no end (the API reads it as 3 hours), every other week or monthly doesn't count.
+  Schedule overrides don't change it.
 - A venue without an ID, or marked not approved, is skipped; one whose fields have the wrong types
   is skipped without failing the others. A response that isn't a JSON array is an error.
 - Only the fields above are read; others, such as managers' Discord IDs, are never stored.
@@ -204,4 +212,5 @@ Caps on user-configurable lists and text, and how input from other players or th
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
-- An FFXIV Venues response is read in one pass over its venues, and titles are cut to 60 characters.
+- An FFXIV Venues response is read in one pass over its venues; a venue's links are at most two, and
+  titles are cut to 60 characters.

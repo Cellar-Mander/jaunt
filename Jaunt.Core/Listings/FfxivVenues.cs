@@ -16,6 +16,12 @@ public static class FfxivVenues
 {
     public const string Url = "https://api.ffxivvenues.com/v1.0/venue";
 
+    /// <summary>
+    /// The shortest opening that counts as a whole day. Venues open around the clock enter 00:00 to
+    /// 23:59, as the site's schedule form can't end a day at 24:00.
+    /// </summary>
+    public static readonly TimeSpan WholeDay = new(23, 59, 0);
+
     /// <summary>A misspelt world ("Bismark") must share at least this many letters with the real one.</summary>
     private const int MinWorldPrefix = 5;
 
@@ -34,7 +40,8 @@ public static class FfxivVenues
 
     /// <summary>One venue as Jaunt keeps it.</summary>
     /// <param name="Address">Null when the venue gives no housing address (a free-text location, or none).</param>
-    public sealed record Venue(string Id, string Name, HousingAddress? Address);
+    /// <param name="Links">Its website and Discord, http or https only.</param>
+    public sealed record Venue(string Id, string Name, HousingAddress? Address, IReadOnlyList<Uri> Links, bool AlwaysOpen);
 
     /// <summary>Reads the API's response.</summary>
     /// <param name="gazetteer">Worlds, to correct a misspelt world name.</param>
@@ -63,6 +70,8 @@ public static class FfxivVenues
         {
             var listing = cache.Seen(ListingSource.FfxivVenues, venue.Id, venue.Name, now);
             listing.Address = venue.Address;
+            listing.Links = venue.Links;
+            listing.AlwaysOpen = venue.AlwaysOpen;
         }
     }
 
@@ -81,7 +90,12 @@ public static class FfxivVenues
         if (data is null || string.IsNullOrWhiteSpace(data.Id) || data.Approved == false)
             return null;
 
-        return new Venue(data.Id, Title(data.Name), Address(data.Location, gazetteer));
+        return new Venue(
+            data.Id,
+            Title(data.Name),
+            Address(data.Location, gazetteer),
+            Links(data.Website, data.Discord),
+            AlwaysOpen(data.Schedule));
     }
 
     private static string Title(string? name)
@@ -127,13 +141,57 @@ public static class FfxivVenues
         return written;
     }
 
+    /// <summary>The website and Discord links, in that order, keeping only http and https ones.</summary>
+    internal static IReadOnlyList<Uri> Links(params string?[] written)
+    {
+        var links = new List<Uri>();
+        foreach (var text in written)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                continue;
+            // Venues sometimes leave out the scheme ("discord.gg/abc"), which WebLinks reads as https
+            var uri = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var parsed) && WebLinks.IsWeb(parsed)
+                ? parsed
+                : WebLinks.Find(text).FirstOrDefault()?.Uri;
+            if (uri is not null && !links.Contains(uri))
+                links.Add(uri);
+        }
+
+        return links;
+    }
+
+    /// <summary>
+    /// Whether the schedule opens every day of every week for at least <see cref="WholeDay"/>. A venue
+    /// with a long opening on only some days, or every other week, is not open around the clock.
+    /// </summary>
+    internal static bool AlwaysOpen(IEnumerable<ScheduleData?>? schedule)
+    {
+        var days = new HashSet<int>();
+        foreach (var opening in schedule ?? [])
+        {
+            if (opening?.Start is { } start && opening.End is { } end
+                && opening.Interval is { IntervalType: 0, IntervalArgument: 1 }
+                && opening.Day is >= 0 and <= 6
+                && Length(start, end) >= WholeDay)
+                days.Add(opening.Day);
+        }
+
+        return days.Count == 7;
+    }
+
+    private static TimeSpan Length(TimeData start, TimeData end) =>
+        new TimeSpan(end.NextDay ? 1 : 0, end.Hour, end.Minute, 0) - new TimeSpan(start.Hour, start.Minute, 0);
+
     // The API's shapes, only the fields Jaunt reads. Others, such as managers' Discord IDs, are ignored.
     internal sealed class VenueData
     {
         public string? Id { get; set; }
         public string? Name { get; set; }
         public LocationData? Location { get; set; }
+        public string? Website { get; set; }
+        public string? Discord { get; set; }
         public bool? Approved { get; set; }
+        public List<ScheduleData?>? Schedule { get; set; }
     }
 
     internal sealed class LocationData
@@ -145,5 +203,32 @@ public static class FfxivVenues
         public int Apartment { get; set; }
         public int Room { get; set; }
         public bool Subdivision { get; set; }
+    }
+
+    internal sealed class ScheduleData
+    {
+        /// <summary>0 is Monday.</summary>
+        public int Day { get; set; }
+
+        public TimeData? Start { get; set; }
+
+        /// <summary>Null means the API's default of three hours after the start.</summary>
+        public TimeData? End { get; set; }
+
+        public IntervalData? Interval { get; set; }
+    }
+
+    internal sealed class TimeData
+    {
+        public int Hour { get; set; }
+        public int Minute { get; set; }
+        public bool NextDay { get; set; }
+    }
+
+    /// <summary>Type 0 is every <c>IntervalArgument</c> weeks; type 1 is a week of each month.</summary>
+    internal sealed class IntervalData
+    {
+        public int IntervalType { get; set; }
+        public int IntervalArgument { get; set; }
     }
 }

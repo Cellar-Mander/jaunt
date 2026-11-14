@@ -333,18 +333,20 @@ public class ListingCacheTests
     }
 
     [Fact]
-    public void AVenuesAddressAndLinksSurviveSaving()
+    public void AVenuesAddressLinksAndAlwaysOpenSurviveSaving()
     {
         var cache = new ListingCache();
         var listing = cache.Seen(ListingSource.FfxivVenues, "v1", "Lounge", Now);
         var address = new HousingAddress("Goblin", WorldSource.Text, District.LavenderBeds, 5, null, true, 12, "3");
         listing.Address = address;
         listing.Links = [new Uri("https://lounge.carrd.co/"), new Uri("http://discord.gg/abc")];
+        listing.AlwaysOpen = true;
 
         var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.FfxivVenues, "v1")!;
 
         Assert.Equal(address, back.Address);
         Assert.Equal([new Uri("https://lounge.carrd.co/"), new Uri("http://discord.gg/abc")], back.Links);
+        Assert.True(back.AlwaysOpen);
     }
 
     [Theory]
@@ -354,7 +356,7 @@ public class ListingCacheTests
     {
         var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
 
-        Assert.Equal((null, 0), (listing.Address, listing.Links.Count));
+        Assert.Equal((null, 0, false), (listing.Address, listing.Links.Count, listing.AlwaysOpen));
     }
 
     [Fact]

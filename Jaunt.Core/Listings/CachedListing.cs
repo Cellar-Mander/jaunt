@@ -27,6 +27,9 @@ public sealed class CachedListing
     /// <summary>The website and Discord links the source gives as data, http or https only.</summary>
     public IReadOnlyList<Uri> Links { get; set; } = [];
 
+    /// <summary>Open around the clock, as inferred from the source's schedule.</summary>
+    public bool AlwaysOpen { get; set; }
+
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }
 
