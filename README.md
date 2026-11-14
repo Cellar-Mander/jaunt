@@ -16,7 +16,9 @@ Then find Jaunt in `/xlplugins` and install it.
 
 ## Using it
 
-`/jaunt` or `/jaunt config` opens the settings: how often Jaunt fetches listings, how times and dates are shown, and the venues you have hidden. The plugin installer's settings button opens them too.
+`/jaunt` opens the venue list, as does the plugin installer's Open button. Jaunt reads venue ads while you browse the Party Finder's None category and lists those with an address, newest first. Each address has Copy address and, with [Lifestream](https://github.com/NightmareXIV/Lifestream) installed, Travel; each website link has Open.
+
+`/jaunt config` opens the settings: how often Jaunt fetches listings, how times and dates are shown, and the venues you have hidden. The plugin installer's settings button opens them too.
 
 ## Contributing
 
