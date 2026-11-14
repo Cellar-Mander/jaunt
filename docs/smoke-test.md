@@ -8,7 +8,7 @@ Setup: deploy with `dotnet buildingway dev-plugin deploy <task-ref>` (see "Testi
 
 To run the checks that need no look at the screen and no click, open Dalamud's self-test window (`/xldev`, Dalamud menu, Open Self-Test), pick the `Jaunt` group and press play. Each check is its own step, so the table shows which passed or failed, and Jump runs any one on its own. Each step logs `Self-test PASS: <step>` or `Self-test FAIL: <step> (<detail>)`; on Linux, `grep 'Self-test' ~/.xlcore/logs/dalamud.log | tail` shows the result.
 
-The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
+The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues and xivpf steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
 
 Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* are covered only for the part named, so finish them by hand. Unmarked checks stay manual: how things look, clicks, reloading the plugin and the real network.
 
@@ -62,6 +62,22 @@ Then:
 5. **Cache file**: `listings.json` still has `"FfxivVenues"` under `lastFetched`, and `/xllog`
    shows no error saving it. *(self-test)*
 6. **Unreadable file**: an unreadable `listings.json` is moved to `listings.json.bad` and Jaunt starts with an empty cache. *(self-test)*
+
+## xivpf
+
+Checks the fetch, the cooldown and the list; the reading rules are covered by `XivpfTests`.
+
+1. **First fetch**: with no `Xivpf` time under `lastFetched` in `listings.json` (disable Jaunt,
+   remove it, re-enable), open `/jaunt` without opening the Party Finder. Within a few seconds
+   "Party Finder (xivpf)" rows appear, and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
+   *(self-test: the request is recorded before it is sent and only None ads after it, against a stand-in; the real site stays manual)*
+2. **Cooldown**: close and reopen `/jaunt` within 10 minutes: no second fetch is logged. After 10
+   minutes, reopening fetches again. *(self-test: no fetch a minute before the 10 min are up)*
+3. **Seen in both**: open the Party Finder's None category and browse a page, then reopen `/jaunt`.
+   A venue ad listed both ways shows once, as "Party Finder", not also as "Party Finder (xivpf)".
+   This also checks that xivpf's listing IDs match the game's. *(self-test: the in-game copy wins, against a stand-in)*
+4. **Offline**: as in FFXIV Venues 7, with the `Xivpf` fetch time: `/xllog` shows a warning
+   "Couldn't fetch Party Finder ads from xivpf", and the cached ads stay listed.
 
 ## FFXIV Venues
 

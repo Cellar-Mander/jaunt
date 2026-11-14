@@ -6,6 +6,7 @@ All notable changes to Jaunt. Versions match the plugin version shown in `/xlplu
 
 - Venue list (`/jaunt`): Party Finder venue ads with an address, newest first, read while you browse the Party Finder's None category. Copy an address, travel there with Lifestream if it is installed, or open the venue's website.
 - Venues from [FFXIV Venues](https://ffxivvenues.com) in the venue list, fetched when you open it at most every 8 hours, with their address, website, Discord and whether they are open 24/7.
+- Party Finder venue ads from [xivpf](https://xivpf.com) in the venue list, fetched when you open it at most every 10 minutes (the refresh cooldown), so ads show without opening the Party Finder. An ad you have also seen in the game shows once.
 - Settings window (`/jaunt config`): a refresh cooldown for fetched listing sources (default 10 minutes; some sources wait longer), 12- or 24-hour times and a date format, Clear cached listings, and a list of hidden venues with Un-hide buttons. Settings save as you change them. Listings that aren't favourited, visited or hidden are dropped from the cache a month after they were last seen.
 
 - Groundwork for reading venue addresses from Party Finder ads: Jaunt now knows worlds, districts and the shorthand players use for them. Nothing visible changes yet.

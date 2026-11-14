@@ -15,8 +15,8 @@ using Jaunt.Travel;
 namespace Jaunt.Windows;
 
 /// <summary>
-/// The MVP listing window: Party Finder venue ads with a parsed address and FFXIV Venues venues with
-/// an address, newest first, each address with Travel and Copy address and each link with Open. The
+/// The MVP listing window: Party Finder venue ads (in-game and from xivpf) with a parsed address and
+/// FFXIV Venues venues with an address, newest first, each address with Travel and Copy address and each link with Open. The
 /// two-pane browser (cdd9e95f) replaces it.
 /// </summary>
 internal sealed class ListingsWindow : Window
@@ -66,7 +66,7 @@ internal sealed class ListingsWindow : Window
 
         if (rows.Count == 0)
         {
-            ImGui.TextWrapped("No venues with an address yet. Open the Party Finder and browse the None category, or wait for FFXIV Venues to load.");
+            ImGui.TextWrapped("No venues with an address yet. Wait for xivpf and FFXIV Venues to load, or open the Party Finder and browse the None category.");
             return;
         }
 
@@ -100,7 +100,7 @@ internal sealed class ListingsWindow : Window
         using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
         ImGui.TextUnformatted(ShownText.Title(listing.Title));
         ImGui.SameLine();
-        ImGui.TextDisabled(listing.Source == ListingSource.FfxivVenues ? "FFXIV Venues" : "Party Finder");
+        ImGui.TextDisabled(SourceName(listing.Source));
         if (listing.AlwaysOpen)
         {
             ImGui.SameLine();
@@ -177,7 +177,7 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// Lists the visible listings that have an address, newest first and then by title, parsing only
-    /// ad text that changed.
+    /// ad text that changed. An xivpf ad the game has also sent shows once, as the in-game copy.
     /// </summary>
     private void Rebuild()
     {
@@ -194,7 +194,7 @@ internal sealed class ListingsWindow : Window
                 continue;
             }
 
-            if (listing.Source != ListingSource.InGamePartyFinder)
+            if (listing.Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf) || Xivpf.ShownInGame(cache, listing))
                 continue;
 
             var key = (listing.Source, listing.Id);
@@ -226,6 +226,13 @@ internal sealed class ListingsWindow : Window
 
     private void Notify(string text, NotificationType type) =>
         notifications.AddNotification(new Notification { Title = "Jaunt", Content = text, Type = type });
+
+    private static string SourceName(ListingSource source) => source switch
+    {
+        ListingSource.FfxivVenues => "FFXIV Venues",
+        ListingSource.Xivpf => "Party Finder (xivpf)",
+        _ => "Party Finder",
+    };
 
     private static string SeenAgo(TimeSpan ago) =>
         ago.TotalMinutes < 1 ? "seen just now"

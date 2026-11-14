@@ -33,7 +33,8 @@ public sealed class Plugin : IDalamudPlugin
     internal ListingCache ListingCache { get; }
     private readonly ListingCacheStore listingCacheStore;
     private readonly PartyFinderListings partyFinderListings;
-    private readonly FfxivVenuesListings ffxivVenuesListings;
+    private readonly FetchedListings xivpfListings;
+    private readonly FetchedListings ffxivVenuesListings;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
@@ -57,8 +58,9 @@ public sealed class Plugin : IDalamudPlugin
         ConfigWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(ConfigWindow);
         var gazetteer = GazetteerLoader.Load(DataManager);
-        ffxivVenuesListings = new FfxivVenuesListings(ListingCache, gazetteer, Configuration, Framework, Log, SaveListingCache);
-        ListingsWindow = new ListingsWindow(ListingCache, new AddressParser(gazetteer), new Lifestream(PluginInterface, Log), NotificationManager, ffxivVenuesListings.FetchIfDue);
+        xivpfListings = FetchedListings.Xivpf(ListingCache, Configuration, Framework, Log, SaveListingCache);
+        ffxivVenuesListings = FetchedListings.FfxivVenues(ListingCache, gazetteer, Configuration, Framework, Log, SaveListingCache);
+        ListingsWindow = new ListingsWindow(ListingCache, new AddressParser(gazetteer), new Lifestream(PluginInterface, Log), NotificationManager, FetchSources);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
@@ -80,6 +82,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         partyFinderListings.Dispose();
+        xivpfListings.Dispose();
         ffxivVenuesListings.Dispose();
 
         WindowSystem.RemoveAllWindows();
@@ -88,6 +91,12 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     internal void SaveListingCache() => listingCacheStore.Save(ListingCache);
+
+    private void FetchSources()
+    {
+        xivpfListings.FetchIfDue();
+        ffxivVenuesListings.FetchIfDue();
+    }
 
     // "config" always opens the settings rather than toggling, so it never closes a window someone
     // asked to see.

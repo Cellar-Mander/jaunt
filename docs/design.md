@@ -235,10 +235,11 @@ two-pane browser (`cdd9e95f`) replaces this list.
   included) and the world it is listed on (`listedOn`). Its title is the first line of the
   normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
   the first change since the last save, and on unload, not once per listing.
-- **List**: in-game Party Finder listings with at least one parsed address and FFXIV Venues venues
-  with an address, not hidden, most recently seen first and then by title, each with its source
-  ("Party Finder" or "FFXIV Venues"), "open 24/7" when it is, and "seen … ago". Titles are drawn as
-  in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
+- **List**: in-game and xivpf Party Finder listings with at least one parsed address and FFXIV
+  Venues venues with an address, not hidden, most recently seen first and then by title, each with
+  its source ("Party Finder", "Party Finder (xivpf)" or "FFXIV Venues"). An xivpf ad the game has
+  also sent shows once, as the in-game copy (see "xivpf"). Each row shows "open 24/7" when it is,
+  and "seen … ago". Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
   are spaced by their last drawn height and not drawn.
 - **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
   apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
