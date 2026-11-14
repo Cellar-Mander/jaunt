@@ -64,6 +64,18 @@ public static class DisplayFormats
             ? time.ToString("h:mm tt", English)
             : time.ToString("HH:mm", English);
 
+    /// <summary>
+    /// An event's times, "Sat 14 Nov 20:00–23:00", with the end's date too when it ends on a later
+    /// day: "Sat 14 Nov 22:00 – Sun 15 Nov 02:00". Pass both in the time zone to show.
+    /// </summary>
+    public static string FormatSpan(DateTime start, DateTime end, TimeFormat timeFormat, DateFormat dateFormat, CultureInfo locale)
+    {
+        var from = $"{FormatDate(start, dateFormat, locale)} {FormatTime(start, timeFormat, locale)}";
+        return end.Date == start.Date
+            ? $"{from}–{FormatTime(end, timeFormat, locale)}"
+            : $"{from} – {FormatDate(end, dateFormat, locale)} {FormatTime(end, timeFormat, locale)}";
+    }
+
     public static string FormatDate(DateTime date, DateFormat format, CultureInfo locale) =>
         Resolve(format, locale) switch
         {

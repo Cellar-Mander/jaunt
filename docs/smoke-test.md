@@ -8,7 +8,7 @@ Setup: deploy with `dotnet buildingway dev-plugin deploy <task-ref>` (see "Testi
 
 To run the checks that need no look at the screen and no click, open Dalamud's self-test window (`/xldev`, Dalamud menu, Open Self-Test), pick the `Jaunt` group and press play. Each check is its own step, so the table shows which passed or failed, and Jump runs any one on its own. Each step logs `Self-test PASS: <step>` or `Self-test FAIL: <step> (<detail>)`; on Linux, `grep 'Self-test' ~/.xlcore/logs/dalamud.log | tail` shows the result.
 
-The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues and xivpf steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
+The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues, xivpf and Partake steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
 
 Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* are covered only for the part named, so finish them by hand. Unmarked checks stay manual: how things look, clicks, reloading the plugin and the real network.
 
@@ -78,6 +78,25 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `X
    This also checks that xivpf's listing IDs match the game's. *(self-test: the in-game copy wins, against a stand-in)*
 4. **Offline**: as in FFXIV Venues 7, with the `Xivpf` fetch time: `/xllog` shows a warning
    "Couldn't fetch Party Finder ads from xivpf", and the cached ads stay listed.
+
+## Partake
+
+Checks the fetch, the cooldown and the list; the reading rules are covered by `PartakeTests`.
+
+1. **First fetch**: with no `Partake` time under `lastFetched` in `listings.json` (disable Jaunt,
+   remove it, re-enable), open `/jaunt`. Within a few seconds "Partake" rows appear, each with a
+   second line of times and "World (Data centre)", and `/xllog` shows `Fetched … events from Partake`.
+   *(self-test: one POST, the request recorded before it is sent, and only events that haven't ended and have a world, against a stand-in; the real site stays manual)*
+2. **Times**: an event's times match its page on partake.gg in your local time, in the time and
+   date formats chosen in Settings. One under way says "on now".
+3. **Location**: an event whose location names a district, ward and plot has Travel and Copy
+   address; one whose location Jaunt can't read shows the text instead.
+4. **Credit**: the list ends with "Events from Partake (partake.gg). Jaunt is not affiliated with or
+   endorsed by Partake."
+5. **Cooldown**: close and reopen `/jaunt`: no second Partake fetch is logged within 8 hours.
+   *(self-test: no fetch a minute before the 8 h are up)*
+6. **Offline**: as in FFXIV Venues 7, with the `Partake` fetch time: `/xllog` shows a warning
+   "Couldn't fetch events from Partake", and the cached events stay listed.
 
 ## FFXIV Venues
 

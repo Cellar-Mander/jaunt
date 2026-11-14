@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
@@ -8,6 +9,7 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
+using Jaunt.Core.Display;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
 using Jaunt.Travel;
@@ -15,9 +17,9 @@ using Jaunt.Travel;
 namespace Jaunt.Windows;
 
 /// <summary>
-/// The MVP listing window: Party Finder venue ads (in-game and from xivpf) with a parsed address and
-/// FFXIV Venues venues with an address, newest first, each address with Travel and Copy address and each link with Open. The
-/// two-pane browser (cdd9e95f) replaces it.
+/// The MVP listing window: Party Finder venue ads (in-game and from xivpf) with a parsed address,
+/// FFXIV Venues venues with an address and Partake events that haven't ended, newest first, each
+/// address with Travel and Copy address and each link with Open. The two-pane browser (cdd9e95f) replaces it.
 /// </summary>
 internal sealed class ListingsWindow : Window
 {
@@ -27,16 +29,18 @@ internal sealed class ListingsWindow : Window
     private readonly AddressParser parser;
     private readonly Lifestream lifestream;
     private readonly INotificationManager notifications;
+    private readonly Configuration configuration;
     private readonly Action fetchSources;
 
-    // Parsed once per ad text, so drawing doesn't re-parse every frame
-    private readonly Dictionary<(ListingSource, string), (string Description, ListingDetails Details)> parsed = [];
+    // Parsed once per ad text or event location, so drawing doesn't re-parse every frame
+    private readonly Dictionary<(ListingSource, string), (string Text, ListingDetails Details)> parsed = [];
     private List<(CachedListing Listing, ListingDetails Details)> rows = [];
     private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
     private DateTimeOffset nextRebuild;
+    private bool showsPartake;
 
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
-    public ListingsWindow(ListingCache cache, AddressParser parser, Lifestream lifestream, INotificationManager notifications, Action fetchSources)
+    public ListingsWindow(ListingCache cache, AddressParser parser, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources)
         : base("Jaunt###JauntListings")
     {
         this.fetchSources = fetchSources;
@@ -44,6 +48,7 @@ internal sealed class ListingsWindow : Window
         this.parser = parser;
         this.lifestream = lifestream;
         this.notifications = notifications;
+        this.configuration = configuration;
         Size = new Vector2(520, 560);
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 240), MaximumSize = new Vector2(1600, 1600) };
@@ -60,13 +65,13 @@ internal sealed class ListingsWindow : Window
         var now = DateTimeOffset.UtcNow;
         if (now >= nextRebuild)
         {
-            Rebuild();
+            Rebuild(now);
             nextRebuild = now + RebuildInterval;
         }
 
         if (rows.Count == 0)
         {
-            ImGui.TextWrapped("No venues with an address yet. Wait for xivpf and FFXIV Venues to load, or open the Party Finder and browse the None category.");
+            ImGui.TextWrapped("No venues with an address yet. Wait for xivpf, FFXIV Venues and Partake to load, or open the Party Finder and browse the None category.");
             return;
         }
 
@@ -77,7 +82,7 @@ internal sealed class ListingsWindow : Window
             // FFXIV Venues alone lists over a thousand venues, so rows out of view are only spaced, not drawn
             var key = (listing.Source, listing.Id);
             var top = ImGui.GetCursorPosY();
-            var lines = 1 + details.Addresses.Count + details.Links.Count;
+            var lines = 1 + EventLines(listing, details) + details.Addresses.Count + details.Links.Count;
             var height = rowHeights.TryGetValue(key, out var measured) && measured.Lines == lines
                 ? measured.Height
                 : lines * lineHeight;
@@ -91,9 +96,17 @@ internal sealed class ListingsWindow : Window
             rowHeights[key] = (lines, ImGui.GetCursorPosY() - top);
         }
 
+        // Partake's terms ask apps not to imply endorsement
+        if (showsPartake)
+            ImGui.TextDisabled("Events from Partake (partake.gg). Jaunt is not affiliated with or endorsed by Partake.");
+
         // Keeps the content height right when the last row was only spaced
         ImGui.Dummy(Vector2.Zero);
     }
+
+    /// <summary>The lines an event adds under its title: its times and world, and its location when no address was read from it.</summary>
+    private static int EventLines(CachedListing listing, ListingDetails details) =>
+        listing.StartsAt is null ? 0 : 1 + (details.Addresses.Count == 0 && !string.IsNullOrEmpty(listing.Location) ? 1 : 0);
 
     private void DrawRow(CachedListing listing, ListingDetails details, DateTimeOffset now, bool travelAvailable)
     {
@@ -112,6 +125,9 @@ internal sealed class ListingsWindow : Window
 
         using (ImRaii.PushIndent())
         {
+            if (listing.StartsAt is { } start && listing.EndsAt is { } end)
+                DrawEventLines(listing, details, start, end, now);
+
             for (var i = 0; i < details.Addresses.Count; i++)
             {
                 using var addressId = ImRaii.PushId($"a{i}");
@@ -126,6 +142,16 @@ internal sealed class ListingsWindow : Window
         }
 
         ImGui.Separator();
+    }
+
+    private void DrawEventLines(CachedListing listing, ListingDetails details, DateTimeOffset start, DateTimeOffset end, DateTimeOffset now)
+    {
+        var times = DisplayFormats.FormatSpan(
+            start.ToLocalTime().DateTime, end.ToLocalTime().DateTime, configuration.TimeFormat, configuration.DateFormat, CultureInfo.CurrentCulture);
+        var world = listing.DataCentre is { } dataCentre ? $"{listing.ListedOn} ({dataCentre})" : listing.ListedOn;
+        ImGui.TextUnformatted(start <= now ? $"{times} · on now · {world}" : $"{times} · {world}");
+        if (details.Addresses.Count == 0 && !string.IsNullOrEmpty(listing.Location))
+            ImGui.TextWrapped(ShownText.Title(listing.Location));
     }
 
     private void DrawAddress(HousingAddress address, bool travelAvailable)
@@ -176,12 +202,14 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// Lists the visible listings that have an address, newest first and then by title, parsing only
-    /// ad text that changed. An xivpf ad the game has also sent shows once, as the in-game copy.
+    /// Lists the visible listings that have an address, and Partake events that haven't ended, newest
+    /// first and then by title, parsing only ad text and locations that changed. An xivpf ad the game
+    /// has also sent shows once, as the in-game copy.
     /// </summary>
-    private void Rebuild()
+    private void Rebuild(DateTimeOffset now)
     {
         var next = new List<(CachedListing, ListingDetails)>();
+        showsPartake = false;
         foreach (var listing in cache.Listings)
         {
             if (listing.Hidden)
@@ -194,18 +222,23 @@ internal sealed class ListingsWindow : Window
                 continue;
             }
 
+            if (listing.Source == ListingSource.Partake)
+            {
+                // Shown without an address too: the location is free text the parser may not read
+                if (!Partake.NotEnded(listing, now))
+                    continue;
+                var location = Parsed(listing, listing.Location ?? "");
+                next.Add((listing, location with { Links = [.. listing.Links.Select(uri => new WebLink(uri.OriginalString, uri))] }));
+                showsPartake = true;
+                continue;
+            }
+
             if (listing.Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf) || Xivpf.ShownInGame(cache, listing))
                 continue;
 
-            var key = (listing.Source, listing.Id);
-            if (!parsed.TryGetValue(key, out var entry) || !ReferenceEquals(entry.Description, listing.Description))
-            {
-                entry = (listing.Description, ListingDetails.Parse(parser, listing.Description, listing.ListedOn));
-                parsed[key] = entry;
-            }
-
-            if (entry.Details.Addresses.Count > 0)
-                next.Add((listing, entry.Details));
+            var details = Parsed(listing, listing.Description);
+            if (details.Addresses.Count > 0)
+                next.Add((listing, details));
         }
 
         rows = [.. next.OrderByDescending(r => r.Item1.LastSeen).ThenBy(r => r.Item1.Title, StringComparer.CurrentCultureIgnoreCase)];
@@ -224,6 +257,18 @@ internal sealed class ListingsWindow : Window
         }
     }
 
+    private ListingDetails Parsed(CachedListing listing, string text)
+    {
+        var key = (listing.Source, listing.Id);
+        if (!parsed.TryGetValue(key, out var entry) || !ReferenceEquals(entry.Text, text))
+        {
+            entry = (text, ListingDetails.Parse(parser, text, listing.ListedOn));
+            parsed[key] = entry;
+        }
+
+        return entry.Details;
+    }
+
     private void Notify(string text, NotificationType type) =>
         notifications.AddNotification(new Notification { Title = "Jaunt", Content = text, Type = type });
 
@@ -231,6 +276,7 @@ internal sealed class ListingsWindow : Window
     {
         ListingSource.FfxivVenues => "FFXIV Venues",
         ListingSource.Xivpf => "Party Finder (xivpf)",
+        ListingSource.Partake => "Partake",
         _ => "Party Finder",
     };
 

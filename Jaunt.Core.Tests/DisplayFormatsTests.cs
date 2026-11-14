@@ -20,6 +20,23 @@ public class DisplayFormatsTests
         Assert.Equal(morning, DisplayFormats.FormatTime(Morning, format, Us));
     }
 
+    [Fact]
+    public void AnEventOnOneDayShowsItsDateOnce()
+    {
+        var end = new DateTime(2026, 11, 14, 23, 0, 0);
+
+        Assert.Equal("Sat 14 Nov 20:05–23:00", DisplayFormats.FormatSpan(Evening, end, TimeFormat.TwentyFourHour, DateFormat.DayMonth, Us));
+        Assert.Equal("Sat Nov 14 8:05 PM–11:00 PM", DisplayFormats.FormatSpan(Evening, end, TimeFormat.TwelveHour, DateFormat.MonthDay, Uk));
+    }
+
+    [Fact]
+    public void AnEventPastMidnightShowsTheEndsDate()
+    {
+        var end = new DateTime(2026, 11, 15, 2, 0, 0);
+
+        Assert.Equal("Sat 14 Nov 20:05 – Sun 15 Nov 02:00", DisplayFormats.FormatSpan(Evening, end, TimeFormat.TwentyFourHour, DateFormat.DayMonth, Us));
+    }
+
     [Theory]
     [InlineData("en-US", "8:05 PM")]
     [InlineData("en-GB", "20:05")]
