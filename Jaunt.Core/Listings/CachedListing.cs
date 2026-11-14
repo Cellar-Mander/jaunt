@@ -12,7 +12,7 @@ public sealed class CachedListing
 
     /// <summary>
     /// The title, or for FFXIV Venues, Partake and the FFXIV RP Event Calendar the name or title as
-    /// sent, which <see cref="ShownTitle"/> reads for the first two.
+    /// sent, which <see cref="ShownTitle"/> reads.
     /// </summary>
     public string Title { get; set; } = "";
 
@@ -22,6 +22,7 @@ public sealed class CachedListing
     {
         ListingSource.FfxivVenues => FfxivVenues.Title(Title),
         ListingSource.Partake => Partake.Title(Title),
+        ListingSource.RpEventCalendar => RpEventCalendar.Title(Title),
         _ => Title,
     };
 
@@ -69,7 +70,8 @@ public sealed class CachedListing
 
     /// <summary>
     /// The content rating the source gives, as sent ("Teen", "Mature"); null if none. Kept for
-    /// filtering; not shown.
+    /// filtering; not shown. For the RP calendar, <see cref="RpEventCalendar.Show"/> falls back to the
+    /// name's rating tag.
     /// </summary>
     public string? Rating { get; set; }
 

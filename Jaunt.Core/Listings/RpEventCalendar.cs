@@ -1,12 +1,14 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Listings;
 
 /// <summary>
-/// Reads the FFXIV RP Event Calendar's events for the next few weeks (<see cref="Url"/>) and records
-/// their raw fields in the listing cache. The rules are in <c>docs/design.md</c> under "FFXIV RP Event Calendar".
+/// Reads the FFXIV RP Event Calendar's events for the next few weeks (<see cref="Url"/>), records
+/// their raw fields in the listing cache, and derives what the list shows from those fields
+/// (<see cref="Show"/>). The rules are in <c>docs/design.md</c> under "FFXIV RP Event Calendar".
 /// </summary>
 /// <remarks>
 /// The response holds one row per occurrence, about 500 rows and 700 KB, which this groups into one
@@ -26,6 +28,9 @@ public static class RpEventCalendar
     public static readonly Uri LicenceUrl = new("https://creativecommons.org/licenses/by-sa/4.0/");
 
     public const string LicenceName = "CC BY-SA 4.0";
+
+    /// <summary>The tags organisers put before an event's name for its rating, and the rating each stands for.</summary>
+    private static readonly (string Tag, string Rating)[] RatingTags = [("[T]", "Teen"), ("[M]", "Mature"), ("[AO]", "Adults Only")];
 
     /// <summary>One event as the calendar sends it, with only the fields Jaunt reads.</summary>
     /// <param name="Id">The calendar's ID for the event, shared by its occurrences.</param>
@@ -47,6 +52,13 @@ public static class RpEventCalendar
         IReadOnlyList<ListingOpening> Openings,
         bool OneOff,
         DateOnly? LastValidated);
+
+    /// <summary>What the list shows for an event, derived from its cached raw fields.</summary>
+    /// <param name="Address">The housing address read from the location, or null when it gives none.</param>
+    /// <param name="Location">The location, trimmed, when it has no housing address (an open-world spot); otherwise null.</param>
+    /// <param name="Rating">Its content rating ("Teen", "Mature", "Adults Only"), or null if it gives none.</param>
+    /// <param name="Links">Its page, http or https only.</param>
+    public sealed record Shown(string Title, HousingAddress? Address, string? Location, string? Rating, IReadOnlyList<Uri> Links);
 
     /// <summary>Reads the API's response.</summary>
     /// <exception cref="JsonException">The text is not a JSON array.</exception>
@@ -111,6 +123,41 @@ public static class RpEventCalendar
         }
     }
 
+    /// <summary>What the list shows for a cached calendar event, derived from its raw fields.</summary>
+    /// <param name="parser">Reads the housing address from the location.</param>
+    public static Shown Show(CachedListing listing, AddressParser parser)
+    {
+        var (name, taggedRating) = WithoutRatingTag(listing.Title);
+        var location = listing.Location?.Trim() ?? "";
+        var world = string.IsNullOrWhiteSpace(listing.ListedOn) ? null : listing.ListedOn.Trim();
+        var address = Address(location, world, parser);
+        return new Shown(
+            FfxivVenues.Title(name),
+            address,
+            address is null && location.Length > 0 ? location : null,
+            string.IsNullOrWhiteSpace(listing.Rating) ? taggedRating : listing.Rating.Trim(),
+            FfxivVenues.Links([.. listing.LinkTexts]));
+    }
+
+    /// <summary>The title shown for an event's name as sent: without its rating tag, first line only, cut to 60 characters.</summary>
+    public static string Title(string name) => FfxivVenues.Title(WithoutRatingTag(name).Name);
+
+    /// <summary>
+    /// The event's name without the rating tag organisers put before it ("[M] Coco's Oasis"), and the
+    /// rating the tag stands for. The tag is metadata, not part of the name.
+    /// </summary>
+    internal static (string Name, string? Rating) WithoutRatingTag(string name)
+    {
+        var text = name.Trim();
+        foreach (var (tag, rating) in RatingTags)
+        {
+            if (text.StartsWith(tag, StringComparison.OrdinalIgnoreCase))
+                return (text[tag.Length..], rating);
+        }
+
+        return (text, null);
+    }
+
     private static (RowData Row, ListingOpening Opening)? Read(JsonElement element)
     {
         RowData? row;
@@ -128,6 +175,19 @@ public static class RpEventCalendar
             return null;
 
         return (row, new ListingOpening(start, end));
+    }
+
+    /// <summary>
+    /// The first housing address in the location. A location that names no world is on the event's
+    /// server, which the calendar gives as data, so that world counts as written.
+    /// </summary>
+    internal static HousingAddress? Address(string location, string? server, AddressParser parser)
+    {
+        if (location.Length == 0)
+            return null;
+
+        var address = parser.Parse(location, server).FirstOrDefault();
+        return address is { WorldFrom: WorldSource.Listing, World: not null } ? address with { WorldFrom = WorldSource.Text } : address;
     }
 
     /// <summary>The day part of the calendar's validation time ("2026-08-30T00:00:00"), or null if missing or unreadable.</summary>

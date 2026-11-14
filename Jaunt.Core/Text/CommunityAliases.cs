@@ -50,7 +50,7 @@ internal static class CommunityAliases
         new(District.Goblet, "ゴブレット"), new(District.Goblet, "ゴブ"),
         new(District.Shirogane, "Shiro"),
         new(District.Empyreum, "Empy"), new(District.Empyreum, "Emp"), new(District.Empyreum, "Em"),
-        new(District.Empyreum, "エンピ"),
+        new(District.Empyreum, "Emperyum"), new(District.Empyreum, "エンピ"),
     ];
 
     public static readonly (string Name, Gazetteer.Keyword Keyword)[] Keywords =

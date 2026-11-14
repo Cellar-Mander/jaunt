@@ -46,7 +46,7 @@ from, a district, a ward and optionally a plot, subdivision, apartment and room.
 district's name in English, German, French and Japanese, read from the game's data
 (`Jaunt/Text/GazetteerLoader.cs`). A built-in community table adds Japanese world names and their
 short forms (パンデモ, ゆに, 槍), the abbreviations `Exl` (Excalibur) and `Gobby` (Goblin or Goblet),
-district shorthand (`LB`, `Lav`, `Gob`, `Shiro`, `Emp`, `Em`, ラベ, ゴブ, エンピ…) and data-centre
+district shorthand (`LB`, `Lav`, `Gob`, `Shiro`, `Emp`, `Em`, the misspelling `Emperyum`, ラベ, ゴブ, エンピ…) and data-centre
 shorthand (`Dyn`, `Cry`, `Pri`, マナ, メテオ…). Names are matched case-insensitively and may span
 several words separated by spaces, `.` or `・`. Any word of three or more letters that starts exactly one
 world's name in the listing world's region is that world ("Krak", "Sagi"). When no world in that region
@@ -220,9 +220,22 @@ failed one counts too. Download and parsing run off the game thread.
 
 **Stored as sent**: the cache keeps `eventName` (as the listing's title), `server` (as the world
 it is listed on), `location`, `esrbRating` and `eventURL` exactly as the calendar sent them, an empty title when
-the name is missing. What is shown is derived from those, never stored, so a change to how they
-are read reaches cached events without fetching again.
+the name is missing. The title, address, location and rating below are derived from those when
+shown, never stored, so a change to how they are read reaches cached events without fetching
+again. The list derives them once per change to those fields, not every frame.
 
+- **Title**: the event's name without a leading rating tag (`[T]`, `[M]` or `[AO]`, any case),
+  which is metadata rather than part of the name; then first line only, trimmed and cut to 60
+  characters like a venue's. A tag anywhere else, or another bracketed word, is kept. Hidden
+  venues shows and sorts by this title too.
+- **Rating**: `esrbRating`, trimmed; when it is missing or blank, the rating the removed tag stands
+  for (Teen, Mature, Adults Only); otherwise none. For filtering; not shown.
+- **Address**: the first housing address the ad-text parser (see "Addresses in ad text") reads from
+  the trimmed location, so typos (`Mists`, `Emperyum`) and a plot written before the ward still
+  parse. A location that names no world is on the event's server (trimmed), which counts as
+  written, not as a listing world. Without a server, the address has no world.
+- **Location**: a location with no housing address ("North Shroud, Hyrstmill", "See URL") is shown
+  as text, trimmed; an empty one is neither.
 - **Links**: `eventURL`, stored as sent; shown only if http or https, read like FFXIV Venues' links.
 - **Openings**: each occurrence's `startTimeUTC` and `endTimeUTC`, earliest first, the same one
   kept once. An occurrence without both, or that doesn't end after it starts, is skipped; the

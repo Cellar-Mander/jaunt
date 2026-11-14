@@ -186,10 +186,12 @@ public class ListingCacheTests
         cache.Seen(ListingSource.Xivpf, "1", "zebra lounge", Now).Hidden = true;
         cache.Seen(ListingSource.Xivpf, "2", "Not hidden", Now);
         cache.Seen(ListingSource.FfxivVenues, "3", "Amber Room\nBar & Grill", Now).Hidden = true;
+        cache.Seen(ListingSource.RpEventCalendar, "4", "[M] Midnight Market", Now).Hidden = true;
 
         var hidden = cache.HiddenListings();
 
-        Assert.Equal(["Amber Room", "zebra lounge"], hidden.Select(l => l.ShownTitle));
+        // An RP calendar event sorts by its title as shown, without the rating tag
+        Assert.Equal(["Amber Room", "Midnight Market", "zebra lounge"], hidden.Select(l => l.ShownTitle));
     }
 
     [Fact]
