@@ -128,6 +128,20 @@ internal sealed class FetchedListings : IDisposable
             },
             cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
 
+    /// <summary>The next few weeks' events from the FFXIV RP Event Calendar.</summary>
+    public static FetchedListings RpEventCalendar(
+        ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
+        HttpMessageHandler? handler = null, TimeProvider? time = null) =>
+        new(
+            ListingSource.RpEventCalendar, "the FFXIV RP Event Calendar", "events",
+            async (http, _, token) =>
+            {
+                var json = await http.GetStringAsync(Core.Listings.RpEventCalendar.Url, token).ConfigureAwait(false);
+                var events = Core.Listings.RpEventCalendar.Parse(json);
+                return new Recording(events.Count, (c, now) => Core.Listings.RpEventCalendar.Record(c, events, now));
+            },
+            cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
+
     private static HttpClientHandler NewHandler() => new() { AutomaticDecompression = DecompressionMethods.All };
 
     /// <summary>The latest fetch, or a completed task if none has started.</summary>

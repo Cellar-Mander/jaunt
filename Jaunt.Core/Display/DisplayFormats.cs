@@ -83,4 +83,16 @@ public static class DisplayFormats
             DateFormat.Iso => date.ToString("yyyy-MM-dd", English),
             _ => date.ToString("ddd d MMM", English),
         };
+
+    /// <summary>
+    /// A date that may be years away, with its year and without its weekday: "30 Aug 2025",
+    /// "Aug 30 2025" or "2025-08-30".
+    /// </summary>
+    public static string FormatDateWithYear(DateOnly date, DateFormat format, CultureInfo locale) =>
+        Resolve(format, locale) switch
+        {
+            DateFormat.MonthDay => date.ToString("MMM d yyyy", English),
+            DateFormat.Iso => date.ToString("yyyy-MM-dd", English),
+            _ => date.ToString("d MMM yyyy", English),
+        };
 }

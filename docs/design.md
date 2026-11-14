@@ -246,6 +246,8 @@ again. The list derives them once per change to those fields, not every frame.
   A response that isn't a JSON array fails the fetch, which is logged, and the cached events stay.
 - Only the fields above are read. `contacts` and `description` (which repeats the contacts) hold
   Discord handles and are never stored or shown.
+- **Credit**: the calendar's listings are CC BY-SA 4.0, so each of its rows shows "FFXIV RP Event
+  Calendar", opening `https://ffxiv-rp.org/`, and "CC BY-SA 4.0", opening the licence.
 
 ### Partake
 
@@ -319,11 +321,16 @@ two-pane browser (`cdd9e95f`) replaces this list.
   normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
   the first change since the last save, and on unload, not once per listing.
 - **List**: in-game and xivpf Party Finder listings with at least one parsed address, FFXIV
-  Venues venues with an address and Partake events that haven't ended, not hidden, most recently
-  seen first and then by title, each with its source ("Party Finder", "Party Finder (xivpf)", "FFXIV
-  Venues" or "Partake"). Events show their times and world on a second line (see "Partake"). An xivpf ad the game has
+  Venues venues with an address, Partake events that haven't ended and FFXIV RP Event Calendar
+  events with an address or a location, not hidden, most recently seen first and then by title,
+  each with its source ("Party Finder", "Party Finder (xivpf)", "FFXIV Venues", "Partake", or the
+  calendar's credit). Partake events show their times and world on a second line (see "Partake").
+  An xivpf ad the game has
   also sent shows once, as the in-game copy (see "xivpf"). Each row shows "open 24/7" when it is,
-  and "seen … ago". Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
+  and "seen … ago". A calendar event also shows, in local time and the Settings formats, "On now
+  until 23:00" for an opening in progress, else "Next Sat 15 Nov 20:00–23:00" for the next one,
+  else "No upcoming dates"; then "validated 30 Aug 2025" (the date with its year) or "never
+  validated"; then its location when it has no address. Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
   are spaced by their last drawn height and not drawn.
 - **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
   apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds

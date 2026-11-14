@@ -8,7 +8,7 @@ Setup: deploy with `dotnet buildingway dev-plugin deploy <task-ref>` (see "Testi
 
 To run the checks that need no look at the screen and no click, open Dalamud's self-test window (`/xldev`, Dalamud menu, Open Self-Test), pick the `Jaunt` group and press play. Each check is its own step, so the table shows which passed or failed, and Jump runs any one on its own. Each step logs `Self-test PASS: <step>` or `Self-test FAIL: <step> (<detail>)`; on Linux, `grep 'Self-test' ~/.xlcore/logs/dalamud.log | tail` shows the result.
 
-The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues, xivpf and Partake steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
+The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues, xivpf, Partake and RP Event Calendar steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
 
 Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* are covered only for the part named, so finish them by hand. Unmarked checks stay manual: how things look, clicks, reloading the plugin and the real network.
 
@@ -97,6 +97,23 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `P
    *(self-test: no fetch a minute before the 8 h are up)*
 6. **Offline**: as in FFXIV Venues 7, with the `Partake` fetch time: `/xllog` shows a warning
    "Couldn't fetch events from Partake", and the cached events stay listed.
+
+## FFXIV RP Event Calendar
+
+Checks the fetch, the cooldown and the list; the reading rules are covered by `RpEventCalendarTests`.
+
+1. **First fetch**: with no `RpEventCalendar` time under `lastFetched` in `listings.json` (disable
+   Jaunt, remove it, re-enable), open `/jaunt`. Within a few seconds rows credited "FFXIV RP Event
+   Calendar · CC BY-SA 4.0" appear, and `/xllog` shows `Fetched … events from the FFXIV RP Event Calendar`.
+   *(self-test: the request is recorded before it is sent and the events after it, against a stand-in; the real site stays manual)*
+2. **Cooldown**: with the Settings cooldown at 10 minutes, close and reopen `/jaunt` after 10
+   minutes: no second calendar fetch is logged. *(self-test: no fetch a minute before the 8 h are up)*
+3. **Rows**: an event shows "Next …" or "On now until …" in your time zone and the Settings formats,
+   then "validated …" with a year or "never validated". An open-world event shows its location as
+   text with no Travel button. *(self-test: the address, location, dates and validation are recorded)*
+4. **Credit**: hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
+   clicking it opens the site. "CC BY-SA 4.0" does the same with the licence page.
+5. **No contacts**: `listings.json` holds no `contacts` and no Discord handles from the calendar. *(self-test)*
 
 ## FFXIV Venues
 

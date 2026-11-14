@@ -18,8 +18,9 @@ namespace Jaunt.Windows;
 
 /// <summary>
 /// The MVP listing window: Party Finder venue ads (in-game and from xivpf) with a parsed address,
-/// FFXIV Venues venues with an address and Partake events that haven't ended, newest first, each
-/// address with Travel and Copy address and each link with Open. The two-pane browser (cdd9e95f) replaces it.
+/// FFXIV Venues venues with an address, Partake events that haven't ended and FFXIV RP Event Calendar
+/// events with an address or a location, newest first, each address with Travel and Copy address and
+/// each link with Open. The two-pane browser (cdd9e95f) replaces it.
 /// </summary>
 internal sealed class ListingsWindow : Window
 {
@@ -37,6 +38,7 @@ internal sealed class ListingsWindow : Window
     // drawing doesn't re-parse every frame
     private readonly Dictionary<(ListingSource, string), (string Text, string? ListedOn, ListingDetails Details)> parsed = [];
     private readonly Dictionary<string, (string Name, FfxivVenues.Fields? Fields, FfxivVenues.Shown Shown)> shownVenues = [];
+    private readonly Dictionary<string, (CalendarFields Fields, RpEventCalendar.Shown Shown)> shownEvents = [];
     private List<Row> rows = [];
     private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
     private DateTimeOffset nextRebuild;
@@ -44,9 +46,23 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// One row: the listing, its title as shown, its addresses and links, whether it is open 24/7, and
-    /// for a Partake event what is shown of it, worked out from the values it was sent with.
+    /// for a Partake or RP calendar event what is shown of it, worked out from the values it was sent with.
     /// </summary>
-    private sealed record Row(CachedListing Listing, string Title, ListingDetails Details, bool AlwaysOpen, Partake.Shown? Event = null);
+    private sealed record Row(
+        CachedListing Listing, string Title, ListingDetails Details, bool AlwaysOpen, Partake.Shown? Event = null, RpEventCalendar.Shown? CalendarEvent = null);
+
+    /// <summary>
+    /// A calendar event's fields that <see cref="RpEventCalendar.Show"/> reads. Recording a fetch assigns
+    /// new objects, so a reference check finds every change.
+    /// </summary>
+    private readonly record struct CalendarFields(string Title, string? Location, string? ListedOn, string? Rating, IReadOnlyList<string> LinkTexts)
+    {
+        public static CalendarFields Of(CachedListing listing) => new(listing.Title, listing.Location, listing.ListedOn, listing.Rating, listing.LinkTexts);
+
+        public bool Same(CalendarFields other) =>
+            ReferenceEquals(Title, other.Title) && ReferenceEquals(Location, other.Location) && ReferenceEquals(ListedOn, other.ListedOn)
+            && ReferenceEquals(Rating, other.Rating) && ReferenceEquals(LinkTexts, other.LinkTexts);
+    }
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
@@ -82,7 +98,7 @@ internal sealed class ListingsWindow : Window
 
         if (rows.Count == 0)
         {
-            ImGui.TextWrapped("No venues with an address yet. Wait for xivpf, FFXIV Venues and Partake to load, or open the Party Finder and browse the None category.");
+            ImGui.TextWrapped("No venues with an address yet. Wait for xivpf, FFXIV Venues, Partake and the FFXIV RP Event Calendar to load, or open the Party Finder and browse the None category.");
             return;
         }
 
@@ -91,10 +107,10 @@ internal sealed class ListingsWindow : Window
         foreach (var row in rows)
         {
             // FFXIV Venues alone lists over a thousand venues, so rows out of view are only spaced, not drawn
-            var (listing, _, details, _, item) = row;
+            var (listing, _, details, _, item, calendarEvent) = row;
             var key = (listing.Source, listing.Id);
             var top = ImGui.GetCursorPosY();
-            var lines = 1 + EventLines(item, details) + details.Addresses.Count + details.Links.Count;
+            var lines = 1 + EventLines(item, details) + CalendarLines(calendarEvent) + details.Addresses.Count + details.Links.Count;
             var height = rowHeights.TryGetValue(key, out var measured) && measured.Lines == lines
                 ? measured.Height
                 : lines * lineHeight;
@@ -120,13 +136,20 @@ internal sealed class ListingsWindow : Window
     private static int EventLines(Partake.Shown? item, ListingDetails details) =>
         item is null ? 0 : 1 + (details.Addresses.Count == 0 && item.Location.Length > 0 ? 1 : 0);
 
+    /// <summary>The lines a calendar event adds under its title: when and validation, then its location when it has no address.</summary>
+    private static int CalendarLines(RpEventCalendar.Shown? calendarEvent) =>
+        calendarEvent is null ? 0 : calendarEvent.Location is null ? 1 : 2;
+
     private void DrawRow(Row row, DateTimeOffset now, bool travelAvailable)
     {
-        var (listing, title, details, alwaysOpen, item) = row;
+        var (listing, title, details, alwaysOpen, item, calendarEvent) = row;
         using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
         ImGui.TextUnformatted(ShownText.Title(title));
         ImGui.SameLine();
-        ImGui.TextDisabled(SourceName(listing.Source));
+        if (calendarEvent is not null)
+            DrawCalendarCredit();
+        else
+            ImGui.TextDisabled(SourceName(listing.Source));
         if (alwaysOpen)
         {
             ImGui.SameLine();
@@ -140,6 +163,8 @@ internal sealed class ListingsWindow : Window
         {
             if (item is not null && listing.StartsAt is { } start && listing.EndsAt is { } end)
                 DrawEventLines(item, details, start, end, now);
+            if (calendarEvent is not null)
+                DrawCalendarLines(listing, calendarEvent, now);
 
             for (var i = 0; i < details.Addresses.Count; i++)
             {
@@ -165,6 +190,54 @@ internal sealed class ListingsWindow : Window
         ImGui.TextUnformatted(start <= now ? $"{times} · on now · {world}" : $"{times} · {world}");
         if (details.Addresses.Count == 0 && item.Location.Length > 0)
             ImGui.TextWrapped(ShownText.Title(item.Location));
+    }
+
+    /// <summary>The calendar's name and licence, each opening its page: its listings are CC BY-SA, which needs both.</summary>
+    private static void DrawCalendarCredit()
+    {
+        DrawLinkText(SourceName(ListingSource.RpEventCalendar), RpEventCalendar.SiteUrl);
+        ImGui.SameLine();
+        ImGui.TextDisabled("·");
+        ImGui.SameLine();
+        DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl);
+    }
+
+    private static void DrawLinkText(string text, Uri uri)
+    {
+        ImGui.TextDisabled(text);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            ImGui.SetTooltip(uri.AbsoluteUri);
+        }
+
+        if (ImGui.IsItemClicked())
+            Util.OpenLink(uri.AbsoluteUri);
+    }
+
+    private void DrawCalendarLines(CachedListing listing, RpEventCalendar.Shown calendarEvent, DateTimeOffset now)
+    {
+        var locale = CultureInfo.CurrentCulture;
+        var when = ListingOpening.Next(listing.Openings, now) is { } opening
+            ? OpeningText(opening, now, locale)
+            : "No upcoming dates";
+        var validated = listing.LastValidated is { } date
+            ? "validated " + DisplayFormats.FormatDateWithYear(date, configuration.DateFormat, locale)
+            : "never validated";
+        ImGui.TextDisabled($"{when} · {validated}");
+
+        if (calendarEvent.Location is { } location)
+            ImGui.TextWrapped(ShownText.Fold(location));
+    }
+
+    /// <summary>"On now until 23:00", or "Next Sat 15 Nov 20:00–23:00", in local time.</summary>
+    private string OpeningText(ListingOpening opening, DateTimeOffset now, CultureInfo locale)
+    {
+        var start = opening.Start.ToLocalTime().DateTime;
+        var end = opening.End.ToLocalTime().DateTime;
+        return opening.Start <= now
+            ? $"On now until {DisplayFormats.FormatTime(end, configuration.TimeFormat, locale)}"
+            : "Next " + DisplayFormats.FormatSpan(start, end, configuration.TimeFormat, configuration.DateFormat, locale);
     }
 
     private void DrawAddress(HousingAddress address, bool travelAvailable)
@@ -215,9 +288,10 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// Lists the visible listings that have an address, and Partake events that haven't ended, newest
-    /// first and then by title, parsing only ad text, locations and venue fields that changed. An xivpf
-    /// ad the game has also sent shows once, as the in-game copy.
+    /// Lists the visible listings that have an address, Partake events that haven't ended and RP
+    /// calendar events with an address or location, newest first and then by title, parsing only ad
+    /// text, locations and venue and event fields that changed. An xivpf ad the game has also sent
+    /// shows once, as the in-game copy.
     /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
@@ -257,17 +331,37 @@ internal sealed class ListingsWindow : Window
                 continue;
             }
 
+            if (listing.Source == ListingSource.RpEventCalendar)
+            {
+                var fields = CalendarFields.Of(listing);
+                if (!shownEvents.TryGetValue(listing.Id, out var calendar) || !calendar.Fields.Same(fields))
+                {
+                    calendar = (fields, RpEventCalendar.Show(listing, parser));
+                    shownEvents[listing.Id] = calendar;
+                }
+
+                // Events in the open world have only a location, which the row shows as text
+                var calendarEvent = calendar.Shown;
+                if (calendarEvent.Address is not null || calendarEvent.Location is not null)
+                {
+                    var details = new ListingDetails(calendarEvent.Address is { } at ? [at] : [], WebLinks(calendarEvent.Links));
+                    next.Add(new Row(listing, calendarEvent.Title, details, AlwaysOpen: false, CalendarEvent: calendarEvent));
+                }
+
+                continue;
+            }
+
             if (listing.Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf) || Xivpf.ShownInGame(cache, listing))
                 continue;
 
-            var details = Parsed(listing, listing.Description, listing.ListedOn);
-            if (details.Addresses.Count > 0)
-                next.Add(new Row(listing, listing.Title, details, AlwaysOpen: false));
+            var adDetails = Parsed(listing, listing.Description, listing.ListedOn);
+            if (adDetails.Addresses.Count > 0)
+                next.Add(new Row(listing, listing.Title, adDetails, AlwaysOpen: false));
         }
 
         rows = [.. next.OrderByDescending(r => r.Listing.LastSeen).ThenBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
 
-        // Forget ads and venues the cache no longer holds (cleared or expired)
+        // Forget ads, venues and events the cache no longer holds (cleared or expired)
         if (parsed.Count > cache.Count)
         {
             foreach (var key in parsed.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
@@ -278,6 +372,12 @@ internal sealed class ListingsWindow : Window
         {
             foreach (var key in shownVenues.Keys.Where(k => cache.Find(ListingSource.FfxivVenues, k) is null).ToList())
                 shownVenues.Remove(key);
+        }
+
+        if (shownEvents.Count > cache.Count)
+        {
+            foreach (var key in shownEvents.Keys.Where(k => cache.Find(ListingSource.RpEventCalendar, k) is null).ToList())
+                shownEvents.Remove(key);
         }
 
         if (rowHeights.Count > cache.Count)
@@ -311,6 +411,7 @@ internal sealed class ListingsWindow : Window
         ListingSource.FfxivVenues => "FFXIV Venues",
         ListingSource.Xivpf => "Party Finder (xivpf)",
         ListingSource.Partake => "Partake",
+        ListingSource.RpEventCalendar => "FFXIV RP Event Calendar",
         _ => "Party Finder",
     };
 
