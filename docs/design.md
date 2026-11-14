@@ -176,6 +176,26 @@ and whether it is open 24/7.
   is skipped without failing the others. A response that isn't a JSON array is an error.
 - Only the fields above are read; others, such as managers' Discord IDs, are never stored.
 
+### Text the font can't draw
+
+Venue names and ad titles use characters the plugin's font lacks (ImGui draws those as a box). The
+font is Dalamud's default: the game font, Noto Sans CJK and FontAwesome; no other font Dalamud ships
+has these characters. `FontFallback.Fold` rewrites a title for display only (the cache, Copy and
+Hidden venues' matching keep it as written), in one pass:
+
+- **Small capitals** (ᴀ ʙ ᴄ … ʜ ʀ ᴛ ᴜ) are always the lower-case letter, even when the font has a
+  glyph: ʜ and ʀ are FontAwesome icons in it. "Tʜᴇ Aᴜʀᴏʀᴀ" shows as "The Aurora".
+- Any other character the font has is kept.
+- **Look-alikes**, only when the font lacks the character and has the stand-in: Canadian syllabics
+  used as letters (ᗩ A, ᗷ B, ᑕ C, ᗪ D, ᗴ E, ᖴ F, ᕼ H, ᒍ J, ᒪ L, ᗰ M, ᑎ N, ᑭ P, ᑫ Q, ᖇ R, ᔕ S,
+  ᑌ U, ᐯ V, ᗯ W), ⅃ L, Ǝ E, ✦ ◆, ✧ ◇, ✩ ✰ ☆, ✪–✯ ★, ❤ ♥, and the Javanese ornaments ꧁ ꧂ as « ».
+- **Compatibility forms** whose plain form the font has: the bold, italic and Fraktur "maths" letters
+  (𝗛𝗢𝗪𝗟 → HOWL, 𝟙 → 1) and full-width letters, by Unicode's NFKC decomposition.
+- Anything else the font lacks, such as emoji, joiners and variation selectors, is left out. When
+  something is left out, runs of spaces close up and trailing spaces go ("✦ 🌴 ROSE" → "◆ ROSE").
+- Whitespace is always kept. ImGui's characters are 16-bit, so nothing beyond U+FFFF counts as in the font.
+- Text that needs no change is returned as it is. Each title is folded once per font, not per frame.
+
 ### Venue list (MVP)
 
 `/jaunt` and the installer's Open button toggle the venue list; `/jaunt config` opens Settings. The
