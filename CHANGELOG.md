@@ -9,3 +9,4 @@ All notable changes to Jaunt. Versions match the plugin version shown in `/xlplu
 
 - Groundwork for reading venue addresses from Party Finder ads: Jaunt now knows worlds, districts and the shorthand players use for them. Nothing visible changes yet.
 - Groundwork for opening a venue's website: Jaunt can now find the links in Party Finder ads, including ones written without `https://` such as `discord.gg/…` or `venue.carrd.co`. Nothing visible changes yet.
+- Groundwork for copying addresses and travelling to venues: Jaunt can now write an address as text to copy and turn it into a Lifestream destination, and keeps each Party Finder ad's text in its listing cache. Nothing visible changes yet.
