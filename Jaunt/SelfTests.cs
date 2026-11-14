@@ -365,7 +365,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 #pragma warning disable IDISP001 // The fetcher's HttpClient disposes it
         var source = new FakeSource(PartakeJson);
 #pragma warning restore IDISP001
-        using var listings = FetchedListings.Partake(cache, gazetteer, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, source, time);
+        using var listings = FetchedListings.Partake(cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, source, time);
         listings.FetchIfDue();
         Check(cache.LastFetched(ListingSource.Partake) == start, "the request wasn't recorded before it was sent");
         foreach (var wait in WaitFor(listings.Fetching, "the fetch"))

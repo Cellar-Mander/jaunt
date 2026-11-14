@@ -27,25 +27,31 @@ internal sealed class ListingsWindow : Window
 
     private readonly ListingCache cache;
     private readonly AddressParser parser;
+    private readonly Gazetteer gazetteer;
     private readonly Lifestream lifestream;
     private readonly INotificationManager notifications;
     private readonly Configuration configuration;
     private readonly Action fetchSources;
 
-    // Parsed once per ad text or event location, so drawing doesn't re-parse every frame
-    private readonly Dictionary<(ListingSource, string), (string Text, ListingDetails Details)> parsed = [];
-    private List<(CachedListing Listing, ListingDetails Details)> rows = [];
+    // Parsed once per ad text or event location and world, so drawing doesn't re-parse every frame
+    private readonly Dictionary<(ListingSource, string), (string Text, string? ListedOn, ListingDetails Details)> parsed = [];
+    private List<Row> rows = [];
     private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
     private DateTimeOffset nextRebuild;
     private bool showsPartake;
 
+    /// <summary>A listing as drawn; <paramref name="Event"/> is set for a Partake event, worked out from the values it was sent with.</summary>
+    private sealed record Row(CachedListing Listing, ListingDetails Details, Partake.Shown? Event = null);
+
+    /// <param name="gazetteer">Worlds, to correct a Partake event's world when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
-    public ListingsWindow(ListingCache cache, AddressParser parser, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources)
+    public ListingsWindow(ListingCache cache, AddressParser parser, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources)
         : base("Jaunt###JauntListings")
     {
         this.fetchSources = fetchSources;
         this.cache = cache;
         this.parser = parser;
+        this.gazetteer = gazetteer;
         this.lifestream = lifestream;
         this.notifications = notifications;
         this.configuration = configuration;
@@ -77,12 +83,13 @@ internal sealed class ListingsWindow : Window
 
         var travelAvailable = lifestream.Available;
         var lineHeight = ImGui.GetTextLineHeightWithSpacing();
-        foreach (var (listing, details) in rows)
+        foreach (var row in rows)
         {
+            var (listing, details, item) = row;
             // FFXIV Venues alone lists over a thousand venues, so rows out of view are only spaced, not drawn
             var key = (listing.Source, listing.Id);
             var top = ImGui.GetCursorPosY();
-            var lines = 1 + EventLines(listing, details) + details.Addresses.Count + details.Links.Count;
+            var lines = 1 + EventLines(item, details) + details.Addresses.Count + details.Links.Count;
             var height = rowHeights.TryGetValue(key, out var measured) && measured.Lines == lines
                 ? measured.Height
                 : lines * lineHeight;
@@ -92,7 +99,7 @@ internal sealed class ListingsWindow : Window
                 continue;
             }
 
-            DrawRow(listing, details, now, travelAvailable);
+            DrawRow(row, now, travelAvailable);
             rowHeights[key] = (lines, ImGui.GetCursorPosY() - top);
         }
 
@@ -105,13 +112,14 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>The lines an event adds under its title: its times and world, and its location when no address was read from it.</summary>
-    private static int EventLines(CachedListing listing, ListingDetails details) =>
-        listing.StartsAt is null ? 0 : 1 + (details.Addresses.Count == 0 && !string.IsNullOrEmpty(listing.Location) ? 1 : 0);
+    private static int EventLines(Partake.Shown? item, ListingDetails details) =>
+        item is null ? 0 : 1 + (details.Addresses.Count == 0 && item.Location.Length > 0 ? 1 : 0);
 
-    private void DrawRow(CachedListing listing, ListingDetails details, DateTimeOffset now, bool travelAvailable)
+    private void DrawRow(Row row, DateTimeOffset now, bool travelAvailable)
     {
+        var (listing, details, item) = row;
         using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
-        ImGui.TextUnformatted(ShownText.Title(listing.Title));
+        ImGui.TextUnformatted(ShownText.Title(item?.Title ?? listing.Title));
         ImGui.SameLine();
         ImGui.TextDisabled(SourceName(listing.Source));
         if (listing.AlwaysOpen)
@@ -125,8 +133,8 @@ internal sealed class ListingsWindow : Window
 
         using (ImRaii.PushIndent())
         {
-            if (listing.StartsAt is { } start && listing.EndsAt is { } end)
-                DrawEventLines(listing, details, start, end, now);
+            if (item is not null && listing.StartsAt is { } start && listing.EndsAt is { } end)
+                DrawEventLines(item, details, start, end, now);
 
             for (var i = 0; i < details.Addresses.Count; i++)
             {
@@ -144,14 +152,14 @@ internal sealed class ListingsWindow : Window
         ImGui.Separator();
     }
 
-    private void DrawEventLines(CachedListing listing, ListingDetails details, DateTimeOffset start, DateTimeOffset end, DateTimeOffset now)
+    private void DrawEventLines(Partake.Shown item, ListingDetails details, DateTimeOffset start, DateTimeOffset end, DateTimeOffset now)
     {
         var times = DisplayFormats.FormatSpan(
             start.ToLocalTime().DateTime, end.ToLocalTime().DateTime, configuration.TimeFormat, configuration.DateFormat, CultureInfo.CurrentCulture);
-        var world = listing.DataCentre is { } dataCentre ? $"{listing.ListedOn} ({dataCentre})" : listing.ListedOn;
+        var world = item.DataCentre is { } dataCentre ? $"{item.World} ({dataCentre})" : item.World;
         ImGui.TextUnformatted(start <= now ? $"{times} · on now · {world}" : $"{times} · {world}");
-        if (details.Addresses.Count == 0 && !string.IsNullOrEmpty(listing.Location))
-            ImGui.TextWrapped(ShownText.Title(listing.Location));
+        if (details.Addresses.Count == 0 && item.Location.Length > 0)
+            ImGui.TextWrapped(ShownText.Title(item.Location));
     }
 
     private void DrawAddress(HousingAddress address, bool travelAvailable)
@@ -208,7 +216,7 @@ internal sealed class ListingsWindow : Window
     /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
-        var next = new List<(CachedListing, ListingDetails)>();
+        var next = new List<Row>();
         showsPartake = false;
         foreach (var listing in cache.Listings)
         {
@@ -218,7 +226,7 @@ internal sealed class ListingsWindow : Window
             if (listing.Source == ListingSource.FfxivVenues)
             {
                 if (listing.Address is { } address)
-                    next.Add((listing, new ListingDetails([address], [.. listing.Links.Select(uri => new WebLink(uri.OriginalString, uri))])));
+                    next.Add(new Row(listing, new ListingDetails([address], WebLinks(listing.Links))));
                 continue;
             }
 
@@ -227,8 +235,9 @@ internal sealed class ListingsWindow : Window
                 // Shown without an address too: the location is free text the parser may not read
                 if (!Partake.NotEnded(listing, now))
                     continue;
-                var location = Parsed(listing, listing.Location ?? "");
-                next.Add((listing, location with { Links = [.. listing.Links.Select(uri => new WebLink(uri.OriginalString, uri))] }));
+                var item = Partake.Show(listing, gazetteer);
+                var location = Parsed(listing, item.Location, item.World);
+                next.Add(new Row(listing, location with { Links = WebLinks(item.Links) }, item));
                 showsPartake = true;
                 continue;
             }
@@ -236,12 +245,12 @@ internal sealed class ListingsWindow : Window
             if (listing.Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf) || Xivpf.ShownInGame(cache, listing))
                 continue;
 
-            var details = Parsed(listing, listing.Description);
+            var details = Parsed(listing, listing.Description, listing.ListedOn);
             if (details.Addresses.Count > 0)
-                next.Add((listing, details));
+                next.Add(new Row(listing, details));
         }
 
-        rows = [.. next.OrderByDescending(r => r.Item1.LastSeen).ThenBy(r => r.Item1.Title, StringComparer.CurrentCultureIgnoreCase)];
+        rows = [.. next.OrderByDescending(r => r.Listing.LastSeen).ThenBy(r => r.Event?.Title ?? r.Listing.Title, StringComparer.CurrentCultureIgnoreCase)];
 
         // Forget ads the cache no longer holds (cleared or expired)
         if (parsed.Count > cache.Count)
@@ -257,17 +266,21 @@ internal sealed class ListingsWindow : Window
         }
     }
 
-    private ListingDetails Parsed(CachedListing listing, string text)
+    // Equals checks the reference first, so an unchanged ad costs no character comparison
+    private ListingDetails Parsed(CachedListing listing, string text, string? listedOn)
     {
         var key = (listing.Source, listing.Id);
-        if (!parsed.TryGetValue(key, out var entry) || !ReferenceEquals(entry.Text, text))
+        if (!parsed.TryGetValue(key, out var entry)
+            || !string.Equals(entry.Text, text, StringComparison.Ordinal) || !string.Equals(entry.ListedOn, listedOn, StringComparison.Ordinal))
         {
-            entry = (text, ListingDetails.Parse(parser, text, listing.ListedOn));
+            entry = (text, listedOn, ListingDetails.Parse(parser, text, listedOn));
             parsed[key] = entry;
         }
 
         return entry.Details;
     }
+
+    private static IReadOnlyList<WebLink> WebLinks(IEnumerable<Uri> links) => [.. links.Select(uri => new WebLink(uri.OriginalString, uri))];
 
     private void Notify(string text, NotificationType type) =>
         notifications.AddNotification(new Notification { Title = "Jaunt", Content = text, Type = type });

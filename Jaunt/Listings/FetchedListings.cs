@@ -105,7 +105,7 @@ internal sealed class FetchedListings : IDisposable
     /// comes back short, at most <see cref="Partake.MaxPages"/>, all in one fetch.
     /// </summary>
     public static FetchedListings Partake(
-        ListingCache cache, Gazetteer gazetteer, Configuration configuration, IFramework framework, IPluginLog log, Action save,
+        ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
         HttpMessageHandler? handler = null, TimeProvider? time = null) =>
         new(
             ListingSource.Partake, "Partake", "events",
@@ -119,7 +119,7 @@ internal sealed class FetchedListings : IDisposable
                     using var content = new StringContent(body, Encoding.UTF8, "application/json");
                     using var response = await http.PostAsync(Core.Listings.Partake.Url, content, token).ConfigureAwait(false);
                     response.EnsureSuccessStatusCode();
-                    var page = Core.Listings.Partake.Parse(await response.Content.ReadAsStringAsync(token).ConfigureAwait(false), gazetteer);
+                    var page = Core.Listings.Partake.Parse(await response.Content.ReadAsStringAsync(token).ConfigureAwait(false));
                     events.AddRange(page.Events);
                     if (!Core.Listings.Partake.HasMore(page, pages))
                         break;

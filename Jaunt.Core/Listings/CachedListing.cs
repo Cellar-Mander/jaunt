@@ -27,11 +27,17 @@ public sealed class CachedListing
     /// <summary>The website and Discord links the source gives as data, http or https only.</summary>
     public IReadOnlyList<Uri> Links { get; set; } = [];
 
-    /// <summary>The data centre the source gives, for sources that say (Partake).</summary>
+    /// <summary>
+    /// The links as the source wrote them, for sources whose links are checked only when shown
+    /// (Partake: <see cref="Partake.Show"/> keeps http and https ones). Empty for other sources.
+    /// </summary>
+    public IReadOnlyList<string> LinkTexts { get; set; } = [];
+
+    /// <summary>The data centre as the source gives it, for sources that say (Partake).</summary>
     public string? DataCentre { get; set; }
 
     /// <summary>
-    /// The free-text location the source gives as data (Partake), for the address parser. Null for
+    /// The free-text location as the source gives it (Partake), for the address parser. Null for
     /// sources whose addresses are structured or in <see cref="Description"/>.
     /// </summary>
     public string? Location { get; set; }

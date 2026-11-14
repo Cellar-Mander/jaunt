@@ -61,8 +61,8 @@ public sealed class Plugin : IDalamudPlugin
         var gazetteer = GazetteerLoader.Load(DataManager);
         xivpfListings = FetchedListings.Xivpf(ListingCache, Configuration, Framework, Log, SaveListingCache);
         ffxivVenuesListings = FetchedListings.FfxivVenues(ListingCache, gazetteer, Configuration, Framework, Log, SaveListingCache);
-        partakeListings = FetchedListings.Partake(ListingCache, gazetteer, Configuration, Framework, Log, SaveListingCache);
-        ListingsWindow = new ListingsWindow(ListingCache, new AddressParser(gazetteer), new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources);
+        partakeListings = FetchedListings.Partake(ListingCache, Configuration, Framework, Log, SaveListingCache);
+        ListingsWindow = new ListingsWindow(ListingCache, new AddressParser(gazetteer), gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 

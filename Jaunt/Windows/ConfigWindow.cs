@@ -222,7 +222,8 @@ public sealed class ConfigWindow : Window, IDisposable
             }
 
             ImGui.SameLine();
-            ImGui.TextUnformatted(ShownText.Title(listing.Title));
+            // Partake keeps titles as sent, so trim and cut them as the list does
+            ImGui.TextUnformatted(ShownText.Title(listing.Source == ListingSource.Partake ? Partake.Title(listing.Title) : listing.Title));
             ImGui.SameLine();
             ImGui.TextDisabled(SourceName(listing.Source));
         }
