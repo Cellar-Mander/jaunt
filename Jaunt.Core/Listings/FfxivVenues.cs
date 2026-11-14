@@ -10,14 +10,18 @@ namespace Jaunt.Core.Listings;
 /// rules are in <c>docs/design.md</c> under "FFXIV Venues".
 /// </summary>
 /// <remarks>
-/// The response is every venue at once, about 2.5 MB for 1,400 venues. Reading it is one pass over
-/// the venues; a venue that doesn't have the expected shape is skipped rather than failing the rest.
+/// The response is every approved venue opening in the coming week at once, about 1.6 MB for 750
+/// venues. Reading it is one pass over the venues; a venue that doesn't have the expected shape is skipped rather than failing the rest.
 /// The cache keeps the name, location, links and schedule as sent, so a change to how they are read
 /// applies to cached venues without fetching again.
 /// </remarks>
 public static class FfxivVenues
 {
-    public const string Url = "https://api.ffxivvenues.com/v1.0/venue";
+    /// <summary>
+    /// Approved venues (already the API's default, pinned here) that open within the coming week, as the
+    /// API works it out. A venue left out keeps its cached copy and marks until it expires.
+    /// </summary>
+    public const string Url = "https://api.ffxivvenues.com/v1.0/venue?approved=true&withinWeek=true";
 
     /// <summary>
     /// The shortest opening that counts as a whole day. Venues open around the clock enter 00:00 to
