@@ -22,14 +22,11 @@ public class OpeningTimesCorpusTests
     private static Dictionary<string, Ad> Load()
     {
         var ads = new Dictionary<string, Ad>();
-        var path = Path.Combine(AppContext.BaseDirectory, "Corpus", "pf-listings.jsonl");
-        foreach (var line in File.ReadLines(path).Where(l => l.Length > 0))
+        foreach (var (id, root) in PfCorpus.Ads())
         {
-            using var doc = JsonDocument.Parse(line);
-            var root = doc.RootElement;
             var seen = DateOnly.FromDateTime(root.GetProperty("firstSeen").GetDateTimeOffset().UtcDateTime);
             var expected = root.GetProperty("labels").GetProperty("times").EnumerateArray().Select(Describe).Order().ToArray();
-            ads[root.GetProperty("id").GetString()!] = new Ad(root.GetProperty("text").GetString()!, seen, expected);
+            ads[id] = new Ad(root.GetProperty("text").GetString()!, seen, expected);
         }
 
         return ads;

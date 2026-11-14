@@ -14,14 +14,11 @@ public class AddressParserCorpusTests
     private static Dictionary<string, (string, string, string[])> Load()
     {
         var ads = new Dictionary<string, (string, string, string[])>();
-        var path = Path.Combine(AppContext.BaseDirectory, "Corpus", "pf-listings.jsonl");
-        foreach (var line in File.ReadLines(path).Where(l => l.Length > 0))
+        foreach (var (id, root) in PfCorpus.Ads())
         {
-            using var doc = JsonDocument.Parse(line);
-            var root = doc.RootElement;
             var listedOn = root.GetProperty("listedOn")[0].GetString()!;
             var expected = root.GetProperty("labels").GetProperty("addresses").EnumerateArray().Select(a => FromLabel(a, listedOn)).ToArray();
-            ads[root.GetProperty("id").GetString()!] = (root.GetProperty("text").GetString()!, listedOn, expected);
+            ads[id] = (root.GetProperty("text").GetString()!, listedOn, expected);
         }
 
         return ads;

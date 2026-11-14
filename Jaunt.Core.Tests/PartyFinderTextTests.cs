@@ -140,13 +140,10 @@ public class PartyFinderTextCorpusTests
     private static Dictionary<string, (string Text, string Name)> LoadNamed()
     {
         var named = new Dictionary<string, (string, string)>();
-        var path = Path.Combine(AppContext.BaseDirectory, "Corpus", "pf-listings.jsonl");
-        foreach (var line in File.ReadLines(path).Where(l => l.Length > 0))
+        foreach (var (id, root) in PfCorpus.Ads())
         {
-            using var doc = JsonDocument.Parse(line);
-            var root = doc.RootElement;
             if (root.GetProperty("labels").GetProperty("name") is { ValueKind: JsonValueKind.Object } name)
-                named[root.GetProperty("id").GetString()!] = (root.GetProperty("text").GetString()!, name.GetProperty("raw").GetString()!);
+                named[id] = (root.GetProperty("text").GetString()!, name.GetProperty("raw").GetString()!);
         }
 
         return named;
