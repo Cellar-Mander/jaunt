@@ -55,6 +55,16 @@ internal sealed class ListingCacheStore : IDisposable
             pending = pending.ContinueWith(_ => Write(json), TaskScheduler.Default);
     }
 
+    /// <summary>The last save asked for, or a completed task if none is waiting.</summary>
+    internal Task Pending
+    {
+        get
+        {
+            lock (gate)
+                return pending;
+        }
+    }
+
     private void Write(string json)
     {
         // Write then rename, so a crash mid-write never leaves a half-written cache

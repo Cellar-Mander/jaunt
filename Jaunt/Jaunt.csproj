@@ -23,6 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The sample cache for the self-tests (SelfTests.cs); SmokeTestListingsTests keeps it in step with docs/smoke-test.md -->
+    <EmbeddedResource Include="..\Jaunt.Core.Tests\Fixtures\smoke-test-listings.json" LogicalName="Jaunt.smoke-test-listings.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Jaunt.Core\Jaunt.Core.csproj" />
   </ItemGroup>
 </Project>

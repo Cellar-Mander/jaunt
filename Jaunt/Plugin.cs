@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static INotificationManager NotificationManager { get; private set; } = null!;
+    [PluginService] internal static ISelfTestRegistry SelfTestRegistry { get; private set; } = null!;
 
     private const string CommandName = "/jaunt";
 
@@ -59,6 +60,7 @@ public sealed class Plugin : IDalamudPlugin
         ffxivVenuesListings = new FfxivVenuesListings(ListingCache, gazetteer, Configuration, Framework, Log, SaveListingCache);
         ListingsWindow = new ListingsWindow(ListingCache, new AddressParser(gazetteer), new Lifestream(PluginInterface, Log), NotificationManager, ffxivVenuesListings.FetchIfDue);
         WindowSystem.AddWindow(ListingsWindow);
+        SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
