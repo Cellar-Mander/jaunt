@@ -150,6 +150,31 @@ to `listings.json.bad` and the cache starts empty.
   mention this. Clear still keeps marked one-offs.
 - **Hidden venues** lists hidden listings by title, case-insensitively, each with an Un-hide button.
 
+### Venue list (MVP)
+
+`/jaunt` and the installer's Open button toggle the venue list; `/jaunt config` opens Settings. The
+two-pane browser (`cdd9e95f`) replaces this list.
+
+- **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
+  cache as `InGamePartyFinder`, keyed by the PF listing ID, with its text (`description`, glyphs
+  included) and the world it is listed on (`listedOn`). Its title is the first line of the
+  normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
+  the first change since the last save, and on unload, not once per listing.
+- **List**: in-game Party Finder listings that are not hidden and have at least one parsed address,
+  most recently seen first, each with "seen … ago". Each ad is parsed once per text, not per frame.
+- **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
+  apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
+  ", Room B1". Districts use their English names. This is the shape Lifestream's address book reads.
+  A world taken from the listing is marked "(world the ad is listed on)".
+- **Travel** calls Lifestream's IPC: `Lifestream.IsBusy`, then `Lifestream.BuildAddressBookEntry`
+  (world, district, ward, plot or apartment, is apartment, is subdivision) and
+  `Lifestream.GoToHousingAddress` with the entry it returns. It is disabled, with a tooltip saying
+  why, when Lifestream isn't loaded or the address lacks a world, district, or both plot and
+  apartment. A plot wins over an apartment; a room is not sent. If Lifestream is busy or fails, a
+  notification says so and suggests copying the address (risk `de04e687`).
+- **Open** opens the link's URI in the browser. `WebLinks` only ever returns http or https URIs,
+  so another player's ad can't make it open anything else; the button's tooltip shows the full URI.
+
 ## Limits
 
 Caps on user-configurable lists and text, and how input from other players or the game is bounded.

@@ -6,7 +6,10 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Jaunt.Core.Listings;
+using Jaunt.Core.Text;
 using Jaunt.Listings;
+using Jaunt.Text;
+using Jaunt.Travel;
 using Jaunt.Windows;
 
 namespace Jaunt;
@@ -16,6 +19,10 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IPartyFinderGui PartyFinderGui { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
+    [PluginService] internal static INotificationManager NotificationManager { get; private set; } = null!;
 
     private const string CommandName = "/jaunt";
 
@@ -24,9 +31,11 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Listings kept between sessions; use from the game thread and save with <see cref="SaveListingCache"/>.</summary>
     internal ListingCache ListingCache { get; }
     private readonly ListingCacheStore listingCacheStore;
+    private readonly PartyFinderListings partyFinderListings;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
+    private ListingsWindow ListingsWindow { get; init; }
 
     public Plugin()
     {
@@ -41,19 +50,22 @@ public sealed class Plugin : IDalamudPlugin
         // Commit hash included, to check which checkout's build the game has loaded
         Log.Information($"Jaunt {typeof(Plugin).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion} loaded");
 
+        partyFinderListings = new PartyFinderListings(PartyFinderGui, Framework, Log, ListingCache, SaveListingCache);
+
         ConfigWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(ConfigWindow);
+        var addressParser = new AddressParser(GazetteerLoader.Load(DataManager));
+        ListingsWindow = new ListingsWindow(ListingCache, addressParser, new Lifestream(PluginInterface, Log), NotificationManager);
+        WindowSystem.AddWindow(ListingsWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open the Jaunt settings. /jaunt config → open the settings"
+            HelpMessage = "Open the venue listings. /jaunt config → open the settings"
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
-
-        // While settings is the only window, hook only OpenConfigUi, so the installer shows just its
-        // settings button. Add OpenMainUi when the plugin gets a main window.
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
+        PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
     }
 
     public void Dispose()
@@ -62,6 +74,8 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager.RemoveHandler(CommandName);
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
+        PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
+        partyFinderListings.Dispose();
 
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
@@ -70,15 +84,17 @@ public sealed class Plugin : IDalamudPlugin
 
     internal void SaveListingCache() => listingCacheStore.Save(ListingCache);
 
-    // Until the listing browser exists (cdd9e95f), plain /jaunt also opens the settings. "config"
-    // always opens them rather than toggling, so it never closes a window someone asked to see.
+    // "config" always opens the settings rather than toggling, so it never closes a window someone
+    // asked to see.
     private void OnCommand(string command, string args)
     {
         if (args.Trim().Equals("config", StringComparison.OrdinalIgnoreCase))
             ConfigWindow.IsOpen = true;
         else
-            ToggleConfigUi();
+            ToggleMainUi();
     }
 
     public void ToggleConfigUi() => ConfigWindow.Toggle();
+
+    public void ToggleMainUi() => ListingsWindow.Toggle();
 }
