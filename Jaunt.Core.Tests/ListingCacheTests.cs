@@ -201,6 +201,7 @@ public class ListingCacheTests
         listing.EndsAt = Now.AddHours(4);
         listing.DataCentre = "Light";
         listing.Location = "LB W19 P58";
+        listing.LinkTexts = ["discord.gg/gala"];
         listing.Favourite = true;
         listing.Visited = true;
         cache.Seen(ListingSource.Xivpf, "7", "Hidden one", Now.AddDays(-3)).Hidden = true;
@@ -216,6 +217,7 @@ public class ListingCacheTests
         Assert.Equal(Now.AddHours(4), back.EndsAt);
         Assert.Equal("Light", back.DataCentre);
         Assert.Equal("LB W19 P58", back.Location);
+        Assert.Equal(["discord.gg/gala"], back.LinkTexts);
         Assert.False(loaded.Find(ListingSource.Xivpf, "7")!.OneOff);
         Assert.Null(loaded.Find(ListingSource.Xivpf, "7")!.StartsAt);
         Assert.True(back.Favourite);
@@ -409,6 +411,17 @@ public class ListingCacheTests
         var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
 
         Assert.Equal([new Uri("https://a.example.com/")], listing.Links);
+    }
+
+    [Theory]
+    [InlineData("""{"listings": [{"source": 3, "id": "5"}]}""", new string[0])]
+    [InlineData("""{"listings": [{"source": 3, "id": "5", "linkTexts": null}]}""", new string[0])]
+    [InlineData("""{"listings": [{"source": 3, "id": "5", "linkTexts": [null, "discord.gg/x"]}]}""", new[] { "discord.gg/x" })]
+    public void LoadingKeepsTheLinkTextsThatArentMissing(string json, string[] expected)
+    {
+        var listing = ListingCache.FromJson(json).Find(ListingSource.Partake, "5")!;
+
+        Assert.Equal(expected, listing.LinkTexts);
     }
 
     [Fact]

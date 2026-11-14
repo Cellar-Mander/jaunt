@@ -10,6 +10,8 @@ namespace Jaunt.Core.Listings;
 /// listing cache. The rules are in <c>docs/design.md</c> under "Partake".
 /// </summary>
 /// <remarks>
+/// The cache keeps each event's values as Partake sent them, so a change to the rules for showing
+/// them applies without a new fetch.
 /// A fetch asks for events starting from <see cref="Lookback"/> before now, so events already under
 /// way are included, one page of <see cref="PageSize"/> at a time until a page comes back short, at
 /// most <see cref="MaxPages"/> pages. About 150 events are listed at once, so one page is usual.
@@ -39,14 +41,15 @@ public static class Partake
         }
         """;
 
-    /// <summary>One event as Jaunt keeps it.</summary>
-    /// <param name="World">The world it is on, corrected to the game's spelling where the gazetteer knows it.</param>
-    /// <param name="DataCentre">The data centre Partake gives, or null.</param>
-    /// <param name="Location">The free-text location, for the address parser; empty when none is given.</param>
-    /// <param name="Links">The host's website and Discord, http or https only.</param>
+    /// <summary>One event as Partake sent it, after the checks that decide whether it is kept.</summary>
+    /// <param name="Title">As sent; it has a character other than whitespace.</param>
+    /// <param name="World">The world (<c>server.name</c>) as sent; it has a character other than whitespace.</param>
+    /// <param name="DataCentre">As sent, or null.</param>
+    /// <param name="Location">The free-text location as sent, or null.</param>
+    /// <param name="LinkTexts">The host's website and Discord as sent, leaving out missing ones.</param>
     public sealed record Event(
         string Id, string Title, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string World, string? DataCentre,
-        string Location, IReadOnlyList<Uri> Links);
+        string? Location, IReadOnlyList<string> LinkTexts);
 
     /// <summary>One response: the events kept, and how many the page held before any were skipped.</summary>
     public sealed record Page(IReadOnlyList<Event> Events, int Received);
@@ -68,10 +71,9 @@ public static class Partake
     /// <param name="pagesRead">Pages read so far, this one included.</param>
     public static bool HasMore(Page page, int pagesRead) => page.Received >= PageSize && pagesRead < MaxPages;
 
-    /// <summary>Reads one response.</summary>
-    /// <param name="gazetteer">Worlds, to correct a misspelt world name.</param>
+    /// <summary>Reads one response, keeping each event's values as sent.</summary>
     /// <exception cref="JsonException">The response has GraphQL errors, or no list of events.</exception>
-    public static Page Parse(string json, Gazetteer gazetteer)
+    public static Page Parse(string json)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -92,7 +94,7 @@ public static class Partake
         var events = new List<Event>();
         foreach (var element in list.EnumerateArray())
         {
-            if (Read(element, gazetteer) is { } item)
+            if (Read(element) is { } item)
                 events.Add(item);
         }
 
@@ -113,14 +115,14 @@ public static class Partake
             listing.ListedOn = item.World;
             listing.DataCentre = item.DataCentre;
             listing.Location = item.Location;
-            listing.Links = item.Links;
+            listing.LinkTexts = item.LinkTexts;
         }
     }
 
     /// <summary>Whether a cached Partake event is upcoming or under way at <paramref name="now"/>.</summary>
     public static bool NotEnded(CachedListing listing, DateTimeOffset now) => listing.EndsAt is { } end && end > now;
 
-    private static Event? Read(JsonElement element, Gazetteer gazetteer)
+    private static Event? Read(JsonElement element)
     {
         EventData? data;
         try
@@ -134,23 +136,12 @@ public static class Partake
 
         // An event without a world can't be travelled to, and one ending before it starts has a wrong time
         if (data?.Id is not { } id || data.StartsAt is not { } start || data.EndsAt is not { } end || end <= start
-            || data.Server?.Name is not { } server || string.IsNullOrWhiteSpace(server))
+            || data.Server?.Name is not { } server || string.IsNullOrWhiteSpace(server)
+            || data.Title is not { } title || string.IsNullOrWhiteSpace(title))
             return null;
 
-        var title = ListingDetails.Shorten((data.Title ?? "").Trim());
-        if (title.Length == 0)
-            return null;
-
-        var dataCentre = data.DataCenter?.Name?.Trim();
-        return new Event(
-            id.ToString(CultureInfo.InvariantCulture),
-            title,
-            start,
-            end,
-            FfxivVenues.World(server.Trim(), gazetteer),
-            string.IsNullOrEmpty(dataCentre) ? null : dataCentre,
-            (data.Location ?? "").Trim(),
-            FfxivVenues.Links(data.Team?.WebsiteUrl, data.Team?.DiscordUrl));
+        string[] links = [.. new[] { data.Team?.WebsiteUrl, data.Team?.DiscordUrl }.OfType<string>()];
+        return new Event(id.ToString(CultureInfo.InvariantCulture), title, start, end, server, data.DataCenter?.Name, data.Location, links);
     }
 
     // The API's shapes, only the fields Jaunt asks for

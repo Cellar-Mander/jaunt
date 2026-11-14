@@ -23,7 +23,7 @@ public class PartakeTests
 
     private static string Response(params string[] events) => "{\"data\":{\"events\":[" + string.Join(",", events) + "]}}";
 
-    private static Partake.Page Read(params string[] events) => Partake.Parse(Response(events), TestGazetteer.Instance);
+    private static Partake.Page Read(params string[] events) => Partake.Parse(Response(events));
 
     private static Partake.Event Single(string eventJson) => Assert.Single(Read(eventJson).Events);
 
@@ -39,14 +39,25 @@ public class PartakeTests
         Assert.Equal("Lich", item.World);
         Assert.Equal("Light", item.DataCentre);
         Assert.Equal("Lavender Beds, Ward 20, Plot 28", item.Location);
-        Assert.Equal([new Uri("https://virtue-xiv.club/"), new Uri("https://discord.gg/xivvirtue")], item.Links);
+        Assert.Equal(["https://virtue-xiv.club/", "discord.gg/xivvirtue"], item.LinkTexts);
     }
 
     [Fact]
-    public void CorrectsAMisspeltWorld()
+    public void KeepsValuesAsSent()
     {
-        Assert.Equal("Cerberus", Single(EventJson(server: """{"name":" cerberus "}""")).World);
-        Assert.Equal("Bismarck", Single(EventJson(server: """{"name":"Bismark"}""")).World);
+        var title = "  " + new string('x', 80) + " ";
+        var item = Single(EventJson(
+            title: JsonSerializer.Serialize(title),
+            location: "\"  LB W19 P58 \"",
+            server: """{"name":" bismark "}""",
+            dataCenter: """{"name":" Light "}""",
+            team: """{"websiteUrl":"javascript:alert(1)","discordUrl":"  "}"""));
+
+        Assert.Equal(title, item.Title);
+        Assert.Equal(" bismark ", item.World);
+        Assert.Equal(" Light ", item.DataCentre);
+        Assert.Equal("  LB W19 P58 ", item.Location);
+        Assert.Equal(["javascript:alert(1)", "  "], item.LinkTexts);
     }
 
     [Fact]
@@ -55,26 +66,9 @@ public class PartakeTests
         var item = Single(EventJson(location: "null", dataCenter: "null", team: "null"));
 
         Assert.Null(item.DataCentre);
-        Assert.Equal("", item.Location);
-        Assert.Empty(item.Links);
-        Assert.Null(Single(EventJson(dataCenter: """{"name":"  "}""")).DataCentre);
-    }
-
-    [Fact]
-    public void DropsHostLinksThatArentWebLinks()
-    {
-        var item = Single(EventJson(team: """{"websiteUrl":"javascript:alert(1)","discordUrl":"  "}"""));
-
-        Assert.Empty(item.Links);
-    }
-
-    [Fact]
-    public void CutsALongTitle()
-    {
-        var title = Single(EventJson(title: JsonSerializer.Serialize("  " + new string('x', 80) + " "))).Title;
-
-        Assert.Equal(ListingDetails.MaxTitleLength, title.Length);
-        Assert.EndsWith("…", title, StringComparison.Ordinal);
+        Assert.Null(item.Location);
+        Assert.Empty(item.LinkTexts);
+        Assert.Equal(["https://x.example/"], Single(EventJson(team: """{"websiteUrl":"https://x.example/","discordUrl":null}""")).LinkTexts);
     }
 
     [Theory]
@@ -115,13 +109,13 @@ public class PartakeTests
     [InlineData("""[]""")]
     public void FailsOnAResponseWithErrorsOrNoEvents(string json)
     {
-        Assert.ThrowsAny<JsonException>(() => Partake.Parse(json, TestGazetteer.Instance));
+        Assert.ThrowsAny<JsonException>(() => Partake.Parse(json));
     }
 
     [Fact]
     public void AnEmptyErrorListIsNoError()
     {
-        var page = Partake.Parse("""{"errors":[],"data":{"events":[]}}""", TestGazetteer.Instance);
+        var page = Partake.Parse("""{"errors":[],"data":{"events":[]}}""");
 
         Assert.Empty(page.Events);
     }
@@ -171,7 +165,8 @@ public class PartakeTests
         Assert.Equal("Lich", listing.ListedOn);
         Assert.Equal("Light", listing.DataCentre);
         Assert.Equal("Lavender Beds, Ward 20, Plot 28", listing.Location);
-        Assert.Equal(item.Links, listing.Links);
+        Assert.Equal(item.LinkTexts, listing.LinkTexts);
+        Assert.Empty(listing.Links);
         Assert.Equal("", listing.Description);
     }
 
@@ -212,7 +207,7 @@ public class PartakeTests
             ]}}
             """;
 
-        var page = Partake.Parse(json, TestGazetteer.Instance);
+        var page = Partake.Parse(json);
 
         Assert.Equal("SHORELINE ★ SLUMBER PARTY★", Assert.Single(page.Events).Title);
         Assert.Equal(2, page.Received);

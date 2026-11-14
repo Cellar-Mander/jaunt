@@ -211,23 +211,28 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
 no authentication, and records each in the listing cache as `Partake`, keyed by the event's ID, as a
 one-off.
 
+- **Raw values**: the cache keeps the title, world, data centre, location and links exactly as
+  Partake sent them (links in `linkTexts`). The rules below for showing them run each time they
+  are shown, so a change to these rules or the address parser applies on the next plugin load,
+  not after the next fetch.
 - **Query**: `events(game: "final-fantasy-xiv", startsBetween: {start}, sortBy: STARTS_AT_ASC)`
   with `start` 24 hours before now, so events already under way are included. Pages of 200 (`limit`,
   `offset`) until a page comes back with fewer, at most 5 pages per fetch. About 150 events are
   listed at once, so one page is usual. Only the fields shown are asked for: `id`, `title`,
   `startsAt`, `endsAt`, `location`, `server.name`, `dataCenter.name` and the host team's
   `websiteUrl` and `discordUrl`. `server` and `dataCenter` work but aren't in Partake's docs.
-- **Title**: the event's title, trimmed and cut to 60 characters like an ad's.
+- **Title**: shown trimmed and cut to 60 characters like an ad's.
 - **Times**: `startsAt` and `endsAt` (UTC).
-- **World**: `server.name`, corrected like an FFXIV Venues world, kept with the data centre. It is
-  the world for addresses in the location that name none.
-- **Location**: free text ("LB W19 P58", "57 plot, ward15 , lavender beds"), for the same address
-  parser as ad text.
-- **Links**: the host's website then Discord, read like FFXIV Venues links.
-- An event without an ID, a title, both times or a world, whose end is not after its start, or whose
-  fields have the wrong types is skipped without failing the others. A response with GraphQL
-  `errors` (Partake answers those with HTTP 200), without `data.events`, or that isn't JSON fails
-  the fetch, and the cached events stay.
+- **World**: `server.name`, shown trimmed and corrected like an FFXIV Venues world, with the data
+  centre trimmed (none when blank). It is the world for addresses in the location that name none.
+- **Location**: free text ("LB W19 P58", "57 plot, ward15 , lavender beds"), trimmed, for the same
+  address parser as ad text.
+- **Links**: the host's website then Discord, shown like FFXIV Venues links: http or https only. On
+  load, the cache drops missing link texts.
+- An event is skipped, without failing the others, when it lacks an ID or either time, its title
+  or world is missing or blank, its end is not after its start, or its fields have the wrong types.
+  A response with GraphQL `errors` (Partake answers those with HTTP 200), without `data.events`, or
+  that isn't JSON fails the fetch, and the cached events stay.
 - Events that have ended by the time a fetch is recorded aren't recorded.
 
 ### Text the font can't draw
