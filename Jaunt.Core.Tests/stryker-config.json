@@ -6,6 +6,10 @@
       "high": 80,
       "low": 60,
       "break": 0
+    },
+    "since": {
+      "enabled": false,
+      "ignore-changes-in": [ "**/Fixtures/**", "**/Corpus/**" ]
     }
   }
 }
