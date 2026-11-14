@@ -350,6 +350,7 @@ public class FfxivVenuesTests
     [Fact]
     public void AMarkedVenueLeftOutOfAFetchKeepsItsFieldsAndMarks()
     {
+        // revert-check: not revert-sensitive (pins existing cache behaviour the within-week fetch relies on)
         var cache = new ListingCache();
         var fields = new FfxivVenues.Fields(new FfxivVenues.Location("Goblin", "Mist", 1, 2, 0, 0, false), "https://a.example.com", null, null);
         FfxivVenues.Record(cache, [new FfxivVenues.Venue("a", "A", fields)], Now.AddDays(-7));
