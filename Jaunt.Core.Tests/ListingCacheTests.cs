@@ -340,14 +340,16 @@ public class ListingCacheTests
         Assert.Equal(Now, SavedFiles.Load(SavedFiles.All(cache)).Find(ListingSource.InGamePartyFinder, "5")!.LastSeen);
     }
 
-    [Fact]
-    public void AnXivpfAdTheGameSentLaterWritesOnlyXivpf()
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    public void AnXivpfAdTheGameSentAsLateOrLaterWritesOnlyXivpf(int hours)
     {
         var cache = new ListingCache();
         cache.SeenAd(ListingSource.InGamePartyFinder, "5", "Ad", null, Now);
         cache.TakeChanges();
 
-        Xivpf.Record(cache, [new Xivpf.Ad("5", "Ad", null)], Now.AddHours(-1));
+        Xivpf.Record(cache, [new Xivpf.Ad("5", "Ad", null)], Now.AddHours(hours));
 
         Assert.Equal(["cache/Xivpf.json"], SavedFiles.Written(cache).Keys);
     }
@@ -424,6 +426,19 @@ public class ListingCacheTests
         var written = SavedFiles.Written(cache);
         Assert.Equal(["cache/Partake.json"], written.Keys.Where(path => path.StartsWith("cache/", StringComparison.Ordinal)));
         Assert.Equal(marksWritten, written.ContainsKey(ListingCache.MarksFile));
+    }
+
+    [Fact]
+    public void ExpiringTwoMarkedListingsWritesTheMarks()
+    {
+        var cache = new ListingCache();
+        cache.Seen(ListingSource.Partake, "1", "Gala", Now.AddMonths(-2), oneOff: true).Hidden = true;
+        cache.Seen(ListingSource.Partake, "2", "Ball", Now.AddMonths(-2), oneOff: true).Favourite = true;
+        cache.TakeChanges();
+
+        cache.RemoveExpired(Now);
+
+        Assert.Contains(ListingCache.MarksFile, SavedFiles.Written(cache).Keys);
     }
 
     [Fact]
@@ -637,13 +652,15 @@ public class ListingCacheTests
     }
 
     [Theory]
-    [InlineData("""{"id": "5"}""")]
-    [InlineData("""{"id": "5", "description": null, "listedOn": null}""")]
-    public void AMissingOrNullDescriptionLoadsAsEmpty(string sent)
+    [InlineData(ListingSource.InGamePartyFinder, """{"id": "5"}""")]
+    [InlineData(ListingSource.InGamePartyFinder, """{"id": "5", "description": null, "listedOn": null}""")]
+    [InlineData(ListingSource.Xivpf, """{"id": "5"}""")]
+    [InlineData(ListingSource.Xivpf, """{"id": "5", "description": null, "listedOn": null}""")]
+    public void AMissingOrNullDescriptionLoadsAsEmpty(ListingSource source, string sent)
     {
         var json = $$"""{"listings": [{"lastSeen": "2026-11-14T20:00:00+00:00", "sent": {{sent}}}]}""";
 
-        var listing = SavedFiles.Load(new Dictionary<string, string> { ["cache/InGamePartyFinder.json"] = json }).Find(ListingSource.InGamePartyFinder, "5")!;
+        var listing = SavedFiles.Load(new Dictionary<string, string> { [ListingCache.SourceFile(source)] = json }).Find(source, "5")!;
 
         Assert.Equal(("", "", null, Now), (listing.Description, listing.Title, listing.ListedOn, listing.LastSeen));
     }
@@ -674,6 +691,19 @@ public class ListingCacheTests
 
         Assert.Equal(expected, listing.LinkTexts);
         Assert.Equal(("", ""), (listing.Title, listing.ListedOn));
+    }
+
+    [Fact]
+    public void AnUnmarkedEventWithoutAWorldKeepsItsTitleAndAnEmptyWorld()
+    {
+        var cache = new ListingCache();
+        var gala = cache.Seen(ListingSource.Partake, "1", "Gala", Now, oneOff: true);
+        gala.StartsAt = Now;
+        gala.EndsAt = Now.AddHours(3);
+
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.Partake, "1")!;
+
+        Assert.Equal(("Gala", ""), (back.Title, back.ListedOn));
     }
 
     [Fact]
@@ -762,7 +792,8 @@ public class ListingCacheTests
               {"source": 1, "id": "", "title": "no id"},
               null,
               {"source": 1, "id": "5", "title": "first"},
-              {"source": 1, "id": "5", "title": null},
+              {"source": 1, "id": "5", "title": null, "description": null},
+              {"source": 3, "id": "7", "linkTexts": null, "openings": null},
               {"source": 4, "id": "6", "linkTexts": [null, "discord.gg/x"], "openings": [null,
                 {"start": "2026-11-14T20:00:00+00:00", "end": "2026-11-14T23:00:00+00:00"},
                 {"start": "2026-11-15T20:00:00+00:00", "end": "2026-11-15T20:00:00+00:00"}]}
@@ -772,7 +803,8 @@ public class ListingCacheTests
 
         var loaded = ListingCache.FromLegacyJson(json);
 
-        Assert.Equal(2, loaded.Count);
+        Assert.Equal(3, loaded.Count);
+        Assert.Equal((0, 0), (loaded.Find(ListingSource.Partake, "7")!.LinkTexts.Count, loaded.Find(ListingSource.Partake, "7")!.Openings.Count));
         Assert.Equal(("", ""), (loaded.Find(ListingSource.Xivpf, "5")!.Title, loaded.Find(ListingSource.Xivpf, "5")!.Description));
         var calendar = loaded.Find(ListingSource.RpEventCalendar, "6")!;
         Assert.Equal(["discord.gg/x"], calendar.LinkTexts);

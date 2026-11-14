@@ -148,6 +148,7 @@ public class XivpfTests
     [Fact]
     public void AnAdTheGameAlsoSentCountsAsSeenNowInGame()
     {
+        // revert-check: not revert-sensitive (pins that xivpf leaves the in-game copy's text, title and world alone, as before)
         var cache = new ListingCache();
         var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "In-game text", "Siren", Now.AddDays(-2));
 

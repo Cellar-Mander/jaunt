@@ -42,7 +42,7 @@ public sealed partial class ListingCache
     public IReadOnlyList<ListingFile> TakeChanges()
     {
         var files = new List<ListingFile>();
-        foreach (var source in changedSources.Order())
+        foreach (var source in changedSources)
             files.Add(SourceSnapshot(source));
         if (fetchTimesChanged)
         {
@@ -238,7 +238,7 @@ public sealed partial class ListingCache
 
     // Only a source's name: a number would follow a renumbering
     private static ListingSource? KnownSource(string? name) =>
-        Enum.TryParse<ListingSource>(name, ignoreCase: false, out var source) && Enum.IsDefined(source) && source.ToString() == name ? source : null;
+        Enum.TryParse<ListingSource>(name, out var source) && Enum.IsDefined(source) && source.ToString() == name ? source : null;
 
     /// <exception cref="JsonException">The text is not the expected file, or is from a later version.</exception>
     private static T? Deserialise<T>(string json)
@@ -266,8 +266,9 @@ public sealed partial class ListingCache
         {
             if (listing is null || string.IsNullOrEmpty(listing.Id))
                 continue;
-            listing.Title ??= "";
+            // Before the title, which an ad works out from its text
             listing.Description ??= "";
+            listing.Title ??= "";
             listing.LinkTexts = [.. (listing.LinkTexts ?? []).Where(text => text is not null)];
             listing.Openings = [.. (listing.Openings ?? []).Where(o => o is not null && o.End > o.Start)];
             listing.Recorded = true;

@@ -8,6 +8,7 @@ public sealed class CachedListing
 {
     private string title = "";
     private string? titledFrom;
+    // Stryker disable once String : titledFrom starts null, so adTitle is always assigned before it is read
     private string adTitle = "";
     private bool favourite;
     private bool visited;
