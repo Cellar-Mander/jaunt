@@ -3,7 +3,8 @@ namespace Jaunt.Core.Listings;
 /// <summary>
 /// Listings seen in any source, kept between sessions so the browser can show them while a source
 /// is cooled down, and so favourite, visited and hidden marks survive. Also keeps when each source
-/// was last fetched, for <see cref="RefreshPolicy"/>; clearing listings never resets those times.
+/// (or each data centre, for a source fetched by data centre) was last fetched, for
+/// <see cref="RefreshPolicy"/>; clearing listings never resets those times.
 /// </summary>
 /// <remarks>
 /// Unmarked listings expire one month after they were last seen (<see cref="RemoveExpired"/>);
@@ -14,7 +15,8 @@ namespace Jaunt.Core.Listings;
 public sealed partial class ListingCache
 {
     private readonly Dictionary<ListingSource, Dictionary<string, CachedListing>> listings = [];
-    private readonly Dictionary<ListingSource, DateTimeOffset> lastFetched = [];
+    // Keyed by source and data centre: "" for a source fetched for every region at once (RefreshPolicy.ByDataCentre)
+    private readonly Dictionary<(ListingSource Source, string DataCentre), DateTimeOffset> lastFetched = [];
     private readonly HashSet<ListingSource> changedSources = [];
     private bool marksChanged;
     private bool fetchTimesChanged;
@@ -131,27 +133,35 @@ public sealed partial class ListingCache
         return removed;
     }
 
-    /// <summary>When the source was last fetched, or null if never.</summary>
-    public DateTimeOffset? LastFetched(ListingSource source) =>
-        lastFetched.TryGetValue(source, out var time) ? time : null;
+    /// <summary>When the source was last fetched, for the data centre if it is fetched by data centre, or null if never.</summary>
+    /// <param name="dataCentre">The data centre for a source fetched by data centre (<see cref="RefreshPolicy.ByDataCentre"/>), else null.</param>
+    public DateTimeOffset? LastFetched(ListingSource source, string? dataCentre = null) =>
+        lastFetched.TryGetValue((source, dataCentre ?? ""), out var time) ? time : null;
 
     /// <summary>
     /// Records a request to the source, whether or not it succeeded: a failed request still counts
     /// against the source's rate limit.
     /// </summary>
-    /// <exception cref="ArgumentException">The in-game Party Finder, which is never fetched.</exception>
-    public void Fetched(ListingSource source, DateTimeOffset now)
+    /// <param name="dataCentre">The data centre asked for, for a source fetched by data centre; else null.</param>
+    /// <exception cref="ArgumentException">
+    /// The in-game Party Finder, which is never fetched, or a data centre given for a source fetched
+    /// for every region, or missing for one fetched by data centre.
+    /// </exception>
+    public void Fetched(ListingSource source, DateTimeOffset now, string? dataCentre = null)
     {
         if (RefreshPolicy.Minimum(source) is null)
             // Stryker disable once String : the message is for the developer reading the log, not behaviour
             throw new ArgumentException($"{source} is never fetched", nameof(source));
-        lastFetched[source] = now;
+        if (RefreshPolicy.ByDataCentre(source) == string.IsNullOrEmpty(dataCentre))
+            // Stryker disable once String : the message is for the developer reading the log, not behaviour
+            throw new ArgumentException($"{source} is fetched {(RefreshPolicy.ByDataCentre(source) ? "by data centre" : "for every region")}", nameof(dataCentre));
+        lastFetched[(source, dataCentre ?? "")] = now;
         fetchTimesChanged = true;
     }
 
-    /// <summary>Whether opening the browser or Refresh should fetch the source now (<see cref="RefreshPolicy.ShouldFetch"/>).</summary>
-    public bool ShouldFetch(ListingSource source, int settingMinutes, DateTimeOffset now) =>
-        RefreshPolicy.ShouldFetch(source, settingMinutes, LastFetched(source), now);
+    /// <summary>Whether opening the browser or Refresh should fetch the source (for the data centre) now (<see cref="RefreshPolicy.ShouldFetch"/>).</summary>
+    public bool ShouldFetch(ListingSource source, int settingMinutes, DateTimeOffset now, string? dataCentre = null) =>
+        RefreshPolicy.ShouldFetch(source, settingMinutes, LastFetched(source, dataCentre), now);
 
     internal void MarksChanged() => marksChanged = true;
 }

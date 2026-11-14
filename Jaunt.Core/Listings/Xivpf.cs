@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Listings;
 
@@ -49,10 +50,17 @@ public static class Xivpf
     /// Records that xivpf listed these ads now. An ad the in-game Party Finder has also sent counts as
     /// seen now there too, so the in-game copy, which the list prefers, shows when it was last listed.
     /// </summary>
-    public static void Record(ListingCache cache, IEnumerable<Ad> ads, DateTimeOffset now)
+    /// <param name="region">
+    /// The worlds the character can travel to; an ad put up on another world, or on none xivpf names, is
+    /// left out. Null keeps every ad, as when loading the cache.
+    /// </param>
+    public static void Record(ListingCache cache, IEnumerable<Ad> ads, DateTimeOffset now, TravelRegion? region = null)
     {
         foreach (var ad in ads)
         {
+            if (region is not null && !region.IncludesWorld(ad.ListedOn))
+                continue;
+
             cache.SeenAd(ListingSource.Xivpf, ad.Id, ad.Description, ad.ListedOn, now);
             if (cache.Find(ListingSource.InGamePartyFinder, ad.Id) is { } inGame)
                 cache.SeenElsewhere(inGame, now);

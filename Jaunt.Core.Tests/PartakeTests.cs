@@ -27,6 +27,33 @@ public class PartakeTests
 
     private static Partake.Event Single(string eventJson) => Assert.Single(Read(eventJson).Events);
 
+    [Theory]
+    [InlineData("Lich", "Light", true)]
+    [InlineData("Lich", null, true)]
+    [InlineData("Lichh", "Light", true)] // a world Jaunt doesn't know, on a data centre in the region
+    [InlineData("Gilgamesh", "Aether", false)]
+    [InlineData("Gilgamesh", null, false)]
+    [InlineData("Lichh", "Aether", false)]
+    public void RecordingForARegionKeepsEventsWhoseWorldOrDataCentreIsInIt(string world, string? dataCentre, bool kept)
+    {
+        var cache = new ListingCache();
+        var item = Single(EventJson()) with { World = world, DataCentre = dataCentre };
+
+        Partake.Record(cache, [item], Now, TestGazetteer.Instance.TravelRegion("Moogle"));
+
+        Assert.Equal(kept, cache.Count == 1);
+    }
+
+    [Fact]
+    public void RecordingWithoutARegionKeepsEventsAnywhere()
+    {
+        var cache = new ListingCache();
+
+        Partake.Record(cache, [Single(EventJson()) with { World = "Gilgamesh", DataCentre = "Aether" }], Now);
+
+        Assert.Equal(1, cache.Count);
+    }
+
     [Fact]
     public void ReadsAnEventsTitleTimesWorldLocationAndHostLinks()
     {

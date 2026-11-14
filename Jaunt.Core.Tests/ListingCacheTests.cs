@@ -249,7 +249,7 @@ public class ListingCacheTests
         var cache = new ListingCache();
         cache.SeenAd(ListingSource.InGamePartyFinder, "1", "Ad", null, Now).Favourite = true;
         cache.Seen(ListingSource.FfxivVenues, "2", "Venue", Now);
-        cache.Fetched(ListingSource.FfxivVenues, Now);
+        cache.Fetched(ListingSource.FfxivVenues, Now, "Aether");
 
         var files = SavedFiles.All(cache);
 
@@ -361,7 +361,7 @@ public class ListingCacheTests
         cache.Seen(ListingSource.FfxivVenues, "1", "Venue", Now).Favourite = true;
         cache.TakeChanges();
 
-        cache.Fetched(ListingSource.FfxivVenues, Now);
+        cache.Fetched(ListingSource.FfxivVenues, Now, "Aether");
 
         Assert.Equal([ListingCache.FetchTimesFile], SavedFiles.Written(cache).Keys);
     }
@@ -559,6 +559,63 @@ public class ListingCacheTests
         Assert.Equal(Now, loaded.LastFetched(ListingSource.Xivpf));
         Assert.Equal(Now.AddHours(-2), loaded.LastFetched(ListingSource.RpEventCalendar));
         Assert.Null(loaded.LastFetched(ListingSource.Partake));
+    }
+
+    [Fact]
+    public void EachDataCentreOfASourceFetchedByDataCentreHasItsOwnFetchTime()
+    {
+        var cache = new ListingCache();
+        cache.Fetched(ListingSource.FfxivVenues, Now, "Aether");
+        cache.Fetched(ListingSource.FfxivVenues, Now.AddHours(-9), "Chaos");
+
+        Assert.False(cache.ShouldFetch(ListingSource.FfxivVenues, 10, Now, "Aether"));
+        Assert.True(cache.ShouldFetch(ListingSource.FfxivVenues, 10, Now, "Chaos"));
+        Assert.True(cache.ShouldFetch(ListingSource.FfxivVenues, 10, Now, "Light"));
+        Assert.Null(cache.LastFetched(ListingSource.FfxivVenues));
+    }
+
+    [Fact]
+    public void DataCentreFetchTimesLoadBack()
+    {
+        var cache = new ListingCache();
+        cache.Fetched(ListingSource.FfxivVenues, Now, "Aether");
+        cache.Fetched(ListingSource.FfxivVenues, Now.AddHours(-1), "Materia");
+
+        var files = SavedFiles.Written(cache);
+        var loaded = SavedFiles.Load(files);
+
+        Assert.Contains("\"FfxivVenues/Aether\":", files[ListingCache.FetchTimesFile], StringComparison.Ordinal);
+        Assert.Equal(Now, loaded.LastFetched(ListingSource.FfxivVenues, "Aether"));
+        Assert.Equal(Now.AddHours(-1), loaded.LastFetched(ListingSource.FfxivVenues, "Materia"));
+    }
+
+    [Theory]
+    [InlineData(ListingSource.FfxivVenues, null)]
+    [InlineData(ListingSource.FfxivVenues, "")]
+    [InlineData(ListingSource.Xivpf, "Aether")]
+    public void AFetchMustNameADataCentreOnlyForASourceFetchedByDataCentre(ListingSource source, string? dataCentre) =>
+        Assert.Throws<ArgumentException>(() => new ListingCache().Fetched(source, Now, dataCentre));
+
+    [Fact]
+    public void LoadingDropsFetchTimesWhoseDataCentreDoesntMatchHowTheSourceIsFetched()
+    {
+        const string json = """
+            {"version": 1, "lastFetched": {
+              "FfxivVenues": "2026-11-14T20:00:00+00:00",
+              "FfxivVenues/Light": "2026-11-14T19:00:00+00:00",
+              "Xivpf/Light": "2026-11-14T20:00:00+00:00",
+              "Partake": "2026-11-14T18:00:00+00:00",
+              "NotASource/Light": "2026-11-14T20:00:00+00:00"
+            }}
+            """;
+
+        var loaded = SavedFiles.Load(new Dictionary<string, string> { [ListingCache.FetchTimesFile] = json });
+
+        Assert.Null(loaded.LastFetched(ListingSource.FfxivVenues));
+        Assert.Equal(Now.AddHours(-1), loaded.LastFetched(ListingSource.FfxivVenues, "Light"));
+        Assert.Null(loaded.LastFetched(ListingSource.Xivpf));
+        Assert.Null(loaded.LastFetched(ListingSource.Xivpf, "Light"));
+        Assert.Equal(Now.AddHours(-2), loaded.LastFetched(ListingSource.Partake));
     }
 
     [Fact]

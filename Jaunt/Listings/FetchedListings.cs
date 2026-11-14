@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -8,17 +9,20 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Plugin.Services;
 using Jaunt.Core.Listings;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Listings;
 
 /// <summary>
-/// Fetches one web source's listings when the listing window opens, unless the source is within its
-/// cooldown (<see cref="RefreshPolicy"/>), and records them in the listing cache.
+/// Fetches one web source's listings for the character's region when the listing window opens, unless
+/// the source is within its cooldown (<see cref="RefreshPolicy"/>), and records the ones on worlds the
+/// character can travel to in the listing cache. Nothing is fetched while no character is logged in.
 /// </summary>
 /// <remarks>
 /// The download and parsing run off the game thread; the cache is only touched on it. Every request
 /// is recorded with <see cref="ListingCache.Fetched"/> before it is sent, so a failed one still counts
-/// against the cooldown.
+/// against the cooldown. A source fetched by data centre (<see cref="RefreshPolicy.ByDataCentre"/>)
+/// asks for each of the region's data centres whose cooldown has passed, one after another, in one fetch.
 /// </remarks>
 internal sealed class FetchedListings : IDisposable
 {
@@ -28,6 +32,7 @@ internal sealed class FetchedListings : IDisposable
     private readonly string sourceName;
     private readonly string itemName;
     private readonly Download download;
+    private readonly Func<TravelRegion?> region;
     private readonly ListingCache cache;
     private readonly Configuration configuration;
     private readonly IFramework framework;
@@ -42,17 +47,20 @@ internal sealed class FetchedListings : IDisposable
     internal sealed record Recording(int Count, Action<ListingCache, DateTimeOffset> Record);
 
     /// <summary>
-    /// Requests and parses a source's listings at a time; throws <see cref="JsonException"/> when a
-    /// response is not the expected shape.
+    /// Requests and parses a source's listings at a time for a region; throws <see cref="JsonException"/>
+    /// when a response is not the expected shape.
     /// </summary>
-    private delegate Task<Recording> Download(HttpClient http, DateTimeOffset now, CancellationToken token);
+    /// <param name="dataCentres">For a source fetched by data centre, the ones to ask for; empty otherwise.</param>
+    private delegate Task<Recording> Download(
+        HttpClient http, DateTimeOffset now, TravelRegion region, IReadOnlyList<string> dataCentres, CancellationToken token);
 
     /// <param name="sourceName">The source as the log names it.</param>
     /// <param name="itemName">Its listings as the log names them ("venues").</param>
+    /// <param name="region">The worlds the current character can travel to, or null while none is logged in. Read on the game thread.</param>
     /// <param name="handler">A stand-in for the network in the self-tests, so a test never reaches the source.</param>
     /// <param name="time">A stand-in for the clock in the self-tests.</param>
     private FetchedListings(
-        ListingSource source, string sourceName, string itemName, Download download,
+        ListingSource source, string sourceName, string itemName, Download download, Func<TravelRegion?> region,
         ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
         HttpMessageHandler handler, TimeProvider time)
     {
@@ -60,6 +68,7 @@ internal sealed class FetchedListings : IDisposable
         this.sourceName = sourceName;
         this.itemName = itemName;
         this.download = download;
+        this.region = region;
         this.cache = cache;
         this.configuration = configuration;
         this.framework = framework;
@@ -71,44 +80,49 @@ internal sealed class FetchedListings : IDisposable
         http.DefaultRequestHeaders.UserAgent.ParseAdd($"Jaunt/{version} (+https://github.com/Cellar-Mander/jaunt)");
     }
 
-    /// <summary>The venue list from FFXIV Venues.</summary>
+    /// <summary>The venue list from FFXIV Venues, one request per data centre due.</summary>
     public static FetchedListings FfxivVenues(
-        ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
+        Func<TravelRegion?> region, ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
         HttpMessageHandler? handler = null, TimeProvider? time = null) =>
         new(
             ListingSource.FfxivVenues, "FFXIV Venues", "venues",
-            async (http, _, token) =>
+            async (http, _, _, dataCentres, token) =>
             {
-                var json = await http.GetStringAsync(Core.Listings.FfxivVenues.Url, token).ConfigureAwait(false);
-                var venues = Core.Listings.FfxivVenues.Parse(json);
+                var venues = new List<Core.Listings.FfxivVenues.Venue>();
+                foreach (var dataCentre in dataCentres)
+                {
+                    var json = await http.GetStringAsync(Core.Listings.FfxivVenues.UrlFor(dataCentre), token).ConfigureAwait(false);
+                    venues.AddRange(Core.Listings.FfxivVenues.Parse(json));
+                }
+
                 return new Recording(venues.Count, (c, now) => Core.Listings.FfxivVenues.Record(c, venues, now));
             },
-            cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
+            region, cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
 
     /// <summary>The Party Finder ads in the None category from xivpf.</summary>
     public static FetchedListings Xivpf(
-        ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
+        Func<TravelRegion?> region, ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
         HttpMessageHandler? handler = null, TimeProvider? time = null) =>
         new(
             ListingSource.Xivpf, "xivpf", "Party Finder ads",
-            async (http, _, token) =>
+            async (http, _, region, _, token) =>
             {
                 var json = await http.GetStringAsync(Core.Listings.Xivpf.Url, token).ConfigureAwait(false);
                 var ads = Core.Listings.Xivpf.Parse(json);
-                return new Recording(ads.Count, (c, now) => Core.Listings.Xivpf.Record(c, ads, now));
+                return new Recording(ads.Count, (c, now) => Core.Listings.Xivpf.Record(c, ads, now, region));
             },
-            cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
+            region, cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
 
     /// <summary>
     /// Upcoming and running FFXIV events from Partake: pages of <see cref="Partake.PageSize"/> until one
     /// comes back short, at most <see cref="Partake.MaxPages"/>, all in one fetch.
     /// </summary>
     public static FetchedListings Partake(
-        ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
+        Func<TravelRegion?> region, ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
         HttpMessageHandler? handler = null, TimeProvider? time = null) =>
         new(
             ListingSource.Partake, "Partake", "events",
-            async (http, now, token) =>
+            async (http, now, region, _, token) =>
             {
                 var start = now - Core.Listings.Partake.Lookback;
                 var events = new List<Core.Listings.Partake.Event>();
@@ -124,46 +138,65 @@ internal sealed class FetchedListings : IDisposable
                         break;
                 }
 
-                return new Recording(events.Count, (c, at) => Core.Listings.Partake.Record(c, events, at));
+                return new Recording(events.Count, (c, at) => Core.Listings.Partake.Record(c, events, at, region));
             },
-            cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
+            region, cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
 
     /// <summary>The next few weeks' events from the FFXIV RP Event Calendar.</summary>
     public static FetchedListings RpEventCalendar(
-        ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
+        Func<TravelRegion?> region, ListingCache cache, Configuration configuration, IFramework framework, IPluginLog log, Action save,
         HttpMessageHandler? handler = null, TimeProvider? time = null) =>
         new(
             ListingSource.RpEventCalendar, "the FFXIV RP Event Calendar", "events",
-            async (http, _, token) =>
+            async (http, _, region, _, token) =>
             {
                 var json = await http.GetStringAsync(Core.Listings.RpEventCalendar.Url, token).ConfigureAwait(false);
                 var events = Core.Listings.RpEventCalendar.Parse(json);
-                return new Recording(events.Count, (c, now) => Core.Listings.RpEventCalendar.Record(c, events, now));
+                return new Recording(events.Count, (c, now) => Core.Listings.RpEventCalendar.Record(c, events, now, region));
             },
-            cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
+            region, cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
 
     private static HttpClientHandler NewHandler() => new() { AutomaticDecompression = DecompressionMethods.All };
 
     /// <summary>The latest fetch, or a completed task if none has started.</summary>
     internal Task Fetching => fetching;
 
-    /// <summary>Starts a fetch if the cooldown has passed and none is running. Call on the game thread.</summary>
+    /// <summary>
+    /// Starts a fetch if a character is logged in, the cooldown has passed (for some data centre in
+    /// the region, for a source fetched by data centre) and none is running. Call on the game thread.
+    /// </summary>
     public void FetchIfDue()
     {
         var now = time.GetUtcNow();
-        if (!fetching.IsCompleted || !cache.ShouldFetch(source, configuration.RefreshCooldownMinutes, now))
+        if (!fetching.IsCompleted || region() is not { } travel)
             return;
 
-        cache.Fetched(source, now);
+        var cooldown = configuration.RefreshCooldownMinutes;
+        IReadOnlyList<string> dataCentres = [];
+        if (RefreshPolicy.ByDataCentre(source))
+        {
+            dataCentres = [.. travel.DataCentres.Where(dc => cache.ShouldFetch(source, cooldown, now, dc))];
+            if (dataCentres.Count == 0)
+                return;
+            foreach (var dataCentre in dataCentres)
+                cache.Fetched(source, now, dataCentre);
+        }
+        else
+        {
+            if (!cache.ShouldFetch(source, cooldown, now))
+                return;
+            cache.Fetched(source, now);
+        }
+
         save();
-        fetching = Task.Run(() => FetchAsync(stopping.Token));
+        fetching = Task.Run(() => FetchAsync(travel, dataCentres, stopping.Token));
     }
 
-    private async Task FetchAsync(CancellationToken token)
+    private async Task FetchAsync(TravelRegion travel, IReadOnlyList<string> dataCentres, CancellationToken token)
     {
         try
         {
-            var recording = await download(http, time.GetUtcNow(), token).ConfigureAwait(false);
+            var recording = await download(http, time.GetUtcNow(), travel, dataCentres, token).ConfigureAwait(false);
             await framework.RunOnFrameworkThread(() =>
             {
                 if (token.IsCancellationRequested)

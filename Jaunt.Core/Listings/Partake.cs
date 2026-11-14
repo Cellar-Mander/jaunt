@@ -109,11 +109,16 @@ public static class Partake
     }
 
     /// <summary>Records that Partake listed these events now, leaving out any that have already ended.</summary>
-    public static void Record(ListingCache cache, IEnumerable<Event> events, DateTimeOffset now)
+    /// <param name="region">
+    /// The worlds the character can travel to; an event whose world and data centre are both outside it
+    /// is left out. Null keeps every event, as when loading the cache.
+    /// </param>
+    public static void Record(ListingCache cache, IEnumerable<Event> events, DateTimeOffset now, TravelRegion? region = null)
     {
         foreach (var item in events)
         {
-            if (item.EndsAt <= now)
+            if (item.EndsAt <= now
+                || (region is not null && !region.IncludesWorld(item.World) && !region.IncludesDataCentre(item.DataCentre)))
                 continue;
 
             var listing = cache.Seen(ListingSource.Partake, item.Id, item.Title, now, oneOff: true);

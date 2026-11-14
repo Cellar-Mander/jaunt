@@ -40,19 +40,21 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
          {"id":"st-2","name":"Self-test Bar","location":{"world":"Bismark","district":"Goblet","ward":3,"plot":7,"apartment":0,"room":0,"subdivision":false},"website":null,"discord":null,"schedule":[],"approved":true}]
         """;
 
-    // Three listings in xivpf's shape: a venue ad, one the game has also sent and a raid
+    // Four listings in xivpf's shape: a venue ad, one the game has also sent, a raid and an ad outside North America
     private const string XivpfJson = """
         [{"listing":{"id":9000001,"category":"None","description":{"en":"Self-test Club Mist W14 P33","ja":"Self-test Club Mist W14 P33"},"created_world":{"name":"Cuchulainn"}}},
-         {"listing":{"id":9000002,"category":"None","description":{"en":"Self-test Den Goblet W3 P7"},"created_world":{"name":"Bismarck"}}},
+         {"listing":{"id":9000002,"category":"None","description":{"en":"Self-test Den Goblet W3 P7"},"created_world":{"name":"Gilgamesh"}}},
+         {"listing":{"id":9000004,"category":"None","description":{"en":"Self-test Abroad Mist W1 P1"},"created_world":{"name":"Bismarck"}}},
          {"listing":{"id":9000003,"category":"HighEndDuty","description":{"en":"Self-test raid"},"created_world":{"name":"Cuchulainn"}}}]
         """;
 
-    // Three events in Partake's shape at the self-test clock's 20:00: one tonight, one that ended and one with no world
+    // Four events in Partake's shape at the self-test clock's 20:00: one tonight, one that ended, one with no world and one outside Europe
     private const string PartakeJson = """
         {"data":{"events":[
           {"id":9100001,"title":"Self-test Gala","startsAt":"2026-11-14T21:00:00Z","endsAt":"2026-11-15T01:00:00Z","location":"LB W19 P58","server":{"name":"Lich"},"dataCenter":{"name":"Light"},"team":{"websiteUrl":"https://example.com/","discordUrl":null}},
           {"id":9100002,"title":"Self-test Matinee","startsAt":"2026-11-14T12:00:00Z","endsAt":"2026-11-14T15:00:00Z","location":"Mist W1 P1","server":{"name":"Lich"},"dataCenter":{"name":"Light"},"team":null},
-          {"id":9100003,"title":"Self-test Nowhere","startsAt":"2026-11-14T21:00:00Z","endsAt":"2026-11-14T23:00:00Z","location":"TBA","server":null,"dataCenter":null,"team":null}]}}
+          {"id":9100003,"title":"Self-test Nowhere","startsAt":"2026-11-14T21:00:00Z","endsAt":"2026-11-14T23:00:00Z","location":"TBA","server":null,"dataCenter":null,"team":null},
+          {"id":9100004,"title":"Self-test Abroad","startsAt":"2026-11-14T21:00:00Z","endsAt":"2026-11-14T23:00:00Z","location":"Mist W1 P1","server":{"name":"Gilgamesh"},"dataCenter":{"name":"Aether"},"team":null}]}}
         """;
 
 
@@ -260,7 +262,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
             Check(titles == "Another hidden, Favourite café, Hidden lounge, Visited night", $"read back \"{titles}\"");
             hidden = string.Join(", ", saved.HiddenListings().Select(l => l.Title));
             Check(hidden == "Hidden lounge", $"after Un-hide and a reload, hidden venues are \"{hidden}\"");
-            Check(saved.LastFetched(ListingSource.FfxivVenues) == SampleFetched, "the FFXIV Venues fetch time wasn't kept");
+            Check(saved.LastFetched(ListingSource.FfxivVenues, "Materia") == SampleFetched, "the FFXIV Venues fetch time wasn't kept");
             cleared = saved.ClearUnmarked();
             Check(cleared == 1, $"Clear after Un-hide removed {cleared}, not 1");
         }
@@ -303,14 +305,17 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 
     private IEnumerable<object?> FirstFetch()
     {
-        using var rig = new VenueRig();
+        using var rig = new VenueRig(gazetteer);
         var start = rig.Time.Now;
         rig.Listings.FetchIfDue();
-        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues) == start, "the request wasn't recorded before it was sent");
+        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues, "Materia") == start, "the request wasn't recorded before it was sent");
         foreach (var wait in WaitFor(rig.Listings.Fetching, "the fetch"))
             yield return wait;
 
-        Check(rig.Handler.Requests == 1, $"{rig.Handler.Requests} requests, not 1");
+        Check(rig.Handler.Requests == 1, $"{rig.Handler.Requests} requests, not 1 for Materia, the only data centre in Oceania");
+        Check(
+            rig.Handler.LastUri?.Query.EndsWith("&dataCenter=Materia", StringComparison.Ordinal) == true,
+            $"asked for {rig.Handler.LastUri}, not Materia's venues");
         Check(rig.Cache.Count == 2, $"{rig.Cache.Count} venues recorded, not 2");
         var bar = rig.Cache.Find(ListingSource.FfxivVenues, "st-2");
         var world = bar is null ? null : FfxivVenues.Show(bar, gazetteer).Address?.World;
@@ -320,7 +325,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 
     private IEnumerable<object?> Cooldown()
     {
-        using var rig = new VenueRig();
+        using var rig = new VenueRig(gazetteer);
         var start = rig.Time.Now;
         rig.Listings.FetchIfDue();
         foreach (var wait in WaitFor(rig.Listings.Fetching, "the first fetch"))
@@ -329,19 +334,19 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         rig.Time.Now = start + RefreshPolicy.Minimum(ListingSource.FfxivVenues)!.Value - TimeSpan.FromMinutes(1);
         rig.Listings.FetchIfDue();
         Check(rig.Handler.Requests == 1, "fetched again inside the cooldown");
-        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues) == start, "a skipped fetch changed the fetch time");
+        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues, "Materia") == start, "a skipped fetch changed the fetch time");
 
         rig.Time.Now += TimeSpan.FromMinutes(1);
         rig.Listings.FetchIfDue();
         foreach (var wait in WaitFor(rig.Listings.Fetching, "the second fetch"))
             yield return wait;
         Check(rig.Handler.Requests == 2, "didn't fetch once the cooldown had passed");
-        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues) == rig.Time.Now, "the second request wasn't recorded");
+        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues, "Materia") == rig.Time.Now, "the second request wasn't recorded");
     }
 
     private IEnumerable<object?> FailedFetch()
     {
-        using var rig = new VenueRig();
+        using var rig = new VenueRig(gazetteer);
         rig.Listings.FetchIfDue();
         foreach (var wait in WaitFor(rig.Listings.Fetching, "the first fetch"))
             yield return wait;
@@ -355,21 +360,21 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
             yield return wait;
 
         Check(rig.Handler.Requests == 2, $"{rig.Handler.Requests} requests, not 2");
-        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues) == failedAt, "the failed request wasn't recorded");
+        Check(rig.Cache.LastFetched(ListingSource.FfxivVenues, "Materia") == failedAt, "the failed request wasn't recorded");
         Check(rig.Cache.Count == 2, $"{rig.Cache.Count} venues left after the failure, not 2");
 
         rig.Listings.FetchIfDue();
         Check(rig.Handler.Requests == 2, "retried straight after the failure");
     }
 
-    private static IEnumerable<object?> XivpfFirstFetch()
+    private IEnumerable<object?> XivpfFirstFetch()
     {
         var time = new ManualTime();
         var cache = new ListingCache();
         var inGame = cache.Seen(ListingSource.InGamePartyFinder, "9000002", "Self-test Den", time.Now.AddDays(-1));
         var start = time.Now;
         var saves = 0;
-        using var listings = FetchedListings.Xivpf(cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, new FakeSource(XivpfJson), time);
+        using var listings = FetchedListings.Xivpf(() => gazetteer.TravelRegion("Cuchulainn"), cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, new FakeSource(XivpfJson), time);
         listings.FetchIfDue();
         Check(cache.LastFetched(ListingSource.Xivpf) == start, "the request wasn't recorded before it was sent");
         foreach (var wait in WaitFor(listings.Fetching, "the fetch"))
@@ -378,6 +383,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         var club = cache.Find(ListingSource.Xivpf, "9000001");
         Check(club?.Description == "Self-test Club Mist W14 P33" && club.ListedOn == "Cuchulainn", "the venue ad wasn't recorded with its text and world");
         Check(cache.Find(ListingSource.Xivpf, "9000003") is null, "the raid listing was recorded");
+        Check(cache.Find(ListingSource.Xivpf, "9000004") is null, "the ad on Bismarck, outside North America, was recorded");
         var den = cache.Find(ListingSource.Xivpf, "9000002");
         Check(den is not null && Xivpf.ShownInGame(cache, den), "the ad the game also sent isn't left to the in-game copy");
         Check(inGame.LastSeen == start, "the in-game copy's last seen time didn't move to the fetch");
@@ -397,7 +403,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 #pragma warning disable IDISP001 // The fetcher's HttpClient disposes it
         var source = new FakeSource(PartakeJson);
 #pragma warning restore IDISP001
-        using var listings = FetchedListings.Partake(cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, source, time);
+        using var listings = FetchedListings.Partake(() => gazetteer.TravelRegion("Lich"), cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, source, time);
         listings.FetchIfDue();
         Check(cache.LastFetched(ListingSource.Partake) == start, "the request wasn't recorded before it was sent");
         foreach (var wait in WaitFor(listings.Fetching, "the fetch"))
@@ -409,6 +415,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
             "the upcoming event wasn't recorded with its world, location and times");
         Check(cache.Find(ListingSource.Partake, "9100002") is null, "the event that ended was recorded");
         Check(cache.Find(ListingSource.Partake, "9100003") is null, "the event with no world was recorded");
+        Check(cache.Find(ListingSource.Partake, "9100004") is null, "the event on Gilgamesh, outside Europe, was recorded");
         Check(saves >= 2, $"saved {saves} times, not after the request and again after the events");
 
         time.Now += RefreshPolicy.Minimum(ListingSource.Partake)!.Value - TimeSpan.FromMinutes(1);
@@ -423,7 +430,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         var cache = new ListingCache();
         var start = time.Now;
         var saves = 0;
-        using var listings = FetchedListings.RpEventCalendar(cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, new FakeSource(RpCalendarJson), time);
+        using var listings = FetchedListings.RpEventCalendar(() => gazetteer.TravelRegion("Balmung"), cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, new FakeSource(RpCalendarJson), time);
         listings.FetchIfDue();
         Check(cache.LastFetched(ListingSource.RpEventCalendar) == start, "the request wasn't recorded before it was sent");
         foreach (var wait in WaitFor(listings.Fetching, "the fetch"))
@@ -470,9 +477,12 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
 
         public HttpMethod? LastMethod { get; private set; }
 
+        public Uri? LastUri { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             LastMethod = request.Method;
+            LastUri = request.RequestUri;
             Interlocked.Increment(ref requests);
             if (Fail)
                 throw new HttpRequestException("self-test: no network");
@@ -480,7 +490,8 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         }
     }
 
-    // A fetcher on a scratch cache with default settings, the fake source and a clock the step moves
+    // A fetcher on a scratch cache with default settings, the fake source, a clock the step moves, and
+    // a character in Oceania, whose one data centre takes one request
     private sealed class VenueRig : IDisposable
     {
         public ManualTime Time { get; } = new();
@@ -489,8 +500,8 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         public FetchedListings Listings { get; }
         public int Saves { get; private set; }
 
-        public VenueRig() =>
-            Listings = FetchedListings.FfxivVenues(Cache, new Configuration(), Plugin.Framework, Plugin.Log, () => Saves++, Handler, Time);
+        public VenueRig(Gazetteer gazetteer) =>
+            Listings = FetchedListings.FfxivVenues(() => gazetteer.TravelRegion("Bismarck"), Cache, new Configuration(), Plugin.Framework, Plugin.Log, () => Saves++, Handler, Time);
 
         // Also disposes Handler, through the fetcher's HttpClient
         public void Dispose() => Listings.Dispose();

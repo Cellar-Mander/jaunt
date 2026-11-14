@@ -348,6 +348,14 @@ public class FfxivVenuesTests
     }
 
     [Fact]
+    public void AsksForOneDataCentreByAddingItToTheQuery()
+    {
+        var query = new Uri(FfxivVenues.UrlFor("Light & Shadow")).Query.TrimStart('?').Split('&');
+
+        Assert.Equal(["approved=true", "dataCenter=Light%20%26%20Shadow", "withinWeek=true"], query.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void AMarkedVenueLeftOutOfAFetchKeepsItsFieldsAndMarks()
     {
         // revert-check: not revert-sensitive (pins existing cache behaviour the within-week fetch relies on)

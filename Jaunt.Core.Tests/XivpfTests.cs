@@ -27,6 +27,27 @@ public class XivpfTests
     private static Xivpf.Ad Single(string itemJson) => Assert.Single(Xivpf.Parse($"[{itemJson}]"));
 
     [Fact]
+    public void RecordingForARegionLeavesOutAdsOnOtherWorldsOrNone()
+    {
+        var cache = new ListingCache();
+        var region = TestGazetteer.Instance.TravelRegion("Gilgamesh");
+
+        Xivpf.Record(cache, [new("1", Venue, "Cuchulainn"), new("2", Venue, "Moogle"), new("3", Venue, null)], Now, region);
+
+        Assert.Equal(["1"], cache.Listings.Select(l => l.Id));
+    }
+
+    [Fact]
+    public void RecordingWithoutARegionKeepsEveryAd()
+    {
+        var cache = new ListingCache();
+
+        Xivpf.Record(cache, [new("1", Venue, "Cuchulainn"), new("2", Venue, "Moogle"), new("3", Venue, null)], Now);
+
+        Assert.Equal(3, cache.Count);
+    }
+
+    [Fact]
     public void ReadsAnAdsIdTextAndWorld()
     {
         var ad = Single(ItemJson());

@@ -61,7 +61,7 @@ Then:
 3. **Un-hide**: press Un-hide on "Another hidden". Only "Hidden lounge" is left. Disable and
    re-enable Jaunt: still only "Hidden lounge". *(self-test: the cache after a save and reload; press Un-hide yourself)*
 4. **Clear again**: it reports "Removed 1 listing." (the venue just un-hidden). *(self-test: the count)*
-5. **Cache files**: `fetch-state.json` still has `"FfxivVenues"` under `lastFetched`, `marks.json`
+5. **Cache files**: `fetch-state.json` still has `"FfxivVenues/Materia"` under `lastFetched`, `marks.json`
    lists only "Hidden lounge" and the favourite and visited listings, `marks.json.bak` holds the marks
    from before the last change, and `/xllog` shows no error saving them. *(self-test: the fetch time and the backup)*
 6. **Unreadable files**: an unreadable `marks.json` is moved to `marks.json.bad` and the marks are read
@@ -124,10 +124,11 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `R
 
 Checks the fetch, the cooldown and the list; the reading rules are covered by `FfxivVenuesTests`.
 
-1. **First fetch**: with no `FfxivVenues` time in `fetch-state.json` (disable Jaunt,
-   remove it, re-enable), open `/jaunt`. Within a few seconds the list fills with "FFXIV Venues" rows,
-   and `/xllog` shows `Fetched … venues from FFXIV Venues`. The game doesn't stutter while it loads.
-   *(self-test: the request is recorded before it is sent and the venues after it, against a stand-in; the real site and the stutter stay manual)*
+1. **First fetch**: with no `FfxivVenues/…` times in `fetch-state.json` (disable Jaunt,
+   remove them, re-enable), open `/jaunt`. Within a few seconds the list fills with "FFXIV Venues" rows,
+   only on your region's worlds, `/xllog` shows `Fetched … venues from FFXIV Venues`, and
+   `fetch-state.json` has one `FfxivVenues/<data centre>` time per data centre in your region. The game doesn't stutter while it loads.
+   *(self-test: Materia's request, with `dataCenter=Materia`, is recorded before it is sent and the venues after it, against a stand-in; the real site and the stutter stay manual)*
 2. **Cooldown**: close and reopen `/jaunt`. No second fetch is logged; the venues are still listed.
    Disable and re-enable Jaunt, then open `/jaunt`: still no fetch, as the time is saved.
    *(self-test: no fetch a minute before the 8 h are up, one when they are; the reload stays manual)*
@@ -137,9 +138,23 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `F
 5. **Links**: Open on a website and a Discord link opens the browser at the URI in the tooltip.
 6. **Scrolling**: scroll quickly through the whole list: rows don't jump or overlap, and the scrollbar
    reaches the last row.
-7. **Offline**: block the network (or set a bad DNS), clear the `FfxivVenues` fetch time as in 1, and
+7. **Offline**: block the network (or set a bad DNS), clear the `FfxivVenues/…` fetch times as in 1, and
    open `/jaunt`. `/xllog` shows a warning "Couldn't fetch venues", the cached venues stay listed, and
    reopening doesn't retry until the cooldown passes. *(self-test: against a failing stand-in)*
 8. **Symbols in names**: no title shows `=` boxes. "꧁Tʜᴇ Aᴜʀᴏʀᴀ Tʜᴇᴀᴛᴇʀ꧂" (Mateus, Shirogane W26 P12)
    shows as "«The Aurora Theater»", "✦✦✦ 🌴 DESERT ROSE 🌴 ✦✦✦" as "◆◆◆ DESERT ROSE ◆◆◆", and
    "♥ Crafty Cafe ♥" and "☆KITSU☆" are unchanged.
+
+## Travel region
+
+Checks that only the character's region is fetched and kept; the matching rules are covered by
+`TravelRegionTests` and each source's tests.
+
+1. **Not logged in**: at the title screen with `/jaunt` open, `/xllog` shows no fetch.
+2. **One region**: logged in, open `/jaunt` after clearing `fetch-state.json` as in each source's
+   first fetch. `cache/Xivpf.json`, `cache/Partake.json` and `cache/RpEventCalendar.json` hold only
+   listings on your region's worlds. *(self-test: an xivpf ad on Bismarck and a Partake event on Gilgamesh aren't recorded, against stand-ins)*
+3. **Another region**: log in a character in another region and open `/jaunt`. FFXIV Venues fetches
+   at once for that region's data centres (new `FfxivVenues/<data centre>` times); xivpf, Partake and
+   the RP calendar don't fetch until their cooldowns pass, and then record only that region's listings.
+   The first region's cached listings are still in the cache files.

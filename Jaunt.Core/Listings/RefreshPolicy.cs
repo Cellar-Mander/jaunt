@@ -31,6 +31,13 @@ public static class RefreshPolicy
         _ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
     };
 
+    /// <summary>
+    /// Whether the source is asked for one data centre per request, each with its own cooldown, so a
+    /// character in another region can fetch its data centres at once. Sources that can't be asked for
+    /// less than every region have one cooldown for all.
+    /// </summary>
+    public static bool ByDataCentre(ListingSource source) => source == ListingSource.FfxivVenues;
+
     /// <summary>The time the source must wait between fetches, given the Settings cooldown.</summary>
     public static TimeSpan? Cooldown(ListingSource source, int settingMinutes)
     {

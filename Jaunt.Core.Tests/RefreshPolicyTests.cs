@@ -53,6 +53,10 @@ public class RefreshPolicyTests
     }
 
     [Fact]
+    public void OnlyFfxivVenuesIsFetchedByDataCentre() =>
+        Assert.Equal([ListingSource.FfxivVenues], Enum.GetValues<ListingSource>().Where(RefreshPolicy.ByDataCentre));
+
+    [Fact]
     public void EveryFetchedSourceHasAMinimum()
     {
         Assert.All(RefreshPolicy.FetchedSources, source => Assert.NotNull(RefreshPolicy.Minimum(source)));

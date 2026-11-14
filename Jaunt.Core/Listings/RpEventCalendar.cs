@@ -109,10 +109,17 @@ public static class RpEventCalendar
     /// Records that the calendar listed these events now, keeping the name as the listing's title,
     /// the server as the world it is listed on, and the location, rating and link, all as sent.
     /// </summary>
-    public static void Record(ListingCache cache, IEnumerable<Event> events, DateTimeOffset now)
+    /// <param name="region">
+    /// The worlds the character can travel to; an event on another server, or on none, is left out.
+    /// Null keeps every event, as when loading the cache.
+    /// </param>
+    public static void Record(ListingCache cache, IEnumerable<Event> events, DateTimeOffset now, TravelRegion? region = null)
     {
         foreach (var calendarEvent in events)
         {
+            if (region is not null && !region.IncludesWorld(calendarEvent.Server))
+                continue;
+
             var listing = cache.Seen(ListingSource.RpEventCalendar, calendarEvent.Id, calendarEvent.Name ?? "", now, calendarEvent.OneOff);
             listing.ListedOn = calendarEvent.Server;
             listing.Location = calendarEvent.Location;
