@@ -23,8 +23,8 @@
 
   <ItemGroup>
     <None Include="Corpus\*.jsonl" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The in-game smoke test's sample cache; SmokeTestListingsTests checks it still loads as that checklist says -->
-    <None Include="..\docs\smoke-test-listings.json" Link="smoke-test-listings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Hand-made test data, such as the in-game smoke test's sample cache (SmokeTestListingsTests) -->
+    <None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

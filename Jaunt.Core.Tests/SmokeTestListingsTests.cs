@@ -3,7 +3,7 @@ using Jaunt.Core.Listings;
 namespace Jaunt.Core.Tests;
 
 /// <summary>
-/// docs/smoke-test-listings.json is the sample cache for the in-game Settings checks in
+/// Fixtures/smoke-test-listings.json is the sample cache for the in-game Settings checks in
 /// docs/smoke-test.md. These tests hold it to what that checklist expects, so a change to the cache
 /// format or rules can't quietly break the checklist.
 /// </summary>
@@ -15,7 +15,7 @@ public class SmokeTestListingsTests
     // As the plugin does on load: read the file, then drop expired listings
     private static (ListingCache Cache, int Expired) LoadAsPlugin()
     {
-        var cache = ListingCache.FromJson(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "smoke-test-listings.json")));
+        var cache = ListingCache.FromJson(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "smoke-test-listings.json")));
         return (cache, cache.RemoveExpired(Now));
     }
 
