@@ -147,7 +147,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `F
 
 ## Travel region
 
-Checks that only the character's region is fetched and kept; the matching rules are covered by
+Checks that only the character's region is fetched, kept and listed; the matching rules are covered by
 `TravelRegionTests` and each source's tests.
 
 1. **Not logged in**: at the title screen with `/jaunt` open, `/xllog` shows no fetch.
@@ -158,3 +158,7 @@ Checks that only the character's region is fetched and kept; the matching rules 
    at once for that region's data centres (new `FfxivVenues/<data centre>` times); xivpf, Partake and
    the RP calendar don't fetch until their cooldowns pass, and then record only that region's listings.
    The first region's cached listings are still in the cache files.
+4. **List follows the character**: with `/jaunt` open, log out: within a second the list shows only
+   "Log in to a character to see the venues it can travel to." Log in a character in the first
+   region: only its region's listings show again, though the other region's are still cached. Every
+   row's world (or a Partake event's data centre) is in the logged-in character's region.

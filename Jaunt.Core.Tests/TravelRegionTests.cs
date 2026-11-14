@@ -1,3 +1,6 @@
+using Jaunt.Core.Listings;
+using Jaunt.Core.Text;
+
 namespace Jaunt.Core.Tests;
 
 public class TravelRegionTests
@@ -51,4 +54,55 @@ public class TravelRegionTests
     [InlineData(null)]
     public void AnUnknownHomeWorldHasNoRegion(string? homeWorld) =>
         Assert.Null(TestGazetteer.Instance.TravelRegion(homeWorld));
+
+    private static TravelRegion NorthAmerica => TestGazetteer.Instance.TravelRegion("Gilgamesh")!;
+
+    private static CachedListing Listing(ListingSource source, string? world, string? dataCentre = null) =>
+        new() { Source = source, Id = "1", ListedOn = world, DataCentre = dataCentre };
+
+    [Theory]
+    [InlineData(ListingSource.InGamePartyFinder, "Balmung", true)]
+    [InlineData(ListingSource.InGamePartyFinder, " balmung ", true)]
+    [InlineData(ListingSource.InGamePartyFinder, "Lich", false)]
+    [InlineData(ListingSource.InGamePartyFinder, null, false)]
+    [InlineData(ListingSource.Xivpf, "Cuchulainn", true)]
+    [InlineData(ListingSource.Xivpf, "Bismarck", false)]
+    [InlineData(ListingSource.RpEventCalendar, "Balmung", true)]
+    [InlineData(ListingSource.RpEventCalendar, "Moogle", false)]
+    [InlineData(ListingSource.RpEventCalendar, null, false)]
+    public void AListingIsInTheRegionWhenItsWorldIs(ListingSource source, string? world, bool included) =>
+        Assert.Equal(included, NorthAmerica.Includes(Listing(source, world)));
+
+    [Theory]
+    [InlineData("Balmung", null, true)]
+    [InlineData(null, "Crystal", true)]
+    [InlineData("Lich", "Crystal", true)]
+    [InlineData("Balmung", "Light", true)]
+    [InlineData("Lich", "Light", false)]
+    [InlineData("Nowhere", null, false)]
+    [InlineData(null, null, false)]
+    public void APartakeEventIsInTheRegionWhenItsWorldOrDataCentreIs(string? world, string? dataCentre, bool included) =>
+        Assert.Equal(included, NorthAmerica.Includes(Listing(ListingSource.Partake, world, dataCentre)));
+
+    [Fact]
+    public void AVenueIsMatchedByItsShownAddressNotAsAListing() =>
+        Assert.Throws<ArgumentException>(() => NorthAmerica.Includes(Listing(ListingSource.FfxivVenues, "Balmung")));
+
+    private static FfxivVenues.Shown Venue(string? world) => FfxivVenues.Show(
+        new CachedListing
+        {
+            Source = ListingSource.FfxivVenues,
+            Id = "1",
+            Venue = new FfxivVenues.Fields(new FfxivVenues.Location(world, "Mist", 3, 4, 0, 0, false), null, null, null),
+        },
+        TestGazetteer.Instance);
+
+    [Theory]
+    [InlineData("Balmung", true)]
+    [InlineData("Balmun", true)] // misspelt, corrected when shown
+    [InlineData("Bismarck", false)]
+    [InlineData("Bismark", false)]
+    [InlineData(null, false)] // no address
+    public void AVenueIsInTheRegionWhenItsShownAddressIs(string? world, bool included) =>
+        Assert.Equal(included, NorthAmerica.Includes(Venue(world)));
 }
