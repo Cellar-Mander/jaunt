@@ -399,5 +399,5 @@ Caps on user-configurable lists and text, and how input from other players or th
   of the list (once a second), about 150 events.
 - An FFXIV Venues response is read in one pass over its venues, off the game thread; a venue's links
   are at most two, and titles are cut to 60 characters when shown. The list (about 750 of 1,400 venues,
-  1.6 MB) keeps `listings.json` under about 800 KB. The list derives a venue's title, address, links and
+  1.6 MB) keeps `cache/FfxivVenues.json` under about 800 KB. The list derives a venue's title, address, links and
   24/7 once per change to its cached fields, not per frame.
