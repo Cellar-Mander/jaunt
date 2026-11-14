@@ -200,3 +200,7 @@ Once, after creating the repository from the template. GitHub settings aren't fi
 5. Create the labels the workflows read: `no-changelog` and `mutation`.
 6. Add a ruleset on `main`: require a pull request, block deletion and force pushes, and require the status checks `test / test`, `pr-build / build`, `lint / actionlint` and `lint / zizmor`, with branches up to date. Leave `test / revert-check`, Changelog and Mutation out: they only inform.
 7. Move the Dalamud pin in `.github/dalamud.env` to the Dalamud you test with, as its comment describes.
+
+## License
+
+Jaunt is licensed under AGPL-3.0-or-later (see [LICENSE.md](LICENSE.md)). By contributing, you agree that your contributions are licensed the same way.
