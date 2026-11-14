@@ -210,7 +210,11 @@ public class RpEventCalendarTests
     [InlineData("\"javascript:alert(1)\"")]
     [InlineData("\"\"")]
     [InlineData("null")]
-    public void ShowsOnlyWebLinks(string url) => Assert.Empty(Shown(RowJson(url: url)).Links);
+    public void ShowsOnlyWebLinks(string url)
+    {
+        // revert-check: not revert-sensitive (asserts links are dropped; ShowsThePageLink checks a good one is kept)
+        Assert.Empty(Shown(RowJson(url: url)).Links);
+    }
 
     [Fact]
     public void TitlesAreTheFirstLineCutLikeAVenuesName()
