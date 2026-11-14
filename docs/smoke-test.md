@@ -53,3 +53,25 @@ Then:
 4. **Clear again**: it reports "Removed 1 listing." (the venue just un-hidden).
 5. **Cache file**: `listings.json` still has `"FfxivVenues"` under `lastFetched`, and `/xllog`
    shows no error saving it.
+
+## FFXIV Venues
+
+Checks the fetch, the cooldown and the list; the reading rules are covered by `FfxivVenuesTests`.
+
+1. **First fetch**: with no `FfxivVenues` time under `lastFetched` in `listings.json` (disable Jaunt,
+   remove it, re-enable), open `/jaunt`. Within a few seconds the list fills with "FFXIV Venues" rows,
+   and `/xllog` shows `Fetched … venues from FFXIV Venues`. The game doesn't stutter while it loads.
+2. **Cooldown**: close and reopen `/jaunt`. No second fetch is logged; the venues are still listed.
+   Disable and re-enable Jaunt, then open `/jaunt`: still no fetch, as the time is saved.
+3. **24/7**: at least one row shows "· open 24/7" (Nox Arcana or Splash Bathhouse, as of 2026-11).
+4. **Address**: on a venue, Copy address copies its world, district, ward and plot; Travel works with
+   Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark".
+5. **Links**: Open on a website and a Discord link opens the browser at the URI in the tooltip.
+6. **Scrolling**: scroll quickly through the whole list: rows don't jump or overlap, and the scrollbar
+   reaches the last row.
+7. **Offline**: block the network (or set a bad DNS), clear the `FfxivVenues` fetch time as in 1, and
+   open `/jaunt`. `/xllog` shows a warning "Couldn't fetch venues", the cached venues stay listed, and
+   reopening doesn't retry until the cooldown passes.
+8. **Symbols in names**: no title shows `=` boxes. "꧁Tʜᴇ Aᴜʀᴏʀᴀ Tʜᴇᴀᴛᴇʀ꧂" (Mateus, Shirogane W26 P12)
+   shows as "«The Aurora Theater»", "✦✦✦ 🌴 DESERT ROSE 🌴 ✦✦✦" as "◆◆◆ DESERT ROSE ◆◆◆", and
+   "♥ Crafty Cafe ♥" and "☆KITSU☆" are unchanged.

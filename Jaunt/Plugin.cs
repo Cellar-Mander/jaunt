@@ -32,6 +32,7 @@ public sealed class Plugin : IDalamudPlugin
     internal ListingCache ListingCache { get; }
     private readonly ListingCacheStore listingCacheStore;
     private readonly PartyFinderListings partyFinderListings;
+    private readonly FfxivVenuesListings ffxivVenuesListings;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
@@ -54,8 +55,9 @@ public sealed class Plugin : IDalamudPlugin
 
         ConfigWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(ConfigWindow);
-        var addressParser = new AddressParser(GazetteerLoader.Load(DataManager));
-        ListingsWindow = new ListingsWindow(ListingCache, addressParser, new Lifestream(PluginInterface, Log), NotificationManager);
+        var gazetteer = GazetteerLoader.Load(DataManager);
+        ffxivVenuesListings = new FfxivVenuesListings(ListingCache, gazetteer, Configuration, Framework, Log, SaveListingCache);
+        ListingsWindow = new ListingsWindow(ListingCache, new AddressParser(gazetteer), new Lifestream(PluginInterface, Log), NotificationManager, ffxivVenuesListings.FetchIfDue);
         WindowSystem.AddWindow(ListingsWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -76,6 +78,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         partyFinderListings.Dispose();
+        ffxivVenuesListings.Dispose();
 
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();

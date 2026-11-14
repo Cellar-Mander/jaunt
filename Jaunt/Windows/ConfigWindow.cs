@@ -222,7 +222,7 @@ public sealed class ConfigWindow : Window, IDisposable
             }
 
             ImGui.SameLine();
-            ImGui.TextUnformatted(listing.Title.Length > 0 ? listing.Title : "(untitled)");
+            ImGui.TextUnformatted(ShownText.Title(listing.Title));
             ImGui.SameLine();
             ImGui.TextDisabled(SourceName(listing.Source));
         }
