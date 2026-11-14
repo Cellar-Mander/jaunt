@@ -47,6 +47,20 @@ public sealed class ListingCache
         return listing;
     }
 
+    /// <summary>
+    /// Records that a source listed this Party Finder ad now, the same way for every source that
+    /// carries PF ads: titled by <see cref="ListingDetails.Title"/>, with its text kept for the parsers.
+    /// </summary>
+    /// <param name="adText">The ad's text as the game sends it, glyphs included.</param>
+    /// <param name="listedOn">The world the ad was put up on, or null if the source doesn't say.</param>
+    public CachedListing SeenAd(ListingSource source, string id, string adText, string? listedOn, DateTimeOffset now)
+    {
+        var listing = Seen(source, id, ListingDetails.Title(adText), now);
+        listing.Description = adText;
+        listing.ListedOn = listedOn;
+        return listing;
+    }
+
     public CachedListing? Find(ListingSource source, string id) => listings.GetValueOrDefault((source, id));
 
     /// <summary>Hidden listings, by title.</summary>

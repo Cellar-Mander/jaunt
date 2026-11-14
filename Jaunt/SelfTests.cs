@@ -35,6 +35,13 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
          {"id":"st-2","name":"Self-test Bar","location":{"world":"Bismark","district":"Goblet","ward":3,"plot":7,"apartment":0,"room":0,"subdivision":false},"website":null,"discord":null,"schedule":[],"approved":true}]
         """;
 
+    // Three listings in xivpf's shape: a venue ad, one the game has also sent and a raid
+    private const string XivpfJson = """
+        [{"listing":{"id":9000001,"category":"None","description":{"en":"Self-test Club Mist W14 P33","ja":"Self-test Club Mist W14 P33"},"created_world":{"name":"Cuchulainn"}}},
+         {"listing":{"id":9000002,"category":"None","description":{"en":"Self-test Den Goblet W3 P7"},"created_world":{"name":"Bismarck"}}},
+         {"listing":{"id":9000003,"category":"HighEndDuty","description":{"en":"Self-test raid"},"created_world":{"name":"Cuchulainn"}}}]
+        """;
+
     private sealed class SelfTestFailure(string message) : Exception(message);
 
     // One check: its body yields to wait a frame and throws SelfTestFailure to fail
@@ -87,6 +94,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         new Step("FFXIV Venues: first fetch is recorded", FirstFetch),
         new Step("FFXIV Venues: no fetch inside the 8 h cooldown", Cooldown),
         new Step("FFXIV Venues: a failed fetch counts and keeps venues", FailedFetch),
+        new Step("xivpf: first fetch records None ads beside the game's", XivpfFirstFetch),
     ];
 
     private static void Check(bool condition, string detail)
@@ -313,6 +321,32 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         Check(rig.Handler.Requests == 2, "retried straight after the failure");
     }
 
+    private static IEnumerable<object?> XivpfFirstFetch()
+    {
+        var time = new ManualTime();
+        var cache = new ListingCache();
+        var inGame = cache.Seen(ListingSource.InGamePartyFinder, "9000002", "Self-test Den", time.Now.AddDays(-1));
+        var start = time.Now;
+        var saves = 0;
+        using var listings = FetchedListings.Xivpf(cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, new FakeSource(XivpfJson), time);
+        listings.FetchIfDue();
+        Check(cache.LastFetched(ListingSource.Xivpf) == start, "the request wasn't recorded before it was sent");
+        foreach (var wait in WaitFor(listings.Fetching, "the fetch"))
+            yield return wait;
+
+        var club = cache.Find(ListingSource.Xivpf, "9000001");
+        Check(club?.Description == "Self-test Club Mist W14 P33" && club.ListedOn == "Cuchulainn", "the venue ad wasn't recorded with its text and world");
+        Check(cache.Find(ListingSource.Xivpf, "9000003") is null, "the raid listing was recorded");
+        var den = cache.Find(ListingSource.Xivpf, "9000002");
+        Check(den is not null && Xivpf.ShownInGame(cache, den), "the ad the game also sent isn't left to the in-game copy");
+        Check(inGame.LastSeen == start, "the in-game copy's last seen time didn't move to the fetch");
+        Check(saves >= 2, $"saved {saves} times, not after the request and again after the ads");
+
+        time.Now += TimeSpan.FromMinutes(RefreshPolicy.DefaultCooldownMinutes - 1);
+        listings.FetchIfDue();
+        Check(cache.LastFetched(ListingSource.Xivpf) == start, "fetched again inside the 10 min cooldown");
+    }
+
     private sealed class ManualTime : TimeProvider
     {
         public DateTimeOffset Now { get; set; } = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
@@ -320,8 +354,8 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    // Stands in for FFXIV Venues: answers every request with VenuesJson, or fails like a network error
-    private sealed class FakeVenues : HttpMessageHandler
+    // Stands in for a fetched source: answers every request with the body, or fails like a network error
+    private sealed class FakeSource(string body) : HttpMessageHandler
     {
         private int requests;
 
@@ -334,7 +368,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
             Interlocked.Increment(ref requests);
             if (Fail)
                 throw new HttpRequestException("self-test: no network");
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(VenuesJson, Encoding.UTF8, "application/json") });
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
         }
     }
 
@@ -342,13 +376,13 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
     private sealed class VenueRig : IDisposable
     {
         public ManualTime Time { get; } = new();
-        public FakeVenues Handler { get; } = new();
+        public FakeSource Handler { get; } = new(VenuesJson);
         public ListingCache Cache { get; } = new();
-        public FfxivVenuesListings Listings { get; }
+        public FetchedListings Listings { get; }
         public int Saves { get; private set; }
 
         public VenueRig(Gazetteer gazetteer) =>
-            Listings = new FfxivVenuesListings(Cache, gazetteer, new Configuration(), Plugin.Framework, Plugin.Log, () => Saves++, Handler, Time);
+            Listings = FetchedListings.FfxivVenues(Cache, gazetteer, new Configuration(), Plugin.Framework, Plugin.Log, () => Saves++, Handler, Time);
 
         // Also disposes Handler, through the fetcher's HttpClient
         public void Dispose() => Listings.Dispose();

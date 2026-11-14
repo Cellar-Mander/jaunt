@@ -180,6 +180,31 @@ so a failed one counts too. Download and parsing run off the game thread.
   logged, and the cached venues stay.
 - Only the fields above are read; others, such as managers' Discord IDs, are never stored.
 
+### xivpf
+
+`Xivpf` reads `https://xivpf.com/api/listings`, every Party Finder listing xivpf holds in one
+response, and records each ad in the None category in the listing cache as `Xivpf`, keyed by its PF
+listing ID, the same ID the game gives the listing. Opening the venue list fetches it, unless the
+source is within its cooldown (the Settings cooldown, 10 minutes at least); the request is recorded
+before it is sent, so a failed one counts too. Download and parsing run off the game thread.
+
+- **Category**: only listings whose category is exactly `None`.
+- **Text**: the ad's English text (`description.en`), glyphs included, so the in-game Party Finder's
+  parsers read it unchanged. xivpf gives the text once per client language, differing only in
+  auto-translate phrases; when the English is missing or blank, the first other language that isn't.
+  An ad with no text in any language is skipped.
+- **Title** as for an in-game ad: the first line of the normalised text, cut to 60 characters.
+- **Listed on**: the world the ad was put up on (`created_world.name`), trimmed, as the in-game
+  Party Finder gives it; none when it is missing or blank.
+- **Seen in both**: when the in-game Party Finder has sent a listing with the same ID, the list
+  shows only the in-game copy, whatever its marks; the xivpf copy stays in the cache. Recording an
+  xivpf ad moves the in-game copy's last seen time up to now (never back), since it was listed then.
+- A listing without a whole-number ID of 0 or more, or whose fields have the wrong types, is skipped
+  without failing the others. A response that isn't a JSON array fails the fetch, which is logged,
+  and the cached ads stay.
+- Only the fields above are read; others, such as the recruiter's name and the party's jobs, are
+  never stored.
+
 ### Text the font can't draw
 
 Venue names and ad titles use characters the plugin's font lacks (ImGui draws those as a box). The
@@ -210,10 +235,11 @@ two-pane browser (`cdd9e95f`) replaces this list.
   included) and the world it is listed on (`listedOn`). Its title is the first line of the
   normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
   the first change since the last save, and on unload, not once per listing.
-- **List**: in-game Party Finder listings with at least one parsed address and FFXIV Venues venues
-  with an address, not hidden, most recently seen first and then by title, each with its source
-  ("Party Finder" or "FFXIV Venues"), "open 24/7" when it is, and "seen … ago". Titles are drawn as
-  in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
+- **List**: in-game and xivpf Party Finder listings with at least one parsed address and FFXIV
+  Venues venues with an address, not hidden, most recently seen first and then by title, each with
+  its source ("Party Finder", "Party Finder (xivpf)" or "FFXIV Venues"). An xivpf ad the game has
+  also sent shows once, as the in-game copy (see "xivpf"). Each row shows "open 24/7" when it is,
+  and "seen … ago". Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
   are spaced by their last drawn height and not drawn.
 - **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
   apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
@@ -239,6 +265,9 @@ Caps on user-configurable lists and text, and how input from other players or th
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
+- An xivpf response (about 700 listings, 1.6 MB) is read in one pass over its listings, off the
+  game thread, keeping about 150 ads; their text is at most a few hundred characters. Checking
+  whether the game also sent an ad is one cache lookup.
 - An FFXIV Venues response is read in one pass over its venues, off the game thread; a venue's links
   are at most two, and titles are cut to 60 characters. The full list (about 1,400 venues, 2.5 MB)
   makes `listings.json` about 600 KB.
