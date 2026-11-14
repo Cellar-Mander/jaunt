@@ -1,3 +1,5 @@
+using Jaunt.Core.Text;
+
 namespace Jaunt.Core.Listings;
 
 /// <summary>A listing kept between sessions, with the user's marks on it.</summary>
@@ -15,6 +17,18 @@ public sealed class CachedListing
 
     /// <summary>The world the source last listed it on, if it says; addresses that name no world use it.</summary>
     public string? ListedOn { get; set; }
+
+    /// <summary>
+    /// The address the source gives as data, for sources with structured addresses (FFXIV Venues).
+    /// Null for ads, whose addresses are parsed from <see cref="Description"/>.
+    /// </summary>
+    public HousingAddress? Address { get; set; }
+
+    /// <summary>The website and Discord links the source gives as data, http or https only.</summary>
+    public IReadOnlyList<Uri> Links { get; set; } = [];
+
+    /// <summary>Open around the clock, as inferred from the source's schedule.</summary>
+    public bool AlwaysOpen { get; set; }
 
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }

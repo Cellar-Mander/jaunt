@@ -3,7 +3,7 @@ namespace Jaunt.Core.Text;
 /// <summary>Where an address's world came from.</summary>
 public enum WorldSource
 {
-    /// <summary>The ad's text names it.</summary>
+    /// <summary>The ad's text names it, or the source gives it as data.</summary>
     Text,
 
     /// <summary>

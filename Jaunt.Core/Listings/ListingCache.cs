@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Listings;
 
@@ -116,6 +117,8 @@ public sealed class ListingCache
                 continue;
             listing.Title ??= "";
             listing.Description ??= "";
+            // A hand-edited file must not make Open launch anything but a website
+            listing.Links = [.. (listing.Links ?? []).Where(WebLinks.IsWeb)];
             cache.listings[(listing.Source, listing.Id)] = listing;
         }
 

@@ -149,6 +149,56 @@ to `listings.json.bad` and the cache starts empty.
   unmarked listings, since they can't reliably be matched to a later listing; the window doesn't
   mention this. Clear still keeps marked one-offs.
 - **Hidden venues** lists hidden listings by title, case-insensitively, each with an Un-hide button.
+  Titles are drawn as in "Text the font can't draw".
+
+### FFXIV Venues
+
+`FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue`, every venue in one response, and
+records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with its address, links
+and whether it is open 24/7. Opening the venue list fetches it, unless the source is within its
+cooldown (8 hours, or the Settings cooldown if longer); the request is recorded before it is sent,
+so a failed one counts too. Download and parsing run off the game thread.
+
+- **Title**: the venue's name, first line only, trimmed and cut to 60 characters like an ad's.
+- **Address**: from the venue's location: the world, a district (`Mist`, `Lavender Beds`, `Goblet`,
+  `Shirogane`, `Empyreum`, with or without "The"), a ward of 1–30, then a plot of 1–60, or else an
+  apartment over 0 with the location's subdivision flag, and a room over 0. A plot wins over an
+  apartment. A world the game data doesn't know is corrected to the one world sharing its longest
+  beginning of at least 5 letters ("Bismark" → Bismarck), and otherwise kept as written. A venue with
+  no world, an unknown district or a ward outside 1–30 (such as one giving only a free-text location)
+  has no address and isn't in the venue list.
+- **Links**: the website then the Discord, http or https only. One without a scheme is read like a
+  link in ad text (`discord.gg/abc` opens as https); any other scheme is dropped. The same link twice
+  is kept once. On load, the cache drops any saved link that isn't http or https.
+- **Open 24/7**: every day of the week (days 0–6) has an opening that repeats every week (interval
+  type 0, every 1 week) and lasts at least 23 h 59 min, end minus start plus a day when the end is the
+  next day. The site's form can't end at 24:00, so venues open around the clock enter 00:00–23:59.
+  An opening with no end (the API reads it as 3 hours), every other week or monthly doesn't count.
+  Schedule overrides don't change it.
+- A venue without an ID, or marked not approved, is skipped; one whose fields have the wrong types
+  is skipped without failing the others. A response that isn't a JSON array fails the fetch, which is
+  logged, and the cached venues stay.
+- Only the fields above are read; others, such as managers' Discord IDs, are never stored.
+
+### Text the font can't draw
+
+Venue names and ad titles use characters the plugin's font lacks (ImGui draws those as a box). The
+font is Dalamud's default: the game font, Noto Sans CJK and FontAwesome; no other font Dalamud ships
+has these characters. `FontFallback.Fold` rewrites a title for display only (the cache, Copy and
+Hidden venues' matching keep it as written), in one pass:
+
+- **Small capitals** (ᴀ ʙ ᴄ … ʜ ʀ ᴛ ᴜ) are always the lower-case letter, even when the font has a
+  glyph: ʜ and ʀ are FontAwesome icons in it. "Tʜᴇ Aᴜʀᴏʀᴀ" shows as "The Aurora".
+- Any other character the font has is kept.
+- **Look-alikes**, only when the font lacks the character and has the stand-in: Canadian syllabics
+  used as letters (ᗩ A, ᗷ B, ᑕ C, ᗪ D, ᗴ E, ᖴ F, ᕼ H, ᒍ J, ᒪ L, ᗰ M, ᑎ N, ᑭ P, ᑫ Q, ᖇ R, ᔕ S,
+  ᑌ U, ᐯ V, ᗯ W), ⅃ L, Ǝ E, ✦ ◆, ✧ ◇, ✩ ✰ ☆, ✪–✯ ★, ❤ ♥, and the Javanese ornaments ꧁ ꧂ as « ».
+- **Compatibility forms** whose plain form the font has: the bold, italic and Fraktur "maths" letters
+  (𝗛𝗢𝗪𝗟 → HOWL, 𝟙 → 1) and full-width letters, by Unicode's NFKC decomposition.
+- Anything else the font lacks, such as emoji, joiners and variation selectors, is left out. When
+  something is left out, runs of spaces close up and trailing spaces go ("✦ 🌴 ROSE" → "◆ ROSE").
+- Whitespace is always kept. ImGui's characters are 16-bit, so nothing beyond U+FFFF counts as in the font.
+- Text that needs no change is returned as it is. Each title is folded once per font, not per frame.
 
 ### Venue list (MVP)
 
@@ -160,8 +210,11 @@ two-pane browser (`cdd9e95f`) replaces this list.
   included) and the world it is listed on (`listedOn`). Its title is the first line of the
   normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
   the first change since the last save, and on unload, not once per listing.
-- **List**: in-game Party Finder listings that are not hidden and have at least one parsed address,
-  most recently seen first, each with "seen … ago". Each ad is parsed once per text, not per frame.
+- **List**: in-game Party Finder listings with at least one parsed address and FFXIV Venues venues
+  with an address, not hidden, most recently seen first and then by title, each with its source
+  ("Party Finder" or "FFXIV Venues"), "open 24/7" when it is, and "seen … ago". Titles are drawn as
+  in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
+  are spaced by their last drawn height and not drawn.
 - **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
   apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
   ", Room B1". Districts use their English names. This is the shape Lifestream's address book reads.
@@ -186,3 +239,6 @@ Caps on user-configurable lists and text, and how input from other players or th
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
+- An FFXIV Venues response is read in one pass over its venues, off the game thread; a venue's links
+  are at most two, and titles are cut to 60 characters. The full list (about 1,400 venues, 2.5 MB)
+  makes `listings.json` about 600 KB.

@@ -15,8 +15,9 @@ using Jaunt.Travel;
 namespace Jaunt.Windows;
 
 /// <summary>
-/// The MVP listing window: Party Finder venue ads with a parsed address, newest first, each address
-/// with Travel and Copy address and each link with Open. The two-pane browser (cdd9e95f) replaces it.
+/// The MVP listing window: Party Finder venue ads with a parsed address and FFXIV Venues venues with
+/// an address, newest first, each address with Travel and Copy address and each link with Open. The
+/// two-pane browser (cdd9e95f) replaces it.
 /// </summary>
 internal sealed class ListingsWindow : Window
 {
@@ -26,15 +27,19 @@ internal sealed class ListingsWindow : Window
     private readonly AddressParser parser;
     private readonly Lifestream lifestream;
     private readonly INotificationManager notifications;
+    private readonly Action fetchSources;
 
     // Parsed once per ad text, so drawing doesn't re-parse every frame
     private readonly Dictionary<(ListingSource, string), (string Description, ListingDetails Details)> parsed = [];
     private List<(CachedListing Listing, ListingDetails Details)> rows = [];
+    private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
     private DateTimeOffset nextRebuild;
 
-    public ListingsWindow(ListingCache cache, AddressParser parser, Lifestream lifestream, INotificationManager notifications)
+    /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
+    public ListingsWindow(ListingCache cache, AddressParser parser, Lifestream lifestream, INotificationManager notifications, Action fetchSources)
         : base("Jaunt###JauntListings")
     {
+        this.fetchSources = fetchSources;
         this.cache = cache;
         this.parser = parser;
         this.lifestream = lifestream;
@@ -44,7 +49,11 @@ internal sealed class ListingsWindow : Window
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 240), MaximumSize = new Vector2(1600, 1600) };
     }
 
-    public override void OnOpen() => nextRebuild = DateTimeOffset.MinValue;
+    public override void OnOpen()
+    {
+        fetchSources();
+        nextRebuild = DateTimeOffset.MinValue;
+    }
 
     public override void Draw()
     {
@@ -57,35 +66,66 @@ internal sealed class ListingsWindow : Window
 
         if (rows.Count == 0)
         {
-            ImGui.TextWrapped("No venue ads with an address yet. Open the Party Finder and browse the None category to load them.");
+            ImGui.TextWrapped("No venues with an address yet. Open the Party Finder and browse the None category, or wait for FFXIV Venues to load.");
             return;
         }
 
         var travelAvailable = lifestream.Available;
+        var lineHeight = ImGui.GetTextLineHeightWithSpacing();
         foreach (var (listing, details) in rows)
         {
-            using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
-            ImGui.TextUnformatted(listing.Title.Length > 0 ? listing.Title : "(untitled)");
-            ImGui.SameLine();
-            ImGui.TextDisabled(SeenAgo(now - listing.LastSeen));
-
-            using (ImRaii.PushIndent())
+            // FFXIV Venues alone lists over a thousand venues, so rows out of view are only spaced, not drawn
+            var key = (listing.Source, listing.Id);
+            var top = ImGui.GetCursorPosY();
+            var lines = 1 + details.Addresses.Count + details.Links.Count;
+            var height = rowHeights.TryGetValue(key, out var measured) && measured.Lines == lines
+                ? measured.Height
+                : lines * lineHeight;
+            if (!ImGui.IsRectVisible(new Vector2(1, height)))
             {
-                for (var i = 0; i < details.Addresses.Count; i++)
-                {
-                    using var addressId = ImRaii.PushId($"a{i}");
-                    DrawAddress(details.Addresses[i], travelAvailable);
-                }
-
-                for (var i = 0; i < details.Links.Count; i++)
-                {
-                    using var linkId = ImRaii.PushId($"l{i}");
-                    DrawLink(details.Links[i]);
-                }
+                ImGui.SetCursorPosY(top + height);
+                continue;
             }
 
-            ImGui.Separator();
+            DrawRow(listing, details, now, travelAvailable);
+            rowHeights[key] = (lines, ImGui.GetCursorPosY() - top);
         }
+
+        // Keeps the content height right when the last row was only spaced
+        ImGui.Dummy(Vector2.Zero);
+    }
+
+    private void DrawRow(CachedListing listing, ListingDetails details, DateTimeOffset now, bool travelAvailable)
+    {
+        using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
+        ImGui.TextUnformatted(ShownText.Title(listing.Title));
+        ImGui.SameLine();
+        ImGui.TextDisabled(listing.Source == ListingSource.FfxivVenues ? "FFXIV Venues" : "Party Finder");
+        if (listing.AlwaysOpen)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled("· open 24/7");
+        }
+
+        ImGui.SameLine();
+        ImGui.TextDisabled("· " + SeenAgo(now - listing.LastSeen));
+
+        using (ImRaii.PushIndent())
+        {
+            for (var i = 0; i < details.Addresses.Count; i++)
+            {
+                using var addressId = ImRaii.PushId($"a{i}");
+                DrawAddress(details.Addresses[i], travelAvailable);
+            }
+
+            for (var i = 0; i < details.Links.Count; i++)
+            {
+                using var linkId = ImRaii.PushId($"l{i}");
+                DrawLink(details.Links[i]);
+            }
+        }
+
+        ImGui.Separator();
     }
 
     private void DrawAddress(HousingAddress address, bool travelAvailable)
@@ -135,13 +175,26 @@ internal sealed class ListingsWindow : Window
         ImGui.TextUnformatted(link.Text);
     }
 
-    /// <summary>Lists the visible ads that have an address, newest first, parsing only text that changed.</summary>
+    /// <summary>
+    /// Lists the visible listings that have an address, newest first and then by title, parsing only
+    /// ad text that changed.
+    /// </summary>
     private void Rebuild()
     {
         var next = new List<(CachedListing, ListingDetails)>();
         foreach (var listing in cache.Listings)
         {
-            if (listing.Hidden || listing.Source != ListingSource.InGamePartyFinder)
+            if (listing.Hidden)
+                continue;
+
+            if (listing.Source == ListingSource.FfxivVenues)
+            {
+                if (listing.Address is { } address)
+                    next.Add((listing, new ListingDetails([address], [.. listing.Links.Select(uri => new WebLink(uri.OriginalString, uri))])));
+                continue;
+            }
+
+            if (listing.Source != ListingSource.InGamePartyFinder)
                 continue;
 
             var key = (listing.Source, listing.Id);
@@ -155,13 +208,19 @@ internal sealed class ListingsWindow : Window
                 next.Add((listing, entry.Details));
         }
 
-        rows = [.. next.OrderByDescending(r => r.Item1.LastSeen)];
+        rows = [.. next.OrderByDescending(r => r.Item1.LastSeen).ThenBy(r => r.Item1.Title, StringComparer.CurrentCultureIgnoreCase)];
 
         // Forget ads the cache no longer holds (cleared or expired)
         if (parsed.Count > cache.Count)
         {
             foreach (var key in parsed.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
                 parsed.Remove(key);
+        }
+
+        if (rowHeights.Count > cache.Count)
+        {
+            foreach (var key in rowHeights.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
+                rowHeights.Remove(key);
         }
     }
 
