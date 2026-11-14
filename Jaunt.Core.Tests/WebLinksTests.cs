@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Tests;
@@ -107,13 +106,10 @@ public class WebLinksTests
     private static Dictionary<string, (string, string[])> Load()
     {
         var ads = new Dictionary<string, (string, string[])>();
-        var path = Path.Combine(AppContext.BaseDirectory, "Corpus", "pf-listings.jsonl");
-        foreach (var line in File.ReadLines(path).Where(l => l.Length > 0))
+        foreach (var (id, root) in PfCorpus.Ads())
         {
-            using var doc = JsonDocument.Parse(line);
-            var root = doc.RootElement;
             var expected = root.GetProperty("labels").GetProperty("urls").EnumerateArray().Select(u => u.GetString()!).ToArray();
-            ads[root.GetProperty("id").GetString()!] = (root.GetProperty("text").GetString()!, expected);
+            ads[id] = (root.GetProperty("text").GetString()!, expected);
         }
 
         return ads;
