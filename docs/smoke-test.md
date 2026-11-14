@@ -15,7 +15,7 @@ Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* a
 ## Loading
 
 1. `/xllog` shows `Jaunt <version>+<commit> loaded`, with this checkout's commit.
-2. `/jaunt` opens the venue list; running it again closes it. `/jaunt config` opens the settings window and leaves it open when run again. *(self-test)*
+2. `/jaunt` opens the listing browser; running it again closes it. `/jaunt config` opens the settings window and leaves it open when run again. *(self-test)*
 3. `/xlplugins` → Installed Plugins shows a settings button for the plugin, which opens the same window.
 4. Change a setting, disable and re-enable the plugin: the setting is kept. *(self-test: Dalamud's save and load; the reload stays manual)*
 
@@ -68,18 +68,49 @@ Then:
    from `marks.json.bak`; an unreadable `cache/<source>.json` is moved to `cache/<source>.json.bad` and
    that source starts empty. *(self-test)*
 
+## Listing browser
+
+Checks the layout, drawing and selection; grouping, which openings are listed, the order and the
+status text are covered by `DayGroupsTests`, `SchedulesTests` and `StatusTextTests`. Venues cached
+before this version have no openings until FFXIV Venues is fetched again: clear the `FfxivVenues/…`
+times as in FFXIV Venues 1 first.
+
+1. **Layout**: `/jaunt` opens a window with the list on the left and a detail pane on the right. The
+   title bar has a cog that opens Settings. Resize the window to its smallest: both panes stay usable.
+   At Steam Deck size (1280×800) with a raised font scale (`/xlsettings` → Look & Feel → Global Font
+   Scale), rows and the detail pane aren't clipped.
+2. **Groups**: dividers read "Open now", then "Today" with the weekday dimmed (if anything opens
+   later today), "Tomorrow" and the weekday, then dates in the Settings format with the weekday
+   dimmed. 24/7 venues are at the end of "Open now". A venue open now also shows under its next
+   opening's day; one not open shows once.
+3. **Rows**: each has a grey square, a status line (green "Open now · until …" or the times), the
+   title and the world. Narrow the window: long titles end in "…" rather than running under the
+   detail pane.
+4. **Local time**: change Settings → Display between 12- and 24-hour and the date formats; rows,
+   dividers and the detail follow at once. A venue's opening matches its FFXIV Venues page in your
+   time zone.
+5. **Detail**: select a Party Finder ad, a venue, a Partake event and a calendar event. Each shows a
+   grey band, its title, status, world, Travel and Open page where it has an address or link, Location,
+   and a footer naming its source. A long ad shows "Read more", which expands it and becomes "Show less".
+6. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
+   Disable and re-enable Jaunt: still selected. Press Settings → Clear cached listings, so it drops
+   out of the data: the detail pane shows "Select a listing on the left to see its details."
+7. **Empty states**: with nothing selected, the detail pane shows the help text. With nothing listed
+   (log in a character in a region with no cached listings, with the network blocked), the list shows
+   a joke line such as "No one here but us chickens." and the detail pane is blank.
+
 ## xivpf
 
 Checks the fetch, the cooldown and the list; the reading rules are covered by `XivpfTests`.
 
 1. **First fetch**: with no `Xivpf` time in `fetch-state.json` (disable Jaunt,
    remove it, re-enable), open `/jaunt` without opening the Party Finder. Within a few seconds
-   "Party Finder (xivpf)" rows appear, and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
+   ads appear whose detail footer says "Listed on Party Finder (xivpf)", and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
    *(self-test: the request is recorded before it is sent and only None ads after it, against a stand-in; the real site stays manual)*
 2. **Cooldown**: close and reopen `/jaunt` within 10 minutes: no second fetch is logged. After 10
    minutes, reopening fetches again. *(self-test: no fetch a minute before the 10 min are up)*
 3. **Seen in both**: open the Party Finder's None category and browse a page, then reopen `/jaunt`.
-   A venue ad listed both ways shows once, as "Party Finder", not also as "Party Finder (xivpf)".
+   A venue ad listed both ways shows once, its footer saying "Party Finder", not "Party Finder (xivpf)".
    This also checks that xivpf's listing IDs match the game's. *(self-test: the in-game copy wins, against a stand-in)*
 4. **Offline**: as in FFXIV Venues 7, with the `Xivpf` fetch time: `/xllog` shows a warning
    "Couldn't fetch Party Finder ads from xivpf", and the cached ads stay listed.
@@ -89,15 +120,15 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `X
 Checks the fetch, the cooldown and the list; the reading rules are covered by `PartakeTests`.
 
 1. **First fetch**: with no `Partake` time in `fetch-state.json` (disable Jaunt,
-   remove it, re-enable), open `/jaunt`. Within a few seconds "Partake" rows appear, each with a
-   second line of times and "World (Data centre)", and `/xllog` shows `Fetched … events from Partake`.
+   remove it, re-enable), open `/jaunt`. Within a few seconds Partake events appear, each row
+   with its times and "World (Data centre)", and `/xllog` shows `Fetched … events from Partake`.
    *(self-test: one POST, the request recorded before it is sent, and only events that haven't ended and have a world, against a stand-in; the real site stays manual)*
 2. **Times**: an event's times match its page on partake.gg in your local time, in the time and
-   date formats chosen in Settings. One under way says "on now".
-3. **Location**: an event whose location names a district, ward and plot has Travel and Copy
-   address; one whose location Jaunt can't read shows the text instead.
+   date formats chosen in Settings. One under way is under "Open now" and says "Open now · until …".
+3. **Location**: selected, an event whose location names a district, ward and plot has Travel and
+   Copy; one whose location Jaunt can't read shows the text under Location instead.
 4. **Credit**: the list ends with "Events from Partake (partake.gg). Jaunt is not affiliated with or
-   endorsed by Partake."
+   endorsed by Partake.", and a selected event's footer says it is not affiliated with or endorsed by Partake.
 5. **Cooldown**: close and reopen `/jaunt`: no second Partake fetch is logged within 8 hours.
    *(self-test: no fetch a minute before the 8 h are up)*
 6. **Offline**: as in FFXIV Venues 7, with the `Partake` fetch time: `/xllog` shows a warning
@@ -108,15 +139,15 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `P
 Checks the fetch, the cooldown and the list; the reading rules are covered by `RpEventCalendarTests`.
 
 1. **First fetch**: with no `RpEventCalendar` time in `fetch-state.json` (disable
-   Jaunt, remove it, re-enable), open `/jaunt`. Within a few seconds rows credited "FFXIV RP Event
-   Calendar · CC BY-SA 4.0" appear, and `/xllog` shows `Fetched … events from the FFXIV RP Event Calendar`.
+   Jaunt, remove it, re-enable), open `/jaunt`. Within a few seconds calendar events appear, their
+   detail footer crediting "FFXIV RP Event Calendar · CC BY-SA 4.0", and `/xllog` shows `Fetched … events from the FFXIV RP Event Calendar`.
    *(self-test: the request is recorded before it is sent and the events after it, against a stand-in; the real site stays manual)*
 2. **Cooldown**: with the Settings cooldown at 10 minutes, close and reopen `/jaunt` after 10
    minutes: no second calendar fetch is logged. *(self-test: no fetch a minute before the 8 h are up)*
-3. **Rows**: an event shows "Next …" or "On now until …" in your time zone and the Settings formats,
-   then "validated …" with a year or "never validated". An open-world event shows its location as
-   text with no Travel button. *(self-test: the address, location, dates and validation are recorded)*
-4. **Credit**: hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
+3. **Detail**: a selected event shows its date and times or "Open now · until …" in your time zone and
+   the Settings formats, and in its footer "Validated …" with a year or "Never validated". An open-world
+   event shows its location as text with no Travel button. An event with no upcoming date isn't listed. *(self-test: the address, location, dates and validation are recorded)*
+4. **Credit**: in the footer, hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
    clicking it opens the site. "CC BY-SA 4.0" does the same with the licence page.
 5. **No contacts**: `cache/RpEventCalendar.json` holds no `contacts` and no Discord handles from the calendar. *(self-test)*
 
@@ -125,17 +156,17 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `R
 Checks the fetch, the cooldown and the list; the reading rules are covered by `FfxivVenuesTests`.
 
 1. **First fetch**: with no `FfxivVenues/…` times in `fetch-state.json` (disable Jaunt,
-   remove them, re-enable), open `/jaunt`. Within a few seconds the list fills with "FFXIV Venues" rows,
+   remove them, re-enable), open `/jaunt`. Within a few seconds the list fills with venues (footer "Listed on FFXIV Venues"),
    only on your region's worlds, `/xllog` shows `Fetched … venues from FFXIV Venues`, and
    `fetch-state.json` has one `FfxivVenues/<data centre>` time per data centre in your region. The game doesn't stutter while it loads.
    *(self-test: Materia's request, with `dataCenter=Materia`, is recorded before it is sent and the venues after it, against a stand-in; the real site and the stutter stay manual)*
 2. **Cooldown**: close and reopen `/jaunt`. No second fetch is logged; the venues are still listed.
    Disable and re-enable Jaunt, then open `/jaunt`: still no fetch, as the time is saved.
    *(self-test: no fetch a minute before the 8 h are up, one when they are; the reload stays manual)*
-3. **24/7**: at least one row shows "· open 24/7" (Nox Arcana or Splash Bathhouse, as of 2026-11).
-4. **Address**: on a venue, Copy address copies its world, district, ward and plot; Travel works with
+3. **24/7**: at least one row at the end of "Open now" shows "Open 24/7" (Nox Arcana or Splash Bathhouse, as of 2026-11).
+4. **Address**: on a selected venue, Copy copies its world, district, ward and plot; Travel works with
    Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark". *(self-test: the Bismarck spelling)*
-5. **Links**: Open on a website and a Discord link opens the browser at the URI in the tooltip.
+5. **Links**: Open page, and Open beside a further link under Location, open the browser at the URI in the tooltip.
 6. **Scrolling**: scroll quickly through the whole list: rows don't jump or overlap, and the scrollbar
    reaches the last row.
 7. **Offline**: block the network (or set a bad DNS), clear the `FfxivVenues/…` fetch times as in 1, and

@@ -31,6 +31,12 @@ public abstract class ConfigurationBase
     /// <summary>Settings → Display.</summary>
     public DateFormat DateFormat { get; set; } = DateFormat.System;
 
+    /// <summary>The source of the listing last selected in the browser, or null when none is.</summary>
+    public ListingSource? SelectedSource { get; set; }
+
+    /// <summary>The ID within <see cref="SelectedSource"/> of the listing last selected in the browser.</summary>
+    public string? SelectedId { get; set; }
+
     /// <summary>Which Settings groups are expanded; null until <see cref="Normalize"/>, which opens them all.</summary>
     public HashSet<SettingsSection>? ExpandedSections { get; set; }
 
@@ -44,5 +50,10 @@ public abstract class ConfigurationBase
             DateFormat = DateFormat.System;
         ExpandedSections ??= [.. Enum.GetValues<SettingsSection>()];
         ExpandedSections.RemoveWhere(section => !Enum.IsDefined(section));
+        if (SelectedSource is { } source && !Enum.IsDefined(source) || SelectedSource is null != SelectedId is null)
+        {
+            SelectedSource = null;
+            SelectedId = null;
+        }
     }
 }

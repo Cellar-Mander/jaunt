@@ -226,7 +226,14 @@ public static class FfxivVenues
 
     /// <param name="Day">0 is Monday.</param>
     /// <param name="End">Null means the API's default of three hours after the start.</param>
-    public sealed record Opening(int Day, Time? Start, Time? End, Interval? Interval);
+    /// <param name="Resolution">
+    /// The occurrence the API worked out when sent: the one in progress or the next, in UTC. Null if
+    /// missing, as in venues cached before it was kept.
+    /// </param>
+    public sealed record Opening(int Day, Time? Start, Time? End, Interval? Interval, Resolution? Resolution = null);
+
+    /// <summary>One occurrence of a schedule entry as the API resolved it, in UTC.</summary>
+    public sealed record Resolution(DateTimeOffset Start, DateTimeOffset End);
 
     public sealed record Time(int Hour, int Minute, bool NextDay);
 
