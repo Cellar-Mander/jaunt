@@ -11,8 +11,8 @@ namespace Jaunt.Listings;
 /// there) in the listing cache, and saves the cache a few seconds after the last change.
 /// </summary>
 /// <remarks>
-/// The game sends listings in batches while the player browses the Party Finder, and saving
-/// serialises the whole cache, so saves are batched rather than made per listing.
+/// The game sends listings in batches while the player browses the Party Finder, and a save
+/// snapshots every in-game ad, so saves are batched rather than made per listing.
 /// </remarks>
 internal sealed class PartyFinderListings : IDisposable
 {

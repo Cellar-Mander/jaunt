@@ -134,12 +134,40 @@ expanded until collapsed; which are expanded is saved too. Each change saves at 
 ### Listing cache
 
 `ListingCache` keeps every listing seen, keyed by source and the source's ID (the same ID in two
-sources is two listings), with its title, when it was last seen, whether it is a one-off event
-(as the source last said) and the favourited, visited and hidden marks. It is saved as
-`listings.json` in the plugin's config folder, as `listings` plus `lastFetched` (each source's
-last fetch time, by source name; unknown names are dropped on load). An unreadable file is moved
-to `listings.json.bad` and the cache starts empty. On load, a saved opening that doesn't end after
-it starts is dropped.
+sources is two listings), with when it was last seen, whether it is a one-off event (as the source
+last said) and the favourited, visited and hidden marks. It is saved in the plugin's config folder
+as separate files, each with a `version` (1); sources are named, not numbered:
+
+- `marks.json`: each marked listing's source, ID, title and one-off flag, and its three marks.
+  Written when a mark changes, when a marked listing's title, ad text or one-off flag changes, and
+  when a marked listing expires. The file it replaces is kept as `marks.json.bak`.
+- `fetch-state.json`: each source's last fetch time (`lastFetched`). Written on each fetch.
+- `cache/<source>.json` (e.g. `cache/FfxivVenues.json`): each listing as the source sent it, in
+  the source's own shape (a Party Finder ad's text and world; a venue's name and fields; an event's
+  values), with when it was last seen. Written only when that source records, re-sees or loses a
+  listing. An xivpf ad the game also sent writes both ad files when it moves the in-game copy's
+  last-seen time.
+
+Nothing derived is saved: titles shown, an ad's title, addresses, opening times, 24/7 and
+whether a listing is marked are worked out again from what the source sent. An ad's title is
+worked out the first time it is read after its text changes, not on load. A save snapshots
+the changed files' contents on the game thread and serialises and writes them on a background
+task, after any earlier save; each file is written to a temporary file and renamed into place.
+
+On load:
+
+- Each file is read on its own. One that is unreadable or has a later `version` is moved aside
+  with `.bad` added to its name and its part starts empty. If `marks.json` is missing or
+  unreadable, `marks.json.bak` is read instead.
+- Unknown source names, entries without an ID and, in fetch times, the in-game Party Finder are
+  dropped. A saved opening that doesn't end after it starts is dropped, and a Partake event that
+  had ended when last seen is dropped.
+- A mark whose listing no source file holds still adds the listing, with the mark's title, so the
+  hidden list shows it. It was last seen at no known time, so a marked one-off expires (see below).
+  A listing whose title is empty takes the mark's title.
+- With neither marks file, a `listings.json` from an earlier version (listings, marks and fetch
+  times together) is read, written out as the files above and, once all are written, renamed to
+  `listings.json.old`. An unreadable one is moved to `listings.json.bad` and the cache starts empty.
 
 - **Clear cached listings** asks for confirmation, warning that rate-limited sources may not show
   in the browser again for hours, then removes every listing that is not favourited, visited or
@@ -351,8 +379,12 @@ Caps on user-configurable lists and text, and how input from other players or th
 
 - Address parsing reads a bounded number of words around each address, plus one pass over the ad for
   a full world name when an address names none. Ads are at most a few hundred characters, so this stays small.
-- The listing cache is a dictionary keyed by source and ID, so recording a listing doesn't grow
+- The listing cache is a dictionary per source keyed by ID, so recording a listing doesn't grow
   with the cache. Expiry bounds its size to the listings seen in the last month plus the marked recurring ones.
+  A save copies only the changed sources' listings on the game thread (about 0.1 ms for 400 in-game
+  ads, 0.5 ms for 1,400 venues) and serialises them off it. Loading every file takes about 20 ms for
+  2,700 listings; working out every listing's address and schedule once takes about 130–280 ms, on the
+  list's first rebuild, as before.
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.

@@ -54,8 +54,8 @@ public static class Xivpf
         foreach (var ad in ads)
         {
             cache.SeenAd(ListingSource.Xivpf, ad.Id, ad.Description, ad.ListedOn, now);
-            if (cache.Find(ListingSource.InGamePartyFinder, ad.Id) is { } inGame && now > inGame.LastSeen)
-                inGame.LastSeen = now;
+            if (cache.Find(ListingSource.InGamePartyFinder, ad.Id) is { } inGame)
+                cache.SeenElsewhere(inGame, now);
         }
     }
 

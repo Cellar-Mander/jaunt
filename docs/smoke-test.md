@@ -8,7 +8,7 @@ Setup: deploy with `dotnet buildingway dev-plugin deploy <task-ref>` (see "Testi
 
 To run the checks that need no look at the screen and no click, open Dalamud's self-test window (`/xldev`, Dalamud menu, Open Self-Test), pick the `Jaunt` group and press play. Each check is its own step, so the table shows which passed or failed, and Jump runs any one on its own. Each step logs `Self-test PASS: <step>` or `Self-test FAIL: <step> (<detail>)`; on Linux, `grep 'Self-test' ~/.xlcore/logs/dalamud.log | tail` shows the result.
 
-The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never the real `listings.json`; the FFXIV Venues, xivpf, Partake and RP Event Calendar steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Two warnings in `/xllog` are expected, each announced by a `Self-test: … expected` line just before it.
+The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never your real cache files; the FFXIV Venues, xivpf, Partake and RP Event Calendar steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Three warnings in `/xllog` are expected, announced by `Self-test: … expected` lines just before them.
 
 Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* are covered only for the part named, so finish them by hand. Unmarked checks stay manual: how things look, clicks, reloading the plugin and the real network.
 
@@ -44,11 +44,14 @@ favourite and one visited, two hidden, plus an old unmarked listing and an old h
 expire on load. Its dates are 2000 or 2099, so the results below hold until 2099.
 `SmokeTestListingsTests` keeps the file and this list in step.
 
-Loading the plugin rewrites `listings.json`, so copy the sample in again before each run:
+The sample is in the single `listings.json` earlier versions saved, which loading moves to the
+current files once, so copy it in again before each run:
 
 1. Disable Jaunt in `/xlplugins`.
-2. Copy `Jaunt.Core.Tests/Fixtures/smoke-test-listings.json` to the plugin's config folder as `listings.json`
-   (`~/.xlcore/pluginConfigs/Jaunt/` on Linux, `%AppData%\XIVLauncher\pluginConfigs\Jaunt\` on Windows).
+2. In the plugin's config folder (`~/.xlcore/pluginConfigs/Jaunt/` on Linux,
+   `%AppData%\XIVLauncher\pluginConfigs\Jaunt\` on Windows), move `marks.json`, `marks.json.bak`,
+   `fetch-state.json` and the `cache` folder somewhere safe if you want to keep them, then copy
+   `Jaunt.Core.Tests/Fixtures/smoke-test-listings.json` there as `listings.json`.
 3. Enable Jaunt and open Settings.
 
 Then:
@@ -59,15 +62,18 @@ Then:
 3. **Un-hide**: press Un-hide on "Another hidden". Only "Hidden lounge" is left. Disable and
    re-enable Jaunt: still only "Hidden lounge". *(self-test: the cache after a save and reload; press Un-hide yourself)*
 4. **Clear again**: it reports "Removed 1 listing." (the venue just un-hidden). *(self-test: the count)*
-5. **Cache file**: `listings.json` still has `"FfxivVenues"` under `lastFetched`, and `/xllog`
-   shows no error saving it. *(self-test)*
-6. **Unreadable file**: an unreadable `listings.json` is moved to `listings.json.bad` and Jaunt starts with an empty cache. *(self-test)*
+5. **Cache files**: `listings.json` is now `listings.json.old`; `fetch-state.json` still has
+   `"FfxivVenues"` under `lastFetched`, `marks.json` lists only "Hidden lounge" and the favourite and
+   visited listings, and `/xllog` shows no error saving them. *(self-test: the move and the fetch time)*
+6. **Unreadable files**: an unreadable `marks.json` is moved to `marks.json.bad` and the marks are read
+   from `marks.json.bak`; an unreadable `cache/<source>.json` is moved to `cache/<source>.json.bad` and
+   that source starts empty. *(self-test)*
 
 ## xivpf
 
 Checks the fetch, the cooldown and the list; the reading rules are covered by `XivpfTests`.
 
-1. **First fetch**: with no `Xivpf` time under `lastFetched` in `listings.json` (disable Jaunt,
+1. **First fetch**: with no `Xivpf` time in `fetch-state.json` (disable Jaunt,
    remove it, re-enable), open `/jaunt` without opening the Party Finder. Within a few seconds
    "Party Finder (xivpf)" rows appear, and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
    *(self-test: the request is recorded before it is sent and only None ads after it, against a stand-in; the real site stays manual)*
@@ -83,7 +89,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `X
 
 Checks the fetch, the cooldown and the list; the reading rules are covered by `PartakeTests`.
 
-1. **First fetch**: with no `Partake` time under `lastFetched` in `listings.json` (disable Jaunt,
+1. **First fetch**: with no `Partake` time in `fetch-state.json` (disable Jaunt,
    remove it, re-enable), open `/jaunt`. Within a few seconds "Partake" rows appear, each with a
    second line of times and "World (Data centre)", and `/xllog` shows `Fetched … events from Partake`.
    *(self-test: one POST, the request recorded before it is sent, and only events that haven't ended and have a world, against a stand-in; the real site stays manual)*
@@ -102,7 +108,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `P
 
 Checks the fetch, the cooldown and the list; the reading rules are covered by `RpEventCalendarTests`.
 
-1. **First fetch**: with no `RpEventCalendar` time under `lastFetched` in `listings.json` (disable
+1. **First fetch**: with no `RpEventCalendar` time in `fetch-state.json` (disable
    Jaunt, remove it, re-enable), open `/jaunt`. Within a few seconds rows credited "FFXIV RP Event
    Calendar · CC BY-SA 4.0" appear, and `/xllog` shows `Fetched … events from the FFXIV RP Event Calendar`.
    *(self-test: the request is recorded before it is sent and the events after it, against a stand-in; the real site stays manual)*
@@ -113,13 +119,13 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `R
    text with no Travel button. *(self-test: the address, location, dates and validation are recorded)*
 4. **Credit**: hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
    clicking it opens the site. "CC BY-SA 4.0" does the same with the licence page.
-5. **No contacts**: `listings.json` holds no `contacts` and no Discord handles from the calendar. *(self-test)*
+5. **No contacts**: `cache/RpEventCalendar.json` holds no `contacts` and no Discord handles from the calendar. *(self-test)*
 
 ## FFXIV Venues
 
 Checks the fetch, the cooldown and the list; the reading rules are covered by `FfxivVenuesTests`.
 
-1. **First fetch**: with no `FfxivVenues` time under `lastFetched` in `listings.json` (disable Jaunt,
+1. **First fetch**: with no `FfxivVenues` time in `fetch-state.json` (disable Jaunt,
    remove it, re-enable), open `/jaunt`. Within a few seconds the list fills with "FFXIV Venues" rows,
    and `/xllog` shows `Fetched … venues from FFXIV Venues`. The game doesn't stutter while it loads.
    *(self-test: the request is recorded before it is sent and the venues after it, against a stand-in; the real site and the stutter stay manual)*

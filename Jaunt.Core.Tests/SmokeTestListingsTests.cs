@@ -12,10 +12,12 @@ public class SmokeTestListingsTests
     // Any day from now until 2099 gives the same result: the sample's dates are 2000 or 2099
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
 
-    // As the plugin does on load: read the file, then drop expired listings
+    // As the plugin does on load: read the earlier version's file, which the checklist copies in, then
+    // drop expired listings
     private static (ListingCache Cache, int Expired) LoadAsPlugin()
     {
-        var cache = ListingCache.FromJson(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "smoke-test-listings.json")));
+        var cache = ListingCache.FromLegacyJson(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "smoke-test-listings.json")));
+        cache.ChangedAll();
         return (cache, cache.RemoveExpired(Now));
     }
 
@@ -62,6 +64,20 @@ public class SmokeTestListingsTests
         var (cache, _) = LoadAsPlugin();
         cache.ClearUnmarked();
 
-        Assert.Contains("\"FfxivVenues\":", cache.ToJson(), StringComparison.Ordinal);
+        Assert.Contains("\"FfxivVenues\":", SavedFiles.Written(cache)[ListingCache.FetchTimesFile], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheMarksAndTitlesSurviveSavingAndLoading()
+    {
+        var (cache, _) = LoadAsPlugin();
+        cache.ClearUnmarked();
+        cache.Find(ListingSource.FfxivVenues, "v-8")!.Hidden = false;
+
+        var saved = SavedFiles.Load(SavedFiles.Written(cache));
+
+        Assert.Equal(["Another hidden", "Favourite café", "Hidden lounge", "Visited night"], saved.Listings.Select(l => l.Title).Order());
+        Assert.Equal(["Hidden lounge"], saved.HiddenListings().Select(l => l.Title));
+        Assert.Equal(1, saved.ClearUnmarked());
     }
 }

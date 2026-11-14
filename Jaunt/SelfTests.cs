@@ -18,7 +18,7 @@ namespace Jaunt;
 // Dalamud's self-test window (/xldev, Dalamud menu, Open Self-Test; group Jaunt): the checks of
 // docs/smoke-test.md that need no look at the screen and no click, one step per check. Each step works
 // on its own scratch copies (a scratch folder, cache, settings object and a stand-in for FFXIV Venues),
-// so it never touches the user's listings.json and runs the same alone or after the others. The
+// so it never touches the user's cache files and runs the same alone or after the others. The
 // settings step saves through Dalamud and puts the user's settings back on disk before it ends.
 internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listingsWindow, Configuration configuration, Gazetteer gazetteer)
 {
@@ -107,8 +107,8 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         new Step("/jaunt toggles the listings window", JauntToggles),
         new Step("/jaunt config opens Settings and keeps it open", JauntConfigOpens),
         new Step("Settings survive Dalamud's save and load", SettingsRoundTrip),
-        new Step("Sample cache: expiry, Clear, Un-hide and a background save", SampleCacheRoundTrip),
-        new Step("An unreadable cache is moved aside", UnreadableCache),
+        new Step("Sample cache: moving to the current files, expiry, Clear, Un-hide and a background save", SampleCacheRoundTrip),
+        new Step("Unreadable files are moved aside, and marks come from the backup", UnreadableCache),
         new Step("FFXIV Venues: first fetch is recorded", FirstFetch),
         new Step("FFXIV Venues: no fetch inside the 8 h cooldown", Cooldown),
         new Step("FFXIV Venues: a failed fetch counts and keeps venues", FailedFetch),
@@ -225,7 +225,9 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         var folder = ScratchFolder();
         try
         {
-            File.WriteAllText(Path.Combine(folder, "listings.json"), ReadSample());
+            // An earlier version's single file, which loading moves to the current files
+            var legacy = Path.Combine(folder, ListingCacheStore.LegacyFile);
+            File.WriteAllText(legacy, ReadSample());
             using var store = new ListingCacheStore(folder, Plugin.Log);
             var cache = store.Load();
             Check(cache.Count == 8, $"loaded {cache.Count} listings, not 8");
@@ -242,6 +244,8 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
             store.Save(cache);
             foreach (var wait in WaitFor(store.Pending, "the background save"))
                 yield return wait;
+            Check(!File.Exists(legacy) && File.Exists(legacy + ".old"), "listings.json wasn't moved to listings.json.old");
+            Check(File.Exists(Path.Combine(folder, ListingCache.MarksFile)), "marks.json wasn't written");
 
             var saved = new ListingCacheStore(folder, Plugin.Log).Load();
             var titles = string.Join(", ", saved.Listings.Select(l => l.Title).Order(StringComparer.Ordinal));
@@ -264,14 +268,22 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         try
         {
             const string broken = "{ not a cache";
-            var path = Path.Combine(folder, "listings.json");
-            File.WriteAllText(path, broken);
-            Plugin.Log.Information("Self-test: the warning about listings.json below is expected");
+            const string backup = """{"version":1,"marks":[{"source":"FfxivVenues","id":"v-1","title":"Backed-up lounge","hidden":true}]}""";
+            var marks = Path.Combine(folder, ListingCache.MarksFile);
+            var venues = Path.Combine(folder, "cache", "FfxivVenues.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(venues)!);
+            File.WriteAllText(marks, broken);
+            File.WriteAllText(Path.Combine(folder, ListingCache.MarksBackupFile), backup);
+            File.WriteAllText(venues, broken);
+            Plugin.Log.Information("Self-test: the two warnings about marks.json and FfxivVenues.json below are expected");
             using var store = new ListingCacheStore(folder, Plugin.Log);
             var cache = store.Load();
-            Check(cache.Count == 0, $"started with {cache.Count} listings, not an empty cache");
-            Check(!File.Exists(path), "listings.json is still there");
-            Check(File.Exists(path + ".bad") && File.ReadAllText(path + ".bad") == broken, "listings.json.bad doesn't hold the unreadable file");
+            var hidden = string.Join(", ", cache.HiddenListings().Select(l => l.Title));
+            Check(hidden == "Backed-up lounge", $"hidden venues are \"{hidden}\", not the backup's");
+            Check(cache.Count == 1, $"started with {cache.Count} listings, not only the backed-up mark");
+            Check(!File.Exists(marks) && !File.Exists(venues), "an unreadable file is still in place");
+            Check(File.Exists(marks + ".bad") && File.ReadAllText(marks + ".bad") == broken, "marks.json.bad doesn't hold the unreadable file");
+            Check(File.Exists(venues + ".bad") && File.ReadAllText(venues + ".bad") == broken, "FfxivVenues.json.bad doesn't hold the unreadable file");
         }
         finally
         {
@@ -422,7 +434,9 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         Check(
             RpEventCalendar.Show(market!, parser) is { Address: null, Location: "North Shroud, Hyrstmill" },
             "the open-world market doesn't show its location as text");
-        Check(!cache.ToJson().Contains("Selftest#", StringComparison.Ordinal), "a contact was saved in the cache");
+        cache.ChangedAll();
+        var saved = string.Concat(cache.TakeChanges().Select(file => file.Json()));
+        Check(!saved.Contains("Selftest#", StringComparison.Ordinal), "a contact was saved in the cache");
         Check(saves >= 2, $"saved {saves} times, not after the request and again after the events");
 
         time.Now += RefreshPolicy.Minimum(ListingSource.RpEventCalendar)!.Value - TimeSpan.FromMinutes(1);
