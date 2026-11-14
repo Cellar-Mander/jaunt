@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "listings": [
+    { "lastSeen": "2099-01-01T00:00:00+00:00", "sent": { "id": "1001", "description": "Unmarked bar", "listedOn": null } },
+    { "lastSeen": "2000-01-01T00:00:00+00:00", "sent": { "id": "1003", "description": "Favourite café", "listedOn": null } },
+    { "lastSeen": "2000-01-01T00:00:00+00:00", "sent": { "id": "1006", "description": "Old unmarked", "listedOn": null } }
+  ]
+}

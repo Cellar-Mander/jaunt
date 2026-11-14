@@ -1,6 +1,3 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
-
 namespace Jaunt.Core.Listings;
 
 /// <summary>
@@ -11,38 +8,31 @@ namespace Jaunt.Core.Listings;
 /// <remarks>
 /// Unmarked listings expire one month after they were last seen (<see cref="RemoveExpired"/>);
 /// marked ones are kept. Lookups are by source and ID, so recording a listing costs the same however
-/// many are cached. Not thread-safe: use from one thread, and save a <see cref="ToJson"/> snapshot.
+/// many are cached. It remembers which sources, marks and fetch times changed, so a save writes only
+/// those files (<see cref="TakeChanges"/>). Not thread-safe: use from one thread.
 /// </remarks>
-public sealed class ListingCache
+public sealed partial class ListingCache
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
-    private readonly Dictionary<(ListingSource Source, string Id), CachedListing> listings = [];
+    private readonly Dictionary<ListingSource, Dictionary<string, CachedListing>> listings = [];
     private readonly Dictionary<ListingSource, DateTimeOffset> lastFetched = [];
+    private readonly HashSet<ListingSource> changedSources = [];
+    private bool marksChanged;
+    private bool fetchTimesChanged;
 
-    public int Count => listings.Count;
+    public int Count => listings.Values.Sum(bySource => bySource.Count);
 
-    public IEnumerable<CachedListing> Listings => listings.Values;
+    public IEnumerable<CachedListing> Listings => listings.Values.SelectMany(bySource => bySource.Values);
 
     /// <summary>Records that a source listed this listing now, adding it if it is new.</summary>
     /// <param name="oneOff">Whether it is a single event (<see cref="CachedListing.OneOff"/>), as the source last said.</param>
     public CachedListing Seen(ListingSource source, string id, string title, DateTimeOffset now, bool oneOff = false)
     {
-        if (!listings.TryGetValue((source, id), out var listing))
-        {
-            listing = new CachedListing { Source = source, Id = id };
-            listings.Add((source, id), listing);
-        }
-
+        var listing = Touch(source, id, now);
+        // The marks file keeps titles and one-off flags, for the hidden list when the cache is lost
+        if (listing.IsMarked && (listing.OneOff != oneOff || !string.Equals(listing.Title, title, StringComparison.Ordinal)))
+            marksChanged = true;
         listing.Title = title;
         listing.OneOff = oneOff;
-        // Stryker disable once Equality : when now equals LastSeen, assigning it changes nothing
-        if (now > listing.LastSeen)
-            listing.LastSeen = now;
         return listing;
     }
 
@@ -54,17 +44,59 @@ public sealed class ListingCache
     /// <param name="listedOn">The world the ad was put up on, or null if the source doesn't say.</param>
     public CachedListing SeenAd(ListingSource source, string id, string adText, string? listedOn, DateTimeOffset now)
     {
-        var listing = Seen(source, id, ListingDetails.Title(adText), now);
+        var listing = Touch(source, id, now);
+        // New text is a new title, which the marks file keeps
+        if (listing.IsMarked && (listing.OneOff || !string.Equals(listing.Description, adText, StringComparison.Ordinal)))
+            marksChanged = true;
+        listing.OneOff = false;
         listing.Description = adText;
         listing.ListedOn = listedOn;
         return listing;
     }
 
-    public CachedListing? Find(ListingSource source, string id) => listings.GetValueOrDefault((source, id));
+    /// <summary>Records that another source listed this cached listing now, without changing its fields.</summary>
+    public void SeenElsewhere(CachedListing listing, DateTimeOffset now)
+    {
+        if (now <= listing.LastSeen)
+            return;
+        listing.LastSeen = now;
+        changedSources.Add(listing.Source);
+    }
+
+    private CachedListing Touch(ListingSource source, string id, DateTimeOffset now)
+    {
+        var bySource = Of(source);
+        if (!bySource.TryGetValue(id, out var listing))
+        {
+            listing = new CachedListing { Source = source, Id = id, Owner = this };
+            bySource.Add(id, listing);
+        }
+
+        listing.Recorded = true;
+        // Stryker disable once Equality : when now equals LastSeen, assigning it changes nothing
+        if (now > listing.LastSeen)
+            listing.LastSeen = now;
+        changedSources.Add(source);
+        return listing;
+    }
+
+    private Dictionary<string, CachedListing> Of(ListingSource source)
+    {
+        if (!listings.TryGetValue(source, out var bySource))
+        {
+            bySource = new Dictionary<string, CachedListing>(StringComparer.Ordinal);
+            listings.Add(source, bySource);
+        }
+
+        return bySource;
+    }
+
+    public CachedListing? Find(ListingSource source, string id) =>
+        listings.TryGetValue(source, out var bySource) ? bySource.GetValueOrDefault(id) : null;
 
     /// <summary>Hidden listings, by title as shown.</summary>
     public IReadOnlyList<CachedListing> HiddenListings() =>
-        [.. listings.Values.Where(l => l.Hidden).OrderBy(l => l.ShownTitle, StringComparer.CurrentCultureIgnoreCase)];
+        [.. Listings.Where(l => l.Hidden).OrderBy(l => l.ShownTitle, StringComparer.CurrentCultureIgnoreCase)];
 
     /// <summary>Removes every listing that is not favourite, visited or hidden.</summary>
     /// <returns>How many were removed.</returns>
@@ -80,10 +112,23 @@ public sealed class ListingCache
 
     private int RemoveWhere(Func<CachedListing, bool> predicate)
     {
-        var doomed = listings.Where(pair => predicate(pair.Value)).Select(pair => pair.Key).ToList();
-        foreach (var key in doomed)
-            listings.Remove(key);
-        return doomed.Count;
+        var removed = 0;
+        foreach (var (source, bySource) in listings)
+        {
+            var doomed = bySource.Values.Where(predicate).ToList();
+            foreach (var listing in doomed)
+            {
+                bySource.Remove(listing.Id);
+                listing.Owner = null;
+                marksChanged |= listing.IsMarked;
+            }
+
+            if (doomed.Count > 0)
+                changedSources.Add(source);
+            removed += doomed.Count;
+        }
+
+        return removed;
     }
 
     /// <summary>When the source was last fetched, or null if never.</summary>
@@ -101,56 +146,12 @@ public sealed class ListingCache
             // Stryker disable once String : the message is for the developer reading the log, not behaviour
             throw new ArgumentException($"{source} is never fetched", nameof(source));
         lastFetched[source] = now;
+        fetchTimesChanged = true;
     }
 
     /// <summary>Whether opening the browser or Refresh should fetch the source now (<see cref="RefreshPolicy.ShouldFetch"/>).</summary>
     public bool ShouldFetch(ListingSource source, int settingMinutes, DateTimeOffset now) =>
         RefreshPolicy.ShouldFetch(source, settingMinutes, LastFetched(source), now);
 
-    public string ToJson() => JsonSerializer.Serialize(
-        new SavedCache
-        {
-            Listings = [.. listings.Values],
-            LastFetched = lastFetched.ToDictionary(pair => pair.Key.ToString(), pair => pair.Value),
-        },
-        JsonOptions);
-
-    /// <summary>
-    /// Reads a saved cache. Listings without an ID are dropped, and a repeated one keeps the last copy.
-    /// Fetch times for sources this version doesn't know, or that are never fetched, are dropped.
-    /// </summary>
-    /// <exception cref="JsonException">The text is not a saved cache.</exception>
-    public static ListingCache FromJson(string json)
-    {
-        var cache = new ListingCache();
-        var saved = JsonSerializer.Deserialize<SavedCache>(json, JsonOptions);
-        foreach (var listing in saved?.Listings ?? [])
-        {
-            if (listing is null || string.IsNullOrEmpty(listing.Id))
-                continue;
-            listing.Title ??= "";
-            listing.Description ??= "";
-            listing.LinkTexts = [.. (listing.LinkTexts ?? []).Where(text => text is not null)];
-            listing.Openings = [.. (listing.Openings ?? []).Where(o => o is not null && o.End > o.Start)];
-            cache.listings[(listing.Source, listing.Id)] = listing;
-        }
-
-        foreach (var (name, time) in saved?.LastFetched ?? [])
-        {
-            if (Enum.TryParse<ListingSource>(name, ignoreCase: false, out var source)
-                && Enum.IsDefined(source)
-                && RefreshPolicy.Minimum(source) is not null)
-                cache.lastFetched[source] = time;
-        }
-
-        return cache;
-    }
-
-    // Sources are saved by name, so the file stays readable and a renumbered source can't take
-    // another's fetch time.
-    private sealed class SavedCache
-    {
-        public List<CachedListing?>? Listings { get; set; }
-        public Dictionary<string, DateTimeOffset>? LastFetched { get; set; }
-    }
+    internal void MarksChanged() => marksChanged = true;
 }

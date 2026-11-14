@@ -148,15 +148,14 @@ public class XivpfTests
     [Fact]
     public void AnAdTheGameAlsoSentCountsAsSeenNowInGame()
     {
+        // revert-check: not revert-sensitive (pins that xivpf leaves the in-game copy's text, title and world alone, as before)
         var cache = new ListingCache();
-        var inGame = cache.Seen(ListingSource.InGamePartyFinder, "12", "In-game title", Now.AddDays(-2));
-        inGame.Description = "In-game text";
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "In-game text", "Siren", Now.AddDays(-2));
 
         Xivpf.Record(cache, [new Xivpf.Ad("12", "xivpf text", "Cuchulainn")], Now);
 
         Assert.Equal(Now, inGame.LastSeen);
-        Assert.Equal("In-game text", inGame.Description);
-        Assert.Equal("In-game title", inGame.Title);
+        Assert.Equal(("In-game text", "In-game text", "Siren"), (inGame.Description, inGame.Title, inGame.ListedOn));
         Assert.NotNull(cache.Find(ListingSource.Xivpf, "12"));
     }
 

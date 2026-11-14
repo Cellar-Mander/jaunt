@@ -7,52 +7,47 @@ using Jaunt.Core.Listings;
 
 namespace Jaunt.Listings;
 
-/// <summary>Loads the listing cache from the plugin's config folder and saves it there off the game thread.</summary>
+/// <summary>
+/// Loads the listing cache from the plugin's config folder and saves the files that changed there,
+/// serialising and writing them off the game thread.
+/// </summary>
 internal sealed class ListingCacheStore : IDisposable
 {
-    private readonly string path;
+    private readonly string folder;
     private readonly IPluginLog log;
     private readonly object gate = new();
     private Task pending = Task.CompletedTask;
 
     public ListingCacheStore(string configDirectory, IPluginLog log)
     {
-        path = Path.Combine(configDirectory, "listings.json");
+        folder = configDirectory;
         this.log = log;
     }
 
     /// <summary>
-    /// Reads the saved cache, or an empty one if there is none. An unreadable file is moved aside to
-    /// <c>listings.json.bad</c>, so the next save doesn't overwrite marks someone could still recover.
+    /// Reads the saved files, or an empty cache if there are none. An unreadable file is moved aside
+    /// with <c>.bad</c> added to its name, so the next save doesn't overwrite marks someone could
+    /// still recover, and its part starts empty.
     /// </summary>
-    public ListingCache Load()
-    {
-        if (!File.Exists(path))
-            return new ListingCache();
+    public ListingCache Load() => ListingCache.Load(Read, MoveAside);
 
-        try
-        {
-            return ListingCache.FromJson(File.ReadAllText(path));
-        }
-        catch (JsonException e)
-        {
-            log.Warning(e, $"Couldn't read {path}; moved it to listings.json.bad and started an empty cache");
-            TryMoveAside();
-        }
-        catch (IOException e)
-        {
-            log.Warning(e, $"Couldn't read {path}; started an empty cache");
-        }
-
-        return new ListingCache();
-    }
-
-    /// <summary>Takes a snapshot now and writes it on a background task, after any earlier save.</summary>
+    /// <summary>Snapshots the files that changed now and writes them on a background task, after any earlier save.</summary>
     public void Save(ListingCache cache)
     {
-        var json = cache.ToJson();
+        var files = cache.TakeChanges();
+        if (files.Count == 0)
+            return;
+        Enqueue(() =>
+        {
+            foreach (var file in files)
+                Write(file);
+        });
+    }
+
+    private void Enqueue(Action write)
+    {
         lock (gate)
-            pending = pending.ContinueWith(_ => Write(json), TaskScheduler.Default);
+            pending = pending.ContinueWith(_ => write(), TaskScheduler.Default);
     }
 
     /// <summary>The last save asked for, or a completed task if none is waiting.</summary>
@@ -65,30 +60,58 @@ internal sealed class ListingCacheStore : IDisposable
         }
     }
 
-    private void Write(string json)
+    private string FullPath(string path) => Path.Combine(folder, path.Replace('/', Path.DirectorySeparatorChar));
+
+    private string? Read(string path)
     {
-        // Write then rename, so a crash mid-write never leaves a half-written cache
-        var temp = path + ".tmp";
+        var full = FullPath(path);
         try
         {
-            File.WriteAllText(temp, json);
-            File.Move(temp, path, overwrite: true);
+            return File.Exists(full) ? File.ReadAllText(full) : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            log.Warning(e, $"Couldn't read {full}; left it out");
+            return null;
+        }
+    }
+
+    private void Write(ListingFile file)
+    {
+        // Write then rename, so a crash mid-write never leaves a half-written file
+        var path = FullPath(file.Path);
+        var temp = path + ".tmp";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(temp, file.Json());
+            if (file.BackupPath is { } backup && File.Exists(path))
+                File.Replace(temp, path, FullPath(backup));
+            else
+                File.Move(temp, path, overwrite: true);
+        }
+        catch (Exception e)
+        {
+            // Not only IO: an unexpected serialisation error must not stop the saves queued after it
             log.Error(e, $"Couldn't save {path}");
         }
     }
 
-    private void TryMoveAside()
+    private void MoveAside(string path, JsonException e)
+    {
+        log.Warning(e, $"Couldn't read {FullPath(path)}; moved it to {path}.bad and left it out");
+        TryMove(path, path + ".bad");
+    }
+
+    private void TryMove(string from, string to)
     {
         try
         {
-            File.Move(path, path + ".bad", overwrite: true);
+            File.Move(FullPath(from), FullPath(to), overwrite: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            log.Error(e, $"Couldn't move {path} aside");
+            log.Error(e, $"Couldn't move {FullPath(from)} to {to}");
         }
     }
 

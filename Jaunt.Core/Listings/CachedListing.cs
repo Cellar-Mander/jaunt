@@ -1,10 +1,19 @@
-using System.Text.Json.Serialization;
-
 namespace Jaunt.Core.Listings;
 
-/// <summary>A listing kept between sessions, with the user's marks on it.</summary>
+/// <summary>
+/// A listing kept between sessions, with the user's marks on it. Only the fields as the source sent
+/// them, when it was last seen and the marks are saved; the rest is derived when read.
+/// </summary>
 public sealed class CachedListing
 {
+    private string title = "";
+    private string? titledFrom;
+    // Stryker disable once String : titledFrom starts null, so adTitle is always assigned before it is read
+    private string adTitle = "";
+    private bool favourite;
+    private bool visited;
+    private bool hidden;
+
     public required ListingSource Source { get; init; }
 
     /// <summary>The listing's ID within its source.</summary>
@@ -12,12 +21,28 @@ public sealed class CachedListing
 
     /// <summary>
     /// The title, or for FFXIV Venues, Partake and the FFXIV RP Event Calendar the name or title as
-    /// sent, which <see cref="ShownTitle"/> reads.
+    /// sent, which <see cref="ShownTitle"/> reads. A Party Finder ad with text is titled from it
+    /// (<see cref="ListingDetails.Title"/>), worked out on first read after the text changes, so
+    /// loading the cache doesn't title every ad; what is set is used only while it has no text.
     /// </summary>
-    public string Title { get; set; } = "";
+    public string Title
+    {
+        get
+        {
+            if (Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf) || Description.Length == 0)
+                return title;
+            if (!ReferenceEquals(titledFrom, Description))
+            {
+                adTitle = ListingDetails.Title(Description);
+                titledFrom = Description;
+            }
+
+            return adTitle;
+        }
+        set => title = value;
+    }
 
     /// <summary>The title as the windows show and sort it, derived from <see cref="Title"/> for sources that send raw names.</summary>
-    [JsonIgnore]
     public string ShownTitle => Source switch
     {
         ListingSource.FfxivVenues => FfxivVenues.Title(Title),
@@ -84,10 +109,41 @@ public sealed class CachedListing
     /// </summary>
     public bool OneOff { get; set; }
 
-    public bool Favourite { get; set; }
-    public bool Visited { get; set; }
-    public bool Hidden { get; set; }
+    public bool Favourite
+    {
+        get => favourite;
+        set => SetMark(ref favourite, value);
+    }
+
+    public bool Visited
+    {
+        get => visited;
+        set => SetMark(ref visited, value);
+    }
+
+    public bool Hidden
+    {
+        get => hidden;
+        set => SetMark(ref hidden, value);
+    }
 
     /// <summary>Favourite, visited and hidden listings are never cleared, and expire only if one-off.</summary>
     public bool IsMarked => Favourite || Visited || Hidden;
+
+    /// <summary>The cache holding it, told when a mark changes so the marks are saved; null while it is in none.</summary>
+    internal ListingCache? Owner { get; set; }
+
+    /// <summary>
+    /// Whether a source has listed it (or the cache file it was read from had it); false for one known
+    /// only from the saved marks, which no source cache file holds.
+    /// </summary>
+    internal bool Recorded { get; set; }
+
+    private void SetMark(ref bool mark, bool value)
+    {
+        if (mark == value)
+            return;
+        mark = value;
+        Owner?.MarksChanged();
+    }
 }

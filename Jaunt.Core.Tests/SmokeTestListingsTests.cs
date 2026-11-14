@@ -3,7 +3,7 @@ using Jaunt.Core.Listings;
 namespace Jaunt.Core.Tests;
 
 /// <summary>
-/// Fixtures/smoke-test-listings.json is the sample cache for the in-game Settings checks in
+/// Fixtures/smoke-test-cache holds the sample cache for the in-game Settings checks in
 /// docs/smoke-test.md. These tests hold it to what that checklist expects, so a change to the cache
 /// format or rules can't quietly break the checklist.
 /// </summary>
@@ -12,10 +12,15 @@ public class SmokeTestListingsTests
     // Any day from now until 2099 gives the same result: the sample's dates are 2000 or 2099
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
 
-    // As the plugin does on load: read the file, then drop expired listings
+    // As the plugin does on load: read the files, then drop expired listings
     private static (ListingCache Cache, int Expired) LoadAsPlugin()
     {
-        var cache = ListingCache.FromJson(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "smoke-test-listings.json")));
+        var folder = Path.Combine(AppContext.BaseDirectory, "Fixtures", "smoke-test-cache");
+        var unreadable = new List<string>();
+        var cache = ListingCache.Load(
+            path => File.Exists(Path.Combine(folder, path)) ? File.ReadAllText(Path.Combine(folder, path)) : null,
+            (path, _) => unreadable.Add(path));
+        Assert.Empty(unreadable);
         return (cache, cache.RemoveExpired(Now));
     }
 
@@ -60,8 +65,23 @@ public class SmokeTestListingsTests
     public void TheFetchTimeSurvivesClear()
     {
         var (cache, _) = LoadAsPlugin();
+        cache.ChangedAll();
         cache.ClearUnmarked();
 
-        Assert.Contains("\"FfxivVenues\":", cache.ToJson(), StringComparison.Ordinal);
+        Assert.Contains("\"FfxivVenues\":", SavedFiles.Written(cache)[ListingCache.FetchTimesFile], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheMarksAndTitlesSurviveSavingAndLoading()
+    {
+        var (cache, _) = LoadAsPlugin();
+        cache.ClearUnmarked();
+        cache.Find(ListingSource.FfxivVenues, "v-8")!.Hidden = false;
+
+        var saved = SavedFiles.Load(SavedFiles.All(cache));
+
+        Assert.Equal(["Another hidden", "Favourite café", "Hidden lounge", "Visited night"], saved.Listings.Select(l => l.Title).Order());
+        Assert.Equal(["Hidden lounge"], saved.HiddenListings().Select(l => l.Title));
+        Assert.Equal(1, saved.ClearUnmarked());
     }
 }

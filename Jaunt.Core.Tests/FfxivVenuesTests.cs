@@ -385,7 +385,7 @@ public class FfxivVenuesTests
         var cache = new ListingCache();
         FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(name: "Lounge\nBar", schedule: schedule)}]"), Now);
 
-        var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.FfxivVenues, "abc123")!;
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!;
 
         var shown = Show(back);
         Assert.Equal("Lounge", shown.Title);
@@ -398,10 +398,10 @@ public class FfxivVenuesTests
     public void AVenueCachedWithAMisspeltWorldIsCorrectedWhenShown()
     {
         const string json = """
-            {"listings": [{"source": 2, "id": "5", "title": "Bar", "venue": {"location": {"world": "Bismark", "district": "Mist", "ward": 3, "plot": 4}}}]}
+            {"listings": [{"lastSeen": "2026-11-14T20:00:00+00:00", "sent": {"id": "5", "name": "Bar", "fields": {"location": {"world": "Bismark", "district": "Mist", "ward": 3, "plot": 4}}}}]}
             """;
 
-        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
+        var listing = FromVenuesFile(json);
 
         Assert.Equal("Bismarck", Show(listing).Address!.World);
     }
@@ -410,23 +410,27 @@ public class FfxivVenuesTests
     public void AHandEditedCacheCantMakeAVenueLinkAnythingButAWebsite()
     {
         const string json = """
-            {"listings": [{"source": 2, "id": "5", "venue": {"website": "javascript:alert(1)", "discord": "file:///C:/x"}}]}
+            {"listings": [{"lastSeen": "2026-11-14T20:00:00+00:00", "sent": {"id": "5", "fields": {"website": "javascript:alert(1)", "discord": "file:///C:/x"}}}]}
             """;
 
-        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
+        var listing = FromVenuesFile(json);
 
         Assert.Empty(Show(listing).Links);
     }
 
     [Theory]
-    [InlineData("""{"listings": [{"source": 2, "id": "5", "title": "Bar"}]}""")]
-    [InlineData("""{"listings": [{"source": 2, "id": "5", "title": "Bar", "venue": null}]}""")]
-    [InlineData("""{"listings": [{"source": 2, "id": "5", "title": "Bar", "address": {"world": "Goblin"}, "links": ["https://a.example.com/"], "alwaysOpen": true}]}""")]
-    public void AVenueCachedWithoutItsFieldsShowsNoAddressUntilFetchedAgain(string json)
+    [InlineData("""{"id": "5", "name": "Bar"}""")]
+    [InlineData("""{"id": "5", "name": "Bar", "fields": null}""")]
+    [InlineData("""{"id": "5", "name": "Bar", "address": {"world": "Goblin"}, "links": ["https://a.example.com/"], "alwaysOpen": true}""")]
+    public void AVenueCachedWithoutItsFieldsShowsNoAddressUntilFetchedAgain(string sent)
     {
-        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
+        var listing = FromVenuesFile($$"""{"listings": [{"lastSeen": "2026-11-14T20:00:00+00:00", "sent": {{sent}}}]}""");
 
         var shown = Show(listing);
         Assert.Equal(("Bar", null, 0, false), (shown.Title, shown.Address, shown.Links.Count, shown.AlwaysOpen));
     }
+
+    private static CachedListing FromVenuesFile(string venuesFile) =>
+        SavedFiles.Load(new Dictionary<string, string> { [ListingCache.SourceFile(ListingSource.FfxivVenues)] = venuesFile })
+            .Find(ListingSource.FfxivVenues, "5")!;
 }

@@ -185,8 +185,9 @@ public class RpEventCalendarTests
         RpEventCalendar.Record(cache, [calendarEvent], Now);
 
         Assert.DoesNotContain("Enhasa", calendarEvent.ToString(), StringComparison.Ordinal);
-        Assert.DoesNotContain("Enhasa", cache.ToJson(), StringComparison.Ordinal);
-        Assert.DoesNotContain("Thavnairian", cache.ToJson(), StringComparison.Ordinal);
+        var saved = string.Concat(SavedFiles.All(cache).Values);
+        Assert.DoesNotContain("Enhasa", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("Thavnairian", saved, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -357,7 +358,7 @@ public class RpEventCalendarTests
         var cache = new ListingCache();
         RpEventCalendar.Record(cache, [Single(RowJson())], Now);
 
-        var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.RpEventCalendar, "abc_R20260830T160000@google.com")!;
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.RpEventCalendar, "abc_R20260830T160000@google.com")!;
 
         var shown = RpEventCalendar.Show(back, TestGazetteer.Parser);
 
