@@ -46,7 +46,7 @@ public sealed partial class ListingCache
             files.Add(SourceSnapshot(source));
         if (fetchTimesChanged)
         {
-            var times = lastFetched.ToDictionary(pair => pair.Key.ToString(), pair => pair.Value);
+            var times = lastFetched.ToDictionary(pair => FetchTimeKey(pair.Key.Source, pair.Key.DataCentre), pair => pair.Value);
             files.Add(new ListingFile(FetchTimesFile, null, () => Serialise(new SavedFetchTimes { LastFetched = times })));
         }
 
@@ -198,15 +198,25 @@ public sealed partial class ListingCache
         _ => null,
     };
 
-    /// <summary>Fetch times for sources this version doesn't know, or that are never fetched, are dropped.</summary>
+    /// <summary>
+    /// Fetch times for sources this version doesn't know, that are never fetched, or saved for every
+    /// region when the source is now fetched by data centre (or the other way round), are dropped.
+    /// </summary>
     private void LoadFetchTimes(string json)
     {
-        foreach (var (name, time) in Deserialise<SavedFetchTimes>(json)?.LastFetched ?? [])
+        foreach (var (key, time) in Deserialise<SavedFetchTimes>(json)?.LastFetched ?? [])
         {
-            if (KnownSource(name) is { } source && RefreshPolicy.Minimum(source) is not null)
-                lastFetched[source] = time;
+            var slash = key.IndexOf('/', StringComparison.Ordinal);
+            var dataCentre = slash < 0 ? "" : key[(slash + 1)..];
+            if (KnownSource(slash < 0 ? key : key[..slash]) is { } source && RefreshPolicy.Minimum(source) is not null
+                && RefreshPolicy.ByDataCentre(source) == (dataCentre.Length > 0))
+                lastFetched[(source, dataCentre)] = time;
         }
     }
+
+    /// <summary>A fetch time's key in the file: the source's name, then <c>/</c> and the data centre for a source fetched by data centre.</summary>
+    private static string FetchTimeKey(ListingSource source, string dataCentre) =>
+        dataCentre.Length == 0 ? source.ToString() : $"{source}/{dataCentre}";
 
     /// <summary>
     /// Marks the listings read from the source files, titling those without a title as the marks file

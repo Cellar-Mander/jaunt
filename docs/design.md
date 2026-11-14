@@ -121,7 +121,21 @@ expanded until collapsed; which are expanded is saved too. Each change saves at 
   never fetched, so it has no cooldown: its listings are recorded as the game sends them. A cooldown
   has passed once exactly that long has gone by. A source never fetched is fetched; one whose last
   fetch time is after now (the clock moved back) is fetched too, rather than left stuck.
-- **Last fetched**: the listing cache records when each fetched source was last requested,
+- **Travel region**: listings are fetched and kept only for worlds the logged-in character can
+  travel to: every public world in its home world's region (`IPlayerState.HomeWorld`, then the
+  `World` sheet's data centre and its region), as data-centre travel doesn't cross regions. Nothing
+  is fetched while no character is logged in. A source that can be asked for one data centre
+  (`RefreshPolicy.ByDataCentre`: FFXIV Venues) gets one request per data centre in the region, each
+  with its own cooldown, so a character in another region fetches its data centres at once. Sources
+  that can't be asked for less than every region (xivpf, Partake, the RP calendar; their APIs had no
+  region, data-centre or server filter as of 2026-11) are fetched whole with one cooldown for all
+  regions, and listings off the region's worlds are left out when recorded; after a switch to another
+  region their listings arrive once that cooldown passes. Listings cached for another region are
+  never purged for it; they expire as usual.
+  An in-game Party Finder ad on a world outside the region isn't recorded either; the game sends only
+  the character's data centre, so this rarely drops one.
+- **Last fetched**: the listing cache records when each fetched source (each data centre, for a
+  source fetched by data centre) was last requested,
   whether or not the request succeeded, and saves it with the listings. It is used only for the
   cooldown, never shown, and survives Clear cached listings, expiry and reloads.
 - **Time format**: System, 12-hour (`8:05 PM`) or 24-hour (`20:05`). System is 12-hour when the
@@ -141,7 +155,8 @@ as separate files, each with a `version` (1); sources are named, not numbered:
 - `marks.json`: each marked listing's source, ID, title and one-off flag, and its three marks.
   Written when a mark changes, when a marked listing's title, ad text or one-off flag changes, and
   when a marked listing expires. The file it replaces is kept as `marks.json.bak`.
-- `fetch-state.json`: each source's last fetch time (`lastFetched`). Written on each fetch.
+- `fetch-state.json`: each source's last fetch time (`lastFetched`), keyed by the source's name,
+  or `<source>/<data centre>` (`FfxivVenues/Aether`) for a source fetched by data centre. Written on each fetch.
 - `cache/<source>.json` (e.g. `cache/FfxivVenues.json`): each listing as the source sent it, in
   the source's own shape (a Party Finder ad's text and world; a venue's name and fields; an event's
   values), with when it was last seen. Written only when that source records, re-sees or loses a
@@ -159,8 +174,9 @@ On load:
 - Each file is read on its own. One that is unreadable or has a later `version` is moved aside
   with `.bad` added to its name and its part starts empty. If `marks.json` is missing or
   unreadable, `marks.json.bak` is read instead.
-- Unknown source names, entries without an ID and, in fetch times, the in-game Party Finder are
-  dropped. A saved opening that doesn't end after it starts is dropped, and a Partake event that
+- Unknown source names, entries without an ID and, in fetch times, the in-game Party Finder and a
+  time with a data centre for a source fetched for every region (or without one for a source fetched
+  by data centre) are dropped. Listings in the source files are loaded whatever their region. A saved opening that doesn't end after it starts is dropped, and a Partake event that
   had ended when last seen is dropped.
 - A mark whose listing no source file holds still adds the listing, with the mark's title, so the
   hidden list shows it. It was last seen at no known time, so a marked one-off expires (see below).
@@ -179,17 +195,18 @@ On load:
 
 ### FFXIV Venues
 
-`FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue?approved=true&withinWeek=true` in one
-response: approved venues (the API's default, pinned) with an opening in the coming week, as the API
+`FfxivVenues` reads `https://api.ffxivvenues.com/v1.0/venue?approved=true&withinWeek=true&dataCenter=<name>`
+once for each data centre in the travel region (see "Settings"; the API matches the name exactly,
+ignoring case, and has no region filter), in one fetch: approved venues (the API's default, pinned) with an opening in the coming week, as the API
 works out from each venue's schedule. A venue left out stays in the cache with its fields and marks,
 and in the venue list, until it expires (see "Listing cache"). `FfxivVenues`
 records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
 the API sent them: its name as the title, and its location, website, Discord and schedule. The title,
 address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
 to how they are read applies to cached venues without fetching again. A venue cached without them
-shows no address until the next fetch. Opening the venue list fetches it, unless the source is within its
-cooldown (8 hours, or the Settings cooldown if longer); the request is recorded before it is sent,
-so a failed one counts too. Download and parsing run off the game thread.
+shows no address until the next fetch. Opening the venue list asks for each data centre in the region
+whose cooldown (8 hours, or the Settings cooldown if longer) has passed, one request after another;
+each request is recorded before it is sent, so a failed one counts too. Download and parsing run off the game thread.
 
 - **Title**: the venue's name, first line only, trimmed and cut to 60 characters like an ad's.
 - **Address**: from the venue's location: the world, a district (`Mist`, `Lavender Beds`, `Goblet`,
@@ -221,6 +238,8 @@ source is within its cooldown (the Settings cooldown, 10 minutes at least); the 
 before it is sent, so a failed one counts too. Download and parsing run off the game thread.
 
 - **Category**: only listings whose category is exactly `None`.
+- **Region**: an ad put up on a world outside the travel region, or on none xivpf names, isn't
+  recorded. The API has no filter, so every region is downloaded.
 - **Text**: the ad's English text (`description.en`), glyphs included, so the in-game Party Finder's
   parsers read it unchanged. xivpf gives the text once per client language, differing only in
   auto-translate phrases; when the English is missing or blank, the first other language that isn't.
@@ -244,7 +263,8 @@ weeks of events with one row per occurrence, and records each event in the listi
 `RpEventCalendar`, keyed by its calendar ID (`uId`, trimmed), which its occurrences share. Opening
 the venue list fetches it, unless the source is within its cooldown (8 hours, or the Settings
 cooldown if longer, so at most 3 fetches a day); the request is recorded before it is sent, so a
-failed one counts too. Download and parsing run off the game thread.
+failed one counts too. Download and parsing run off the game thread. An event whose `server` isn't
+a world in the travel region, or is missing, isn't recorded; the week endpoint has no region filter.
 
 **Stored as sent**: the cache keeps `eventName` (as the listing's title), `server` (as the world
 it is listed on), `location`, `esrbRating` and `eventURL` exactly as the calendar sent them, an empty title when
@@ -283,7 +303,8 @@ again. The list derives them once per change to those fields, not every frame.
 no authentication, and records each in the listing cache as `Partake`, keyed by the event's ID, as a
 one-off. Opening the venue list fetches it, unless the source is within its cooldown (8 hours, or
 the Settings cooldown if longer); the request is recorded before it is sent, so a failed one counts
-too. Download and parsing run off the game thread.
+too. Download and parsing run off the game thread. An event is recorded only when its world or its
+data centre is in the travel region; the API has no region filter.
 
 - **Raw values**: the cache keeps the title, world, data centre, location and links exactly as
   Partake sent them (links in `linkTexts`). The rules below for showing them run each time they
@@ -394,7 +415,8 @@ Caps on user-configurable lists and text, and how input from other players or th
 - A Partake fetch is at most 5 pages of 200 events, read off the game thread. Each event's location
   is parsed once per text, like an ad; its title, world and links are worked out once per rebuild
   of the list (once a second), about 150 events.
-- An FFXIV Venues response is read in one pass over its venues, off the game thread; a venue's links
+- An FFXIV Venues fetch is at most one request per data centre in the region (4 for North America and
+  Japan, 2 for Europe, 1 for Oceania), each read in one pass over its venues, off the game thread; a venue's links
   are at most two, and titles are cut to 60 characters when shown. The list (about 750 of 1,400 venues,
   1.6 MB) keeps `cache/FfxivVenues.json` under about 800 KB. The list derives a venue's title, address, links and
   24/7 once per change to its cached fields, not per frame.

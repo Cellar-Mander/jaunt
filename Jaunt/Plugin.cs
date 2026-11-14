@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static INotificationManager NotificationManager { get; private set; } = null!;
     [PluginService] internal static ISelfTestRegistry SelfTestRegistry { get; private set; } = null!;
+    [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
 
     private const string CommandName = "/jaunt";
 
@@ -54,15 +55,16 @@ public sealed class Plugin : IDalamudPlugin
         // Commit hash included, to check which checkout's build the game has loaded
         Log.Information($"Jaunt {typeof(Plugin).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion} loaded");
 
-        partyFinderListings = new PartyFinderListings(PartyFinderGui, Framework, Log, ListingCache, SaveListingCache);
+        var gazetteer = GazetteerLoader.Load(DataManager);
+        var region = new CurrentRegion(PlayerState, gazetteer);
+        partyFinderListings = new PartyFinderListings(PartyFinderGui, Framework, Log, ListingCache, region.Get, SaveListingCache);
 
         ConfigWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(ConfigWindow);
-        var gazetteer = GazetteerLoader.Load(DataManager);
-        xivpfListings = FetchedListings.Xivpf(ListingCache, Configuration, Framework, Log, SaveListingCache);
-        ffxivVenuesListings = FetchedListings.FfxivVenues(ListingCache, Configuration, Framework, Log, SaveListingCache);
-        partakeListings = FetchedListings.Partake(ListingCache, Configuration, Framework, Log, SaveListingCache);
-        rpEventCalendarListings = FetchedListings.RpEventCalendar(ListingCache, Configuration, Framework, Log, SaveListingCache);
+        xivpfListings = FetchedListings.Xivpf(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
+        ffxivVenuesListings = FetchedListings.FfxivVenues(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
+        partakeListings = FetchedListings.Partake(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
+        rpEventCalendarListings = FetchedListings.RpEventCalendar(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
         ListingsWindow = new ListingsWindow(ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());

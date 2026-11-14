@@ -35,6 +35,20 @@ public class RpEventCalendarTests
 
     private static RpEventCalendar.Event Single(string row) => Assert.Single(Parse(row));
 
+    [Theory]
+    [InlineData("\"Alpha\"", true)]
+    [InlineData("\" alpha \"", true)]
+    [InlineData("\"Balmung\"", false)]
+    [InlineData("null", false)]
+    public void RecordingForARegionLeavesOutEventsOnOtherServersOrNone(string server, bool kept)
+    {
+        var cache = new ListingCache();
+
+        RpEventCalendar.Record(cache, [Single(RowJson(server: server))], Now, TestGazetteer.Instance.TravelRegion("Moogle"));
+
+        Assert.Equal(kept, cache.Count == 1);
+    }
+
     /// <summary>Records one event as a fetch would, and returns its cached listing.</summary>
     private static CachedListing Recorded(string row)
     {

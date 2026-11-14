@@ -68,7 +68,7 @@ public class SmokeTestListingsTests
         cache.ChangedAll();
         cache.ClearUnmarked();
 
-        Assert.Contains("\"FfxivVenues\":", SavedFiles.Written(cache)[ListingCache.FetchTimesFile], StringComparison.Ordinal);
+        Assert.Contains("\"FfxivVenues/Materia\":", SavedFiles.Written(cache)[ListingCache.FetchTimesFile], StringComparison.Ordinal);
     }
 
     [Fact]

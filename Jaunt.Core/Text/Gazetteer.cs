@@ -80,6 +80,10 @@ public sealed class Gazetteer
 
     internal Entry? Find(string key) => entries.GetValueOrDefault(key);
 
+    /// <summary>The worlds a character whose home world is <paramref name="homeWorld"/> can travel to, or null for an unknown world.</summary>
+    public TravelRegion? TravelRegion(string? homeWorld) =>
+        FindWorld(homeWorld?.Trim()) is { } home ? new TravelRegion(home.Region, worldsByName.Values) : null;
+
     /// <summary>
     /// The world whose name starts with <paramref name="word"/>, which ads use as an abbreviation
     /// ("Krak", "Sagi"): the one in <paramref name="region"/>, or when none there starts with it, the
