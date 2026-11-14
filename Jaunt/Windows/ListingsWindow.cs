@@ -26,32 +26,37 @@ internal sealed class ListingsWindow : Window
     private static readonly TimeSpan RebuildInterval = TimeSpan.FromSeconds(1);
 
     private readonly ListingCache cache;
-    private readonly AddressParser parser;
     private readonly Gazetteer gazetteer;
+    private readonly AddressParser parser;
     private readonly Lifestream lifestream;
     private readonly INotificationManager notifications;
     private readonly Configuration configuration;
     private readonly Action fetchSources;
 
-    // Parsed once per ad text or event location and world, so drawing doesn't re-parse every frame
+    // Parsed once per ad text or event location and world, and derived once per venue's fields, so
+    // drawing doesn't re-parse every frame
     private readonly Dictionary<(ListingSource, string), (string Text, string? ListedOn, ListingDetails Details)> parsed = [];
+    private readonly Dictionary<string, (string Name, FfxivVenues.Fields? Fields, FfxivVenues.Shown Shown)> shownVenues = [];
     private List<Row> rows = [];
     private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
     private DateTimeOffset nextRebuild;
     private bool showsPartake;
 
-    /// <summary>A listing as drawn; <paramref name="Event"/> is set for a Partake event, worked out from the values it was sent with.</summary>
-    private sealed record Row(CachedListing Listing, ListingDetails Details, Partake.Shown? Event = null);
+    /// <summary>
+    /// One row: the listing, its title as shown, its addresses and links, whether it is open 24/7, and
+    /// for a Partake event what is shown of it, worked out from the values it was sent with.
+    /// </summary>
+    private sealed record Row(CachedListing Listing, string Title, ListingDetails Details, bool AlwaysOpen, Partake.Shown? Event = null);
 
-    /// <param name="gazetteer">Worlds, to correct a Partake event's world when shown.</param>
+    /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
-    public ListingsWindow(ListingCache cache, AddressParser parser, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources)
+    public ListingsWindow(ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources)
         : base("Jaunt###JauntListings")
     {
         this.fetchSources = fetchSources;
         this.cache = cache;
-        this.parser = parser;
         this.gazetteer = gazetteer;
+        parser = new AddressParser(gazetteer);
         this.lifestream = lifestream;
         this.notifications = notifications;
         this.configuration = configuration;
@@ -85,8 +90,8 @@ internal sealed class ListingsWindow : Window
         var lineHeight = ImGui.GetTextLineHeightWithSpacing();
         foreach (var row in rows)
         {
-            var (listing, details, item) = row;
             // FFXIV Venues alone lists over a thousand venues, so rows out of view are only spaced, not drawn
+            var (listing, _, details, _, item) = row;
             var key = (listing.Source, listing.Id);
             var top = ImGui.GetCursorPosY();
             var lines = 1 + EventLines(item, details) + details.Addresses.Count + details.Links.Count;
@@ -117,12 +122,12 @@ internal sealed class ListingsWindow : Window
 
     private void DrawRow(Row row, DateTimeOffset now, bool travelAvailable)
     {
-        var (listing, details, item) = row;
+        var (listing, title, details, alwaysOpen, item) = row;
         using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
-        ImGui.TextUnformatted(ShownText.Title(item?.Title ?? listing.Title));
+        ImGui.TextUnformatted(ShownText.Title(title));
         ImGui.SameLine();
         ImGui.TextDisabled(SourceName(listing.Source));
-        if (listing.AlwaysOpen)
+        if (alwaysOpen)
         {
             ImGui.SameLine();
             ImGui.TextDisabled("· open 24/7");
@@ -211,8 +216,8 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// Lists the visible listings that have an address, and Partake events that haven't ended, newest
-    /// first and then by title, parsing only ad text and locations that changed. An xivpf ad the game
-    /// has also sent shows once, as the in-game copy.
+    /// first and then by title, parsing only ad text, locations and venue fields that changed. An xivpf
+    /// ad the game has also sent shows once, as the in-game copy.
     /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
@@ -225,8 +230,18 @@ internal sealed class ListingsWindow : Window
 
             if (listing.Source == ListingSource.FfxivVenues)
             {
-                if (listing.Address is { } address)
-                    next.Add(new Row(listing, new ListingDetails([address], WebLinks(listing.Links))));
+                // Recording a fetch assigns new name and field objects, so a reference check finds every change
+                if (!shownVenues.TryGetValue(listing.Id, out var venue)
+                    || !ReferenceEquals(venue.Name, listing.Title) || !ReferenceEquals(venue.Fields, listing.Venue))
+                {
+                    venue = (listing.Title, listing.Venue, FfxivVenues.Show(listing, gazetteer));
+                    shownVenues[listing.Id] = venue;
+                }
+
+                var shown = venue.Shown;
+                if (shown.Address is { } address)
+                    next.Add(new Row(listing, shown.Title, new ListingDetails([address], WebLinks(shown.Links)), shown.AlwaysOpen));
+
                 continue;
             }
 
@@ -237,7 +252,7 @@ internal sealed class ListingsWindow : Window
                     continue;
                 var item = Partake.Show(listing, gazetteer);
                 var location = Parsed(listing, item.Location, item.World);
-                next.Add(new Row(listing, location with { Links = WebLinks(item.Links) }, item));
+                next.Add(new Row(listing, item.Title, location with { Links = WebLinks(item.Links) }, AlwaysOpen: false, item));
                 showsPartake = true;
                 continue;
             }
@@ -247,16 +262,22 @@ internal sealed class ListingsWindow : Window
 
             var details = Parsed(listing, listing.Description, listing.ListedOn);
             if (details.Addresses.Count > 0)
-                next.Add(new Row(listing, details));
+                next.Add(new Row(listing, listing.Title, details, AlwaysOpen: false));
         }
 
-        rows = [.. next.OrderByDescending(r => r.Listing.LastSeen).ThenBy(r => r.Event?.Title ?? r.Listing.Title, StringComparer.CurrentCultureIgnoreCase)];
+        rows = [.. next.OrderByDescending(r => r.Listing.LastSeen).ThenBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
 
-        // Forget ads the cache no longer holds (cleared or expired)
+        // Forget ads and venues the cache no longer holds (cleared or expired)
         if (parsed.Count > cache.Count)
         {
             foreach (var key in parsed.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
                 parsed.Remove(key);
+        }
+
+        if (shownVenues.Count > cache.Count)
+        {
+            foreach (var key in shownVenues.Keys.Where(k => cache.Find(ListingSource.FfxivVenues, k) is null).ToList())
+                shownVenues.Remove(key);
         }
 
         if (rowHeights.Count > cache.Count)

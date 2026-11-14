@@ -130,6 +130,16 @@ public class PartakeTests
         Assert.Equal("Gala", Partake.Title(" Gala "));
     }
 
+    [Fact]
+    public void HiddenEventsAreListedByTheirShownTitles()
+    {
+        var cache = new ListingCache();
+        cache.Seen(ListingSource.Partake, "1", "  zebra gala ", Now, oneOff: true).Hidden = true;
+        cache.Seen(ListingSource.Partake, "2", "amber night", Now, oneOff: true).Hidden = true;
+
+        Assert.Equal(["amber night", "zebra gala"], cache.HiddenListings().Select(l => l.ShownTitle));
+    }
+
     [Theory]
     [InlineData("endsAt", "\"2025-05-05T21:00:00.000Z\"")] // before startsAt
     [InlineData("endsAt", "\"2026-11-14T21:00:00.000Z\"")] // equal to startsAt
@@ -225,7 +235,6 @@ public class PartakeTests
         Assert.Equal("Light", listing.DataCentre);
         Assert.Equal("Lavender Beds, Ward 20, Plot 28", listing.Location);
         Assert.Equal(item.LinkTexts, listing.LinkTexts);
-        Assert.Empty(listing.Links);
         Assert.Equal("", listing.Description);
     }
 

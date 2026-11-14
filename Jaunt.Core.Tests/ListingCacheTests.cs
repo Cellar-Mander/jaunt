@@ -185,11 +185,11 @@ public class ListingCacheTests
         var cache = new ListingCache();
         cache.Seen(ListingSource.Xivpf, "1", "zebra lounge", Now).Hidden = true;
         cache.Seen(ListingSource.Xivpf, "2", "Not hidden", Now);
-        cache.Seen(ListingSource.FfxivVenues, "3", "Amber Room", Now).Hidden = true;
+        cache.Seen(ListingSource.FfxivVenues, "3", "Amber Room\nBar & Grill", Now).Hidden = true;
 
         var hidden = cache.HiddenListings();
 
-        Assert.Equal(["Amber Room", "zebra lounge"], hidden.Select(l => l.Title));
+        Assert.Equal(["Amber Room", "zebra lounge"], hidden.Select(l => l.ShownTitle));
     }
 
     [Fact]
@@ -372,45 +372,6 @@ public class ListingCacheTests
 
         Assert.Equal("Café  Siren Mist W5 P12", back.Description);
         Assert.Equal("Siren", back.ListedOn);
-    }
-
-    [Fact]
-    public void AVenuesAddressLinksAndAlwaysOpenSurviveSaving()
-    {
-        var cache = new ListingCache();
-        var listing = cache.Seen(ListingSource.FfxivVenues, "v1", "Lounge", Now);
-        var address = new HousingAddress("Goblin", WorldSource.Text, District.LavenderBeds, 5, null, true, 12, "3");
-        listing.Address = address;
-        listing.Links = [new Uri("https://lounge.carrd.co/"), new Uri("http://discord.gg/abc")];
-        listing.AlwaysOpen = true;
-
-        var back = ListingCache.FromJson(cache.ToJson()).Find(ListingSource.FfxivVenues, "v1")!;
-
-        Assert.Equal(address, back.Address);
-        Assert.Equal([new Uri("https://lounge.carrd.co/"), new Uri("http://discord.gg/abc")], back.Links);
-        Assert.True(back.AlwaysOpen);
-    }
-
-    [Theory]
-    [InlineData("""{"listings": [{"source": 2, "id": "5"}]}""")]
-    [InlineData("""{"listings": [{"source": 2, "id": "5", "links": null, "address": null}]}""")]
-    public void AListingSavedWithoutVenueFieldsLoadsWithout(string json)
-    {
-        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
-
-        Assert.Equal((null, 0, false), (listing.Address, listing.Links.Count, listing.AlwaysOpen));
-    }
-
-    [Fact]
-    public void LoadingDropsLinksThatArentWebsites()
-    {
-        const string json = """
-            {"listings": [{"source": 2, "id": "5", "links": ["https://a.example.com/", "javascript:alert(1)", "file:///C:/x", "ftp://b.example.com/"]}]}
-            """;
-
-        var listing = ListingCache.FromJson(json).Find(ListingSource.FfxivVenues, "5")!;
-
-        Assert.Equal([new Uri("https://a.example.com/")], listing.Links);
     }
 
     [Theory]

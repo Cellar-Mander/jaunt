@@ -5,12 +5,15 @@ using Jaunt.Core.Text;
 namespace Jaunt.Core.Listings;
 
 /// <summary>
-/// Reads the venue list from FFXIV Venues (<see cref="Url"/>) and records it in the listing cache.
-/// The rules are in <c>docs/design.md</c> under "FFXIV Venues".
+/// Reads the venue list from FFXIV Venues (<see cref="Url"/>), records each venue's fields as sent in
+/// the listing cache, and derives what the list shows from those fields (<see cref="Show"/>). The
+/// rules are in <c>docs/design.md</c> under "FFXIV Venues".
 /// </summary>
 /// <remarks>
 /// The response is every venue at once, about 2.5 MB for 1,400 venues. Reading it is one pass over
 /// the venues; a venue that doesn't have the expected shape is skipped rather than failing the rest.
+/// The cache keeps the name, location, links and schedule as sent, so a change to how they are read
+/// applies to cached venues without fetching again.
 /// </remarks>
 public static class FfxivVenues
 {
@@ -38,15 +41,23 @@ public static class FfxivVenues
         ["Empyreum"] = District.Empyreum,
     };
 
-    /// <summary>One venue as Jaunt keeps it.</summary>
+    /// <summary>One venue as the API sends it, with only the fields Jaunt reads.</summary>
+    /// <param name="Name">Its name as sent; null if missing.</param>
+    public sealed record Venue(string Id, string? Name, Fields Fields);
+
+    /// <summary>A venue's fields as the API sends them, other than its ID and name.</summary>
+    /// <param name="Location">Null if missing.</param>
+    /// <param name="Schedule">Its weekly openings; null if missing.</param>
+    public sealed record Fields(Location? Location, string? Website, string? Discord, IReadOnlyList<Opening?>? Schedule);
+
+    /// <summary>What the list shows for a venue, derived from its cached fields.</summary>
     /// <param name="Address">Null when the venue gives no housing address (a free-text location, or none).</param>
     /// <param name="Links">Its website and Discord, http or https only.</param>
-    public sealed record Venue(string Id, string Name, HousingAddress? Address, IReadOnlyList<Uri> Links, bool AlwaysOpen);
+    public sealed record Shown(string Title, HousingAddress? Address, IReadOnlyList<Uri> Links, bool AlwaysOpen);
 
     /// <summary>Reads the API's response.</summary>
-    /// <param name="gazetteer">Worlds, to correct a misspelt world name.</param>
     /// <exception cref="JsonException">The text is not a JSON array.</exception>
-    public static IReadOnlyList<Venue> Parse(string json, Gazetteer gazetteer)
+    public static IReadOnlyList<Venue> Parse(string json)
     {
         using var document = JsonDocument.Parse(json);
         if (document.RootElement.ValueKind != JsonValueKind.Array)
@@ -56,26 +67,36 @@ public static class FfxivVenues
         var venues = new List<Venue>();
         foreach (var element in document.RootElement.EnumerateArray())
         {
-            if (Read(element, gazetteer) is { } venue)
+            if (Read(element) is { } venue)
                 venues.Add(venue);
         }
 
         return venues;
     }
 
-    /// <summary>Records that FFXIV Venues listed these venues now.</summary>
+    /// <summary>
+    /// Records that FFXIV Venues listed these venues now, keeping the name as the listing's title and
+    /// the other fields, all as sent.
+    /// </summary>
     public static void Record(ListingCache cache, IEnumerable<Venue> venues, DateTimeOffset now)
     {
         foreach (var venue in venues)
-        {
-            var listing = cache.Seen(ListingSource.FfxivVenues, venue.Id, venue.Name, now);
-            listing.Address = venue.Address;
-            listing.Links = venue.Links;
-            listing.AlwaysOpen = venue.AlwaysOpen;
-        }
+            cache.Seen(ListingSource.FfxivVenues, venue.Id, venue.Name ?? "", now).Venue = venue.Fields;
     }
 
-    private static Venue? Read(JsonElement element, Gazetteer gazetteer)
+    /// <summary>What the list shows for a cached venue, derived from its fields as sent.</summary>
+    /// <param name="gazetteer">Worlds, to correct a misspelt world name.</param>
+    public static Shown Show(CachedListing listing, Gazetteer gazetteer)
+    {
+        var fields = listing.Venue;
+        return new Shown(
+            Title(listing.Title),
+            Address(fields?.Location, gazetteer),
+            Links(fields?.Website, fields?.Discord),
+            AlwaysOpen(fields?.Schedule));
+    }
+
+    private static Venue? Read(JsonElement element)
     {
         VenueData? data;
         try
@@ -90,17 +111,13 @@ public static class FfxivVenues
         if (data is null || string.IsNullOrWhiteSpace(data.Id) || data.Approved == false)
             return null;
 
-        return new Venue(
-            data.Id,
-            Title(data.Name),
-            Address(data.Location, gazetteer),
-            Links(data.Website, data.Discord),
-            AlwaysOpen(data.Schedule));
+        return new Venue(data.Id, data.Name, new Fields(data.Location, data.Website, data.Discord, data.Schedule));
     }
 
-    private static string Title(string? name)
+    /// <summary>The title shown for a venue's name as sent: first line only, trimmed and cut to 60 characters.</summary>
+    public static string Title(string name)
     {
-        var text = (name ?? "").Trim();
+        var text = name.Trim();
         var lineEnd = text.IndexOfAny(['\r', '\n']);
         // Stryker disable once Equality : the name is trimmed, so it never starts with a line break and lineEnd is never 0
         return ListingDetails.Shorten(lineEnd < 0 ? text : text[..lineEnd].TrimEnd());
@@ -110,7 +127,7 @@ public static class FfxivVenues
     /// The venue's housing address: a known district and a ward of 1 to 30, with a plot of 1 to 60 or
     /// else an apartment. Null otherwise, such as for a venue that gives only a free-text location.
     /// </summary>
-    internal static HousingAddress? Address(LocationData? location, Gazetteer gazetteer)
+    internal static HousingAddress? Address(Location? location, Gazetteer gazetteer)
     {
         if (location?.World is not { } written || string.IsNullOrWhiteSpace(written)
             || location.District is null || !Districts.TryGetValue(location.District.Trim(), out var district)
@@ -164,7 +181,7 @@ public static class FfxivVenues
     /// Whether the schedule opens every day of every week for at least <see cref="WholeDay"/>. A venue
     /// with a long opening on only some days, or every other week, is not open around the clock.
     /// </summary>
-    internal static bool AlwaysOpen(IEnumerable<ScheduleData?>? schedule)
+    internal static bool AlwaysOpen(IEnumerable<Opening?>? schedule)
     {
         var days = new HashSet<int>();
         foreach (var opening in schedule ?? [])
@@ -179,56 +196,30 @@ public static class FfxivVenues
         return days.Count == 7;
     }
 
-    private static TimeSpan Length(TimeData start, TimeData end) =>
+    private static TimeSpan Length(Time start, Time end) =>
         new TimeSpan(end.NextDay ? 1 : 0, end.Hour, end.Minute, 0) - new TimeSpan(start.Hour, start.Minute, 0);
 
-    // The API's shapes, only the fields Jaunt reads. Others, such as managers' Discord IDs, are ignored.
-    internal sealed class VenueData
+    // The API's shape, only the fields Jaunt reads. Others, such as managers' Discord IDs, are ignored.
+    private sealed class VenueData
     {
         public string? Id { get; set; }
         public string? Name { get; set; }
-        public LocationData? Location { get; set; }
+        public Location? Location { get; set; }
         public string? Website { get; set; }
         public string? Discord { get; set; }
         public bool? Approved { get; set; }
-        public List<ScheduleData?>? Schedule { get; set; }
+        public List<Opening?>? Schedule { get; set; }
     }
 
-    internal sealed class LocationData
-    {
-        public string? World { get; set; }
-        public string? District { get; set; }
-        public int Ward { get; set; }
-        public int Plot { get; set; }
-        public int Apartment { get; set; }
-        public int Room { get; set; }
-        public bool Subdivision { get; set; }
-    }
+    /// <summary>A venue's location as the API sends it. A venue that gives only a free-text location sends no world or district.</summary>
+    public sealed record Location(string? World, string? District, int Ward, int Plot, int Apartment, int Room, bool Subdivision);
 
-    internal sealed class ScheduleData
-    {
-        /// <summary>0 is Monday.</summary>
-        public int Day { get; set; }
+    /// <param name="Day">0 is Monday.</param>
+    /// <param name="End">Null means the API's default of three hours after the start.</param>
+    public sealed record Opening(int Day, Time? Start, Time? End, Interval? Interval);
 
-        public TimeData? Start { get; set; }
-
-        /// <summary>Null means the API's default of three hours after the start.</summary>
-        public TimeData? End { get; set; }
-
-        public IntervalData? Interval { get; set; }
-    }
-
-    internal sealed class TimeData
-    {
-        public int Hour { get; set; }
-        public int Minute { get; set; }
-        public bool NextDay { get; set; }
-    }
+    public sealed record Time(int Hour, int Minute, bool NextDay);
 
     /// <summary>Type 0 is every <c>IntervalArgument</c> weeks; type 1 is a week of each month.</summary>
-    internal sealed class IntervalData
-    {
-        public int IntervalType { get; set; }
-        public int IntervalArgument { get; set; }
-    }
+    public sealed record Interval(int IntervalType, int IntervalArgument);
 }
