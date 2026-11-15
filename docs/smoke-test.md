@@ -89,14 +89,17 @@ times as in FFXIV Venues 1 first.
    dimmed. 24/7 venues are at the end of "Open now". A venue open now also shows under its next
    opening's day; one not open shows once.
 3. **Rows**: each has a grey square, a status line (green "Open now · until …" or the times), the
-   title and the world. Narrow the window: long titles end in "…" rather than running under the
+   title in a larger font and the world. Above the list, at the right, "N listings" counts the
+   entries (a venue under both "Open now" and its next day counts once). Narrow the window: long titles end in "…" rather than running under the
    detail pane.
 4. **Local time**: change Settings → Display between 12- and 24-hour and the date formats; rows,
    dividers and the detail follow at once. A venue's opening matches its FFXIV Venues page in your
    time zone.
 5. **Detail**: select a Party Finder ad, a venue, a Partake event and a calendar event. Each shows a
-   grey band, its title, status, world, Travel and Open page where it has an address or link, Location,
-   and a footer naming its source. A long ad shows "Read more", which expands it and becomes "Show less".
+   grey band, its title in a larger font, status, world, Travel and Open page where it has an address or link, Location,
+   and a footer naming its source ("Sources: FFXIV Venues"), each source but Party Finder linking to its
+   site, in blue and underlined. A venue with a Discord invite shows "Discord" (also blue and underlined) first in the footer, opening the invite, and
+   not under Location; one whose only link is the invite has no Open page. A long ad shows "Read more", which expands it and becomes "Show less".
 6. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
    Disable and re-enable Jaunt: still selected. Press Settings → Clear cached listings, so it drops
    out of the data: the detail pane shows "Select a listing on the left to see its details."
@@ -107,7 +110,7 @@ times as in FFXIV Venues 1 first.
    the same time: a re-posted ad (same text, new listing), a venue's several ads, and an ad for an
    FFXIV Venues venue that is open then each show as one row. The merged row takes the FFXIV Venues
    name, Location lists every link from its listings once, About shows one ad's text, and the footer
-   names each source once on one line ("Listed on FFXIV Venues, Party Finder, xivpf"). Two xivpf ads
+   names each source once on one line ("Sources: FFXIV Venues, Party Finder, xivpf"). Two xivpf ads
    giving only the ward ("Fae / LB / W4") merge with the game's ad naming the plot in that ward. A
    venue's next opening still shows under its own day. FFXIV Venues venues cached before this version
    have no openings to merge with: clear the `FfxivVenues/…` times as in FFXIV Venues 1 first. *(self-test: none; the matching rules
@@ -121,7 +124,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `X
 
 1. **First fetch**: with no `Xivpf` time in `fetch-state.json` (disable Jaunt,
    remove it, re-enable), open `/jaunt` without opening the Party Finder. Within a few seconds
-   ads appear whose detail footer says "Listed on xivpf", and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
+   ads appear whose detail footer says "Sources: xivpf", and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
    *(self-test: the request is recorded before it is sent and only None ads after it, against a stand-in; the real site stays manual)*
 2. **Cooldown**: close and reopen `/jaunt` within 10 minutes: no second fetch is logged. After 10
    minutes, reopening fetches again. *(self-test: no fetch a minute before the 10 min are up)*
@@ -172,7 +175,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `R
 Checks the fetch, the cooldown and the list; the reading rules are covered by `FfxivVenuesTests`.
 
 1. **First fetch**: with no `FfxivVenues/…` times in `fetch-state.json` (disable Jaunt,
-   remove them, re-enable), open `/jaunt`. Within a few seconds the list fills with venues (footer "Listed on FFXIV Venues"),
+   remove them, re-enable), open `/jaunt`. Within a few seconds the list fills with venues (footer "Sources: FFXIV Venues"),
    only on your region's worlds, `/xllog` shows `Fetched … venues from FFXIV Venues`, and
    `fetch-state.json` has one `FfxivVenues/<data centre>` time per data centre in your region. The game doesn't stutter while it loads.
    *(self-test: Materia's request, with `dataCenter=Materia`, is recorded before it is sent and the venues after it, against a stand-in; the real site and the stutter stay manual)*
