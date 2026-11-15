@@ -32,7 +32,7 @@ public class StatusTextTests
         Assert.Equal("Open now · until Sun 15 Nov 15:00", Row(new Occurrence(Now.AddHours(-1), Now.AddDays(1))));
 
     [Fact]
-    public void AlwaysOpenSays247() => Assert.Equal("Open 24/7", Row(new Occurrence(null, null), always: true));
+    public void AlwaysOpenSays247() => Assert.Equal("Open now · 24h", Row(new Occurrence(null, null), always: true));
 
     [Fact]
     public void UpcomingRowsShowLocalTimesOnly()
@@ -48,6 +48,6 @@ public class StatusTextTests
         Assert.Equal("Sun 15 Nov 17:00–20:00", Detail(new Occurrence(Now.AddHours(26), Now.AddHours(29))));
         Assert.Equal("Sun 15 Nov 17:00", Detail(new Occurrence(Now.AddHours(26), null)));
         Assert.Equal("Open now · until 18:00", Detail(new Occurrence(Now.AddHours(-1), Now.AddHours(3))));
-        Assert.Equal("Open 24/7", Detail(new Occurrence(null, null), always: true));
+        Assert.Equal("Open now · 24h", Detail(new Occurrence(null, null), always: true));
     }
 }

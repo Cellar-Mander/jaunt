@@ -7,14 +7,14 @@ namespace Jaunt.Core.Browser;
 public static class StatusText
 {
     /// <summary>
-    /// For a list row, under a day divider that already gives the date: "Open 24/7", "Open now",
+    /// For a list row, under a day divider that already gives the date: "Open now · 24h", "Open now",
     /// "Open now · until 23:00" (with the date when it closes after the next 24 hours), or the times,
     /// "20:00–23:00", or "20:00" with no closing time.
     /// </summary>
     public static string Row(Occurrence when, bool alwaysOpen, DateTimeOffset now, TimeZoneInfo zone, TimeFormat timeFormat, DateFormat dateFormat, CultureInfo locale)
     {
         if (alwaysOpen)
-            return "Open 24/7";
+            return "Open now · 24h";
         if (when.IsOpen(now))
             return OpenNow(when, now, zone, timeFormat, dateFormat, locale);
 

@@ -398,7 +398,7 @@ internal sealed class ListingsWindow : Window
         if (row.CalendarEvent?.Rating is not { } rating)
             return;
 
-        Section("Rating");
+        Section("Age / rating");
         ImGui.TextUnformatted(rating);
     }
 

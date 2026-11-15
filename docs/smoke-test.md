@@ -163,7 +163,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `F
 2. **Cooldown**: close and reopen `/jaunt`. No second fetch is logged; the venues are still listed.
    Disable and re-enable Jaunt, then open `/jaunt`: still no fetch, as the time is saved.
    *(self-test: no fetch a minute before the 8 h are up, one when they are; the reload stays manual)*
-3. **24/7**: at least one row at the end of "Open now" shows "Open 24/7" (Nox Arcana or Splash Bathhouse, as of 2026-11).
+3. **24/7**: at least one row at the end of "Open now" shows "Open now · 24h" (Nox Arcana or Splash Bathhouse, as of 2026-11).
 4. **Address**: on a selected venue, Copy copies its world, district, ward and plot; Travel works with
    Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark". *(self-test: the Bismarck spelling)*
 5. **Links**: Open page, and Open beside a further link under Location, open the browser at the URI in the tooltip.

@@ -405,14 +405,14 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Rows**: a placeholder square for the icon, then three lines, each cut with "…" to the pane's
   width: the status, the title, and the world dimmed. The status is "Open now · until 23:00" in green
   ("until Mon 16 Nov 23:00" when it closes more than a day ahead), "Open now" when the end isn't
-  known, "Open 24/7", or for a later opening its times ("20:00–23:00", or "20:00" without an end).
+  known, "Open now · 24h", or for a later opening its times ("20:00–23:00", or "20:00" without an end).
   Rows out of view are spaced, not drawn. The list is rebuilt every second.
 - **Detail pane**, top to bottom, each part only when the listing has it: a placeholder band for the
   splash image; the title; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"), and for a recurring listing open now "Next: " and its next opening; the world;
   Travel and Open page; Location: each address with Copy, a location given only as text, and any
   further links; About: an ad's normalised text, cut with "…" to 6 lines with "Read more" (then "Show
-  less"); Rating: an RP calendar event's rating; then a footer with the source and "seen … ago", or
+  less"); Age / rating: an RP calendar event's rating; then a footer with the source and "seen … ago", or
   for an RP calendar event the calendar's credit and licence links and when it was last validated,
   and for a Partake event the line that Jaunt is not affiliated with or endorsed by Partake.
 - **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
