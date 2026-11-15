@@ -37,32 +37,11 @@ public static class PlaceMarks
         for (var i = 0; i < entries.Count; i++)
             Adopt(cache, entries[i]);
 
-        // 1. The same FFXIV Venues ID: certain, and where the venue is now, so the place moves there
-        var byVenue = new Dictionary<string, PlaceMark>(StringComparer.Ordinal);
-        foreach (var place in cache.Places)
-        {
-            foreach (var id in place.VenueIds)
-                byVenue.TryAdd(id, place);
-        }
-
-        for (var i = 0; i < entries.Count; i++)
-        {
-            if (entries[i].Places.Count == 0)
-                continue;
-            foreach (var venue in entries[i].Members.Where(m => m.Source == ListingSource.FfxivVenues))
-            {
-                if (byVenue.TryGetValue(venue.Id, out var place) && place.Owner is not null)
-                {
-                    matched[i] = Moved(cache, place, entries[i].Places[0], moved);
-                    break;
-                }
-            }
-        }
+        MatchByVenue(cache, entries, matched, moved);
 
         // 2. The same address
         for (var i = 0; i < entries.Count; i++)
         {
-            // Stryker disable once Statement : an entry matched by ID was moved to its first address, where the address pass would find the same place
             if (matched[i] is not null)
                 continue;
             foreach (var address in entries[i].Places)
@@ -87,6 +66,56 @@ public static class PlaceMarks
         }
 
         return matched;
+    }
+
+    /// <summary>
+    /// 1. The same FFXIV Venues ID as one the place has seen. The entry carries the place, which stays
+    /// put when it is at one of the entry's addresses and otherwise moves to the first, as the venue's
+    /// owner has said where it is now. It doesn't move while an entry at its address shows another of
+    /// its IDs: two venues sharing a house were both seen there, and the one that moved can't take the
+    /// marks from the one still there (nor, once moved, can another claim them back).
+    /// </summary>
+    private static void MatchByVenue(ListingCache cache, IReadOnlyList<MarkEntry> entries, PlaceMark?[] matched, HashSet<PlaceMark> moved)
+    {
+        var byVenue = new Dictionary<string, PlaceMark>(StringComparer.Ordinal);
+        foreach (var place in cache.Places)
+        {
+            foreach (var id in place.VenueIds)
+                byVenue.TryAdd(id, place);
+        }
+
+        // The FFXIV Venues IDs shown at each address this time
+        var idsAt = new Dictionary<AddressKey, HashSet<string>>();
+        foreach (var entry in entries)
+        {
+            foreach (var address in entry.Places)
+            {
+                if (!idsAt.TryGetValue(address, out var ids))
+                    idsAt[address] = ids = new HashSet<string>(StringComparer.Ordinal);
+                ids.UnionWith(entry.Members.Where(m => m.Source == ListingSource.FfxivVenues).Select(m => m.Id));
+            }
+        }
+
+        for (var i = 0; i < entries.Count; i++)
+        {
+            if (entries[i].Places.Count == 0)
+                continue;
+            foreach (var venue in entries[i].Members.Where(m => m.Source == ListingSource.FfxivVenues))
+            {
+                if (!byVenue.TryGetValue(venue.Id, out var place) || place.Owner is null)
+                    continue;
+                if (entries[i].Places.Contains(place.Address))
+                {
+                    matched[i] = place;
+                    break;
+                }
+
+                if (idsAt.TryGetValue(place.Address, out var there) && there.Overlaps(place.VenueIds))
+                    continue;
+                matched[i] = Moved(cache, place, entries[i].Places[0], moved);
+                break;
+            }
+        }
     }
 
     /// <summary>Moves the place, noting it so its title and shown address follow the entry it moved to.</summary>

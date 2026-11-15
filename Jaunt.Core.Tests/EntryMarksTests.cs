@@ -143,6 +143,41 @@ public class EntryMarksTests
     }
 
     [Fact]
+    public void OneOfTwoVenuesSharingAHouseMovingLeavesTheMarksWithTheOneStillThere()
+    {
+        // Both venues were seen at the marked house, so the place holds both IDs
+        var monday = Venue("monday");
+        var friday = Venue("friday");
+        var place = cache.Place(Tavern);
+        place.Favourite = true;
+        Match(Entry(Tavern, monday), Entry(Tavern, friday));
+
+        for (var rebuild = 0; rebuild < 3; rebuild++)
+        {
+            cache.TakeChanges();
+            var matched = Match(Entry(Tavern, monday), Entry(NewHouse, friday));
+
+            Assert.Same(place, matched[0]);
+            Assert.Null(matched[1]);
+            Assert.Equal(Tavern, place.Address);
+            Assert.False(cache.MarksUnsaved);
+        }
+    }
+
+    [Fact]
+    public void AVenuesIdOutranksAnotherPlaceAtTheEntrysFirstAddress()
+    {
+        var venue = Venue();
+        var byId = Toggle(Entry(Elsewhere, venue), EntryMark.Favourite);
+        cache.Place(Tavern).Hidden = true;
+
+        var matched = Match(new MarkEntry([venue], [Tavern, Elsewhere], "Tavern", "", []));
+
+        Assert.Same(byId, matched[0]);
+        Assert.Equal(Elsewhere, byId!.Address);
+    }
+
+    [Fact]
     public void AWebsiteMovesTheMarksWhenNothingAtTheOldAddressShowsIt()
     {
         Toggle(Entry(Tavern, ["https://tavern.carrd.co/"], Ad("a")), EntryMark.Favourite);
@@ -325,6 +360,21 @@ public class EntryMarksTests
         Toggle(Entry(Elsewhere, second), EntryMark.Hidden);
 
         var place = Match(Entry(NewHouse, first, second))[0];
+
+        Assert.True(place!.Favourite);
+        Assert.False(place.Hidden);
+        Assert.True(cache.PlaceAt(Elsewhere)!.Hidden);
+    }
+
+    [Fact]
+    public void AnEntryWhoseFirstVenueIsInPlaceMovesNoOtherVenuesPlace()
+    {
+        var first = Venue("1");
+        var second = Venue("2");
+        Toggle(Entry(Tavern, first), EntryMark.Favourite);
+        Toggle(Entry(Elsewhere, second), EntryMark.Hidden);
+
+        var place = Match(Entry(Tavern, first, second))[0];
 
         Assert.True(place!.Favourite);
         Assert.False(place.Hidden);

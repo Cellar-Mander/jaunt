@@ -525,8 +525,11 @@ and copy link (`6e2b5199`) are separate tasks.
     there, from any source, now or later", "Mark this event visited", "Hide these ads"; a lit button
     says "Remove from favourites", "Mark not visited" or "Un-hide".
   - **Matching**, from the surest evidence down (measured in `spikes/mark-identity`):
-    1. The same FFXIV Venues ID as one seen at a place: the entry carries it, and the place moves to the
-       entry's address, as the venue's owner has said where it is now.
+    1. The same FFXIV Venues ID as one seen at a place: the entry carries it. A place at one of the
+       entry's addresses stays put; otherwise it moves to the entry's first address, as the venue's
+       owner has said where it is now, unless an entry still at its address shows another of its IDs.
+       Two venues sharing a house are both seen there, so the one that moves leaves the marks with
+       the one that stays.
     2. The same address: any of the entry's plot or apartment addresses, the one it shows first first.
     3. A website the place has seen, shown by an entry with no place at another address: the place moves
        there, unless an entry still at the place's address shows that website or shows none (an ad
