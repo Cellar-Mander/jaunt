@@ -116,7 +116,7 @@ public sealed class SearchQuery
             if (i < text.Length && text[i] == '"')
             {
                 var close = text.IndexOf('"', i + 1);
-                var end = close < 0 ? text.Length : close;
+                var end = close == -1 ? text.Length : close;
                 term = text[(i + 1)..end].Trim();
                 i = end + 1;
             }
