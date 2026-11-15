@@ -206,8 +206,8 @@ ignoring case, and has no region filter), in one fetch: approved venues (the API
 works out from each venue's schedule. A venue left out stays in the cache with its fields and marks,
 and in the browser while it has openings to list, until it expires (see "Listing cache"). `FfxivVenues`
 records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
-the API sent them: its name as the title, and its location, website, Discord and schedule, each
-schedule entry with its time zone (the start's `timeZone`, an IANA ID). The title,
+the API sent them: its name as the title, and its location, website, Discord, schedule, `sfw` and
+tags, each schedule entry with its time zone (the start's `timeZone`, an IANA ID). The title,
 address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
 to how they are read applies to cached venues without fetching again. A venue cached without them
 shows no address until the next fetch. Opening the browser asks for each data centre in the region
@@ -314,16 +314,17 @@ the Settings cooldown if longer); the request is recorded before it is sent, so 
 too. Download and parsing run off the game thread. An event is recorded only when its world or its
 data centre is in the travel region; the API has no region filter.
 
-- **Raw values**: the cache keeps the title, world, data centre, location and links exactly as
-  Partake sent them (links in `linkTexts`). The rules below for showing them run each time they
+- **Raw values**: the cache keeps the title, world, data centre, location, links, age rating and
+  tags exactly as Partake sent them (links in `linkTexts`; the rating and tags are for "Tags and
+  SFW"). The rules below for showing them run each time they
   are shown, so a change to these rules or the address parser applies on the next plugin load,
   not after the next fetch.
 - **Query**: `events(game: "final-fantasy-xiv", startsBetween: {start}, sortBy: STARTS_AT_ASC)`
   with `start` 24 hours before now, so events already under way are included. Pages of 200 (`limit`,
   `offset`) until a page comes back with fewer, at most 5 pages per fetch. About 150 events are
-  listed at once, so one page is usual. Only the fields shown are asked for: `id`, `title`,
-  `startsAt`, `endsAt`, `location`, `server.name`, `dataCenter.name` and the host team's
-  `websiteUrl` and `discordUrl`. `server` and `dataCenter` work but aren't in Partake's docs.
+  listed at once, so one page is usual. Only the fields shown or filtered on are asked for: `id`,
+  `title`, `startsAt`, `endsAt`, `location`, `ageRating`, `tags`, `server.name`, `dataCenter.name`
+  and the host team's `websiteUrl` and `discordUrl`. `server` and `dataCenter` work but aren't in Partake's docs.
 - **Title**: shown trimmed and cut to 60 characters like an ad's.
 - **Times**: `startsAt` and `endsAt` (UTC), shown in local time in the chosen time and date formats,
   "Sat 14 Nov 20:00–23:00", with the end's date too when it ends on a later day, and "on now" once
@@ -339,7 +340,7 @@ data centre is in the travel region; the API has no region filter.
 - An event is skipped, without failing the others, when it lacks an ID or either time, its title
   or world is missing or blank, its end is not after its start, or its fields have the wrong types.
   A response with GraphQL `errors` (Partake answers those with HTTP 200), without `data.events`, or
-  that isn't JSON fails the fetch, which is logged, and the cached events stay.
+  that isn't JSON fails the fetch, which is logged, and the cached events stay. A missing tag is dropped.
 - Events that have ended by the time a fetch is recorded aren't recorded, and the list leaves out
   cached events once they end.
 - **Credit**: Partake's API terms (https://partake.gg/developers) bar apps from presenting
@@ -367,6 +368,46 @@ Hidden venues' matching keep it as written), in one pass:
   something is left out, runs of spaces close up and trailing spaces go ("✦ 🌴 ROSE" → "◆ ROSE").
 - Whitespace is always kept. ImGui's characters are 16-bit, so nothing beyond U+FFFF counts as in the font.
 - Text that needs no change is returned as it is. Each title is folded once per font, not per frame.
+
+### Tags and SFW
+
+`ListingTags` gives each cached listing a set of interests and decides whether it counts as NSFW,
+for the browser's filters (`d68d407e`) and detail pane (`5d36be20`). Both are worked out from the
+fields the source sent, so a change to the keyword lists applies to cached listings without fetching
+again.
+
+- **Interests**: Clubs (and DJs), Bars (and taverns), Cafes (and food), Live music (and open stage),
+  Games (contests and giveaways too), Gambling, Roleplay, Spa (and baths), Art, Photography, Tarot,
+  and Chill (AFK, open house, 24/7). A listing has any number of them; the median venue ad has two.
+- **Keywords**: developer-maintained lists in `ListingTags`, read from an ad's text, an event's
+  title or a venue's name after Party Finder glyphs are decoded (boxed letters read as letters) and
+  case is folded. A word is a run of letters and digits, keeping `/` between digits (`24/7`,
+  `50/50`) and `+` next to a digit (`18+`); other characters split words, so `Bar/DJs` and
+  `twitch.tv/name` give their words. Keywords match whole words, or a phrase's consecutive words,
+  and a word ending in "s" also matches without it (`bars`, `hot springs`); "starts" is not "art"
+  and "team" is not "tea". Japanese keywords (喫茶, 雑談, 読書, 見学, 珈琲, ...) match anywhere in the
+  text. Gambling shorthand (`DRT`, `BJ`, `50/50`, raffle) counts as Gambling, and bingo, trivia,
+  prizes and giveaways as Games; a Twitch link or "party" counts as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
+  lists were tuned on those ads.
+- **Source tags**: FFXIV Venues' owner-chosen tags and Partake's event tags map to interests,
+  ignoring case and surrounding spaces ("Bath house" → Spa, "Live DJs" → Clubs, "Cafes, Taverns &
+  Inns" → Cafes and Bars). Tags with no matching interest (Courtesans, VIP, LGBTQIA+) add none. A
+  venue's or event's interests are its tags' and its name's or title's keywords together.
+  FFXIV RP Event Calendar events are always Roleplay.
+- **SFW or NSFW**: the browser's safety filter is SFW only. A listing that marks itself neither
+  SFW nor NSFW but has an age restriction counts as NSFW. An explicit word in the text means the
+  word `NSFW` (NSFW, even if it also says SFW) or `SFW`; an age restriction is `18+`, `21+`, `+18`,
+  `R18`, `R-18`, "adults only", 18禁 or 成人向け, not a bare number ("W18"). Per source:
+  - FFXIV Venues: its `sfw` field decides; a venue cached before it was kept counts as SFW until
+    the next fetch.
+  - Partake: an explicit word in the title wins; otherwise `ageRating` `ADULT` (any case) is NSFW,
+    and `MATURE`, `EVERYONE` or none is SFW.
+  - FFXIV RP Event Calendar: an explicit word in the name wins; otherwise Adults Only (the rating,
+    or the `[AO]` tag when there is none) is NSFW, and Mature and Teen are SFW: Mature's 16+ is a
+    content rating, not an age restriction.
+  - Party Finder ads: an explicit word wins; otherwise an age restriction is NSFW.
+- **Listings shown as one**: every member's interests, and NSFW when any member is: NSFW always
+  wins over SFW, even over an FFXIV Venues venue marked SFW.
 
 ### Listing browser
 
@@ -510,6 +551,9 @@ Caps on user-configurable lists and text, and how input from other players or th
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
+- Tagging a listing is one pass over its normalised text into words, a dictionary lookup per word
+  (and per word of a phrase starting there), and one substring search per Japanese keyword (about
+  40), with no regex, so it stays linear in the text's length.
 - An xivpf response (about 700 listings, 1.6 MB) is read in one pass over its listings, off the
   game thread, keeping about 150 ads; their text is at most a few hundred characters. Checking
   whether the game also sent an ad is one cache lookup.

@@ -20,9 +20,11 @@ public class FfxivVenuesTests
         string website = "\"https://lounge.carrd.co/\"",
         string discord = "\"https://discord.gg/lounge\"",
         string schedule = "[]",
-        string approved = "true") => $$"""
+        string approved = "true",
+        string sfw = "true",
+        string tags = """["Bar"]""") => $$"""
         {"id":"{{id}}","name":{{JsonSerializer.Serialize(name)}},"location":{{location}},"website":{{website}},"discord":{{discord}},
-         "hiring":false,"sfw":true,"schedule":{{schedule}},"scheduleOverrides":[],"managers":["1"],"tags":["Bar"],"approved":{{approved}}}
+         "hiring":false,"sfw":{{sfw}},"schedule":{{schedule}},"scheduleOverrides":[],"managers":["1"],"tags":{{tags}},"approved":{{approved}}}
         """;
 
     /// <summary>Reads one venue, records it in a new cache and derives what the list shows for it.</summary>
@@ -72,6 +74,27 @@ public class FfxivVenuesTests
 
         var expected = new FfxivVenues.Resolution(new DateTimeOffset(2026, 11, 14, 19, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 15, 2, 0, 0, TimeSpan.Zero));
         Assert.Equal(expected, Assert.Single(loaded.Venue!.Schedule!)!.Resolution);
+    }
+
+    [Fact]
+    public void KeepsSfwAndTagsAsSentThroughTheCache()
+    {
+        var cache = new ListingCache();
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(sfw: "false", tags: """["Bath house", null, "Tarot"]""")}]"), Now);
+
+        var fields = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!.Venue!;
+
+        Assert.False(fields.Sfw);
+        Assert.Equal(["Bath house", null, "Tarot"], fields.Tags!);
+    }
+
+    [Fact]
+    public void AVenueWithoutSfwOrTagsHasNeither()
+    {
+        var fields = Cached(VenueJson(sfw: "null", tags: "null")).Venue!;
+
+        Assert.Null(fields.Sfw);
+        Assert.Null(fields.Tags);
     }
 
     [Fact]

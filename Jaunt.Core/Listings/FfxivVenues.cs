@@ -61,7 +61,11 @@ public static class FfxivVenues
     /// <summary>A venue's fields as the API sends them, other than its ID and name.</summary>
     /// <param name="Location">Null if missing.</param>
     /// <param name="Schedule">Its weekly openings; null if missing.</param>
-    public sealed record Fields(Location? Location, string? Website, string? Discord, IReadOnlyList<Opening?>? Schedule);
+    /// <param name="Sfw">Whether the owner marks it safe for work; null if missing, as in venues cached before it was kept.</param>
+    /// <param name="Tags">The tags its owner chose ("Bar", "Tarot"), as sent; null if missing.</param>
+    public sealed record Fields(
+        Location? Location, string? Website, string? Discord, IReadOnlyList<Opening?>? Schedule,
+        bool? Sfw = null, IReadOnlyList<string?>? Tags = null);
 
     /// <summary>What the list shows for a venue, derived from its cached fields.</summary>
     /// <param name="Address">Null when the venue gives no housing address (a free-text location, or none).</param>
@@ -124,7 +128,7 @@ public static class FfxivVenues
         if (data is null || string.IsNullOrWhiteSpace(data.Id) || data.Approved == false)
             return null;
 
-        return new Venue(data.Id, data.Name, new Fields(data.Location, data.Website, data.Discord, data.Schedule));
+        return new Venue(data.Id, data.Name, new Fields(data.Location, data.Website, data.Discord, data.Schedule, data.Sfw, data.Tags));
     }
 
     /// <summary>
@@ -237,6 +241,8 @@ public static class FfxivVenues
         public string? Discord { get; set; }
         public bool? Approved { get; set; }
         public List<Opening?>? Schedule { get; set; }
+        public bool? Sfw { get; set; }
+        public List<string?>? Tags { get; set; }
     }
 
     /// <summary>A venue's location as the API sends it. A venue that gives only a free-text location sends no world or district.</summary>

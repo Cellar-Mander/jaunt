@@ -36,11 +36,11 @@ public static class Partake
     /// <summary>How far back to ask for start times, to include events still under way.</summary>
     public static readonly TimeSpan Lookback = TimeSpan.FromHours(24);
 
-    // Only the fields Jaunt shows, as Partake's acceptable-use rules ask
+    // Only the fields Jaunt shows or filters on, as Partake's acceptable-use rules ask
     private const string Query = """
         query Events($game: String, $start: DateTime, $limit: Int, $offset: Int) {
           events(game: $game, startsBetween: { start: $start }, sortBy: STARTS_AT_ASC, limit: $limit, offset: $offset) {
-            id title startsAt endsAt location
+            id title startsAt endsAt location ageRating tags
             server { name } dataCenter { name }
             team { websiteUrl discordUrl }
           }
@@ -53,9 +53,11 @@ public static class Partake
     /// <param name="DataCentre">As sent, or null.</param>
     /// <param name="Location">The free-text location as sent, or null.</param>
     /// <param name="LinkTexts">The host's website and Discord as sent, leaving out missing ones.</param>
+    /// <param name="AgeRating">As sent ("EVERYONE", "MATURE", "ADULT"), or null.</param>
+    /// <param name="Tags">The event's tags as sent ("Live DJs"), leaving out missing ones.</param>
     public sealed record Event(
         string Id, string Title, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string World, string? DataCentre,
-        string? Location, IReadOnlyList<string> LinkTexts);
+        string? Location, IReadOnlyList<string> LinkTexts, string? AgeRating = null, IReadOnlyList<string>? Tags = null);
 
     /// <summary>What the list shows for a cached event, worked out from the values Partake sent.</summary>
     /// <param name="World">Corrected to the game's spelling where the gazetteer knows it.</param>
@@ -134,6 +136,8 @@ public static class Partake
             listing.DataCentre = item.DataCentre;
             listing.Location = item.Location;
             listing.LinkTexts = item.LinkTexts;
+            listing.Rating = item.AgeRating;
+            listing.SourceTags = item.Tags ?? [];
         }
     }
 
@@ -175,7 +179,9 @@ public static class Partake
             return null;
 
         string[] links = [.. new[] { data.Team?.WebsiteUrl, data.Team?.DiscordUrl }.OfType<string>()];
-        return new Event(id.ToString(CultureInfo.InvariantCulture), title, start, end, server, data.DataCenter?.Name, data.Location, links);
+        return new Event(
+            id.ToString(CultureInfo.InvariantCulture), title, start, end, server, data.DataCenter?.Name, data.Location, links,
+            data.AgeRating, [.. (data.Tags ?? []).OfType<string>()]);
     }
 
     // The API's shapes, only the fields Jaunt asks for
@@ -204,6 +210,12 @@ public static class Partake
 
         [JsonPropertyName("team")]
         public TeamData? Team { get; set; }
+
+        [JsonPropertyName("ageRating")]
+        public string? AgeRating { get; set; }
+
+        [JsonPropertyName("tags")]
+        public List<string?>? Tags { get; set; }
     }
 
     private sealed class NameData

@@ -16,9 +16,11 @@ public class PartakeTests
         string location = "\"Lavender Beds, Ward 20, Plot 28\"",
         string server = """{"name":"Lich"}""",
         string dataCenter = """{"name":"Light"}""",
-        string team = """{"websiteUrl":"https://virtue-xiv.club/","discordUrl":"discord.gg/xivvirtue"}""") => $$"""
+        string team = """{"websiteUrl":"https://virtue-xiv.club/","discordUrl":"discord.gg/xivvirtue"}""",
+        string ageRating = "\"ADULT\"",
+        string tags = """["Live DJs","Casino & Gambling"]""") => $$"""
         {"id":{{id}},"title":{{title}},"startsAt":{{startsAt}},"endsAt":{{endsAt}},"location":{{location}},
-         "server":{{server}},"dataCenter":{{dataCenter}},"team":{{team}} }
+         "server":{{server}},"dataCenter":{{dataCenter}},"team":{{team}},"ageRating":{{ageRating}},"tags":{{tags}} }
         """;
 
     private static string Response(params string[] events) => "{\"data\":{\"events\":[" + string.Join(",", events) + "]}}";
@@ -67,6 +69,46 @@ public class PartakeTests
         Assert.Equal("Light", item.DataCentre);
         Assert.Equal("Lavender Beds, Ward 20, Plot 28", item.Location);
         Assert.Equal(["https://virtue-xiv.club/", "discord.gg/xivvirtue"], item.LinkTexts);
+    }
+
+    [Fact]
+    public void AsksForTheAgeRatingAndTags()
+    {
+        var query = JsonDocument.Parse(Partake.RequestBody(Now, 0)).RootElement.GetProperty("query").GetString()!;
+
+        Assert.Contains(" ageRating tags", query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void KeepsTheAgeRatingAndTagsThroughTheCache()
+    {
+        var cache = new ListingCache();
+        Partake.Record(cache, [Single(EventJson(tags: """["Live DJs", null, "Spa & Relaxation"]"""))], Now);
+
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.Partake, "56564")!;
+
+        Assert.Equal("ADULT", back.Rating);
+        Assert.Equal(["Live DJs", "Spa & Relaxation"], back.SourceTags);
+    }
+
+    [Fact]
+    public void AnEventWithoutAgeRatingOrTagsHasNeither()
+    {
+        var cache = new ListingCache();
+        Partake.Record(cache, [Single(EventJson(ageRating: "null", tags: "null"))], Now);
+
+        var listing = Assert.Single(cache.Listings);
+        Assert.Null(listing.Rating);
+        Assert.Empty(listing.SourceTags);
+    }
+
+    [Fact]
+    public void RecordingAnEventMadeWithoutTagsKeepsNone()
+    {
+        var cache = new ListingCache();
+        Partake.Record(cache, [Single(EventJson()) with { Tags = null }], Now);
+
+        Assert.Empty(Assert.Single(cache.Listings).SourceTags);
     }
 
     [Fact]

@@ -94,11 +94,17 @@ public sealed class CachedListing
     public DateOnly? LastValidated { get; set; }
 
     /// <summary>
-    /// The content rating the source gives, as sent ("Teen", "Mature"); null if none. Kept for
-    /// filtering; not shown. For the RP calendar, <see cref="RpEventCalendar.Show"/> falls back to the
-    /// name's rating tag.
+    /// The content rating the source gives, as sent (the RP calendar's "Teen" or "Mature", Partake's
+    /// "MATURE"); null if none. Kept for filtering (<see cref="ListingTags"/>); not shown. For the RP
+    /// calendar, <see cref="RpEventCalendar.Show"/> falls back to the name's rating tag.
     /// </summary>
     public string? Rating { get; set; }
+
+    /// <summary>
+    /// The tags the source gives, as sent, for sources that keep them outside their own fields
+    /// (Partake). Empty for other sources; FFXIV Venues' are in <see cref="Venue"/>.
+    /// </summary>
+    public IReadOnlyList<string> SourceTags { get; set; } = [];
 
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }
