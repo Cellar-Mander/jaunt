@@ -83,18 +83,33 @@ public static class OpeningTimeResolver
     /// <param name="written">The zone as written (<see cref="OpeningTime.Zone"/>), or null.</param>
     /// <param name="region">The region the listing was seen in.</param>
     /// <param name="language">The ad's language as an ISO 639-1 code ("de", "fr", "en"), or null if unknown.</param>
-    public static TimeZoneInfo Zone(string? written, PartyFinderRegion region, string? language)
-    {
-        var id = written is null ? null : ZoneIds.GetValueOrDefault(written);
-        if (id is not null)
-            return Find(id);
-        return Find(region switch
+    public static TimeZoneInfo Zone(string? written, PartyFinderRegion region, string? language) =>
+        Written(written) ?? Find(region switch
         {
             PartyFinderRegion.NorthAmerica => "America/New_York",
             PartyFinderRegion.Japan => "Asia/Tokyo",
             PartyFinderRegion.Oceania => "Australia/Sydney",
             _ => language is "de" or "fr" ? "Europe/Berlin" : "Europe/London",
         });
+
+    /// <summary>The zone an ad writes, or null when it writes none or one this doesn't know.</summary>
+    /// <param name="written">The zone as written (<see cref="OpeningTime.Zone"/>), or null.</param>
+    public static TimeZoneInfo? Written(string? written) =>
+        written is not null && ZoneIds.TryGetValue(written, out var id) ? Find(id) : null;
+
+    /// <summary>Every zone an ad can write, once each, in a fixed order.</summary>
+    public static IEnumerable<TimeZoneInfo> WritableZones => WindowsIds.Keys.Select(Find);
+
+    /// <summary>
+    /// The zone with an IANA ID, such as one FFXIV Venues sends, or null when the runtime doesn't know
+    /// it (no ICU and not one of the zones ads write).
+    /// </summary>
+    public static TimeZoneInfo? FindZone(string ianaId)
+    {
+        if (TimeZoneInfo.TryFindSystemTimeZoneById(ianaId, out var zone))
+            return zone;
+        // Stryker disable once Conditional : the fallback differs only on a runtime without ICU, which the tests don't run on
+        return WindowsIds.TryGetValue(ianaId, out var windowsId) && TimeZoneInfo.TryFindSystemTimeZoneById(windowsId, out zone) ? zone : null;
     }
 
     private static TimeZoneInfo Find(string ianaId)

@@ -75,6 +75,37 @@ public class FfxivVenuesTests
     }
 
     [Fact]
+    public void KeepsTheScheduleZoneThroughTheCache()
+    {
+        var cache = new ListingCache();
+        var schedule = $"[{Opening(1, "20:00", "23:00").Replace("\"UTC\"", "\"America/New_York\"", StringComparison.Ordinal)}]";
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(schedule: schedule)}]"), Now);
+
+        var loaded = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!;
+
+        Assert.Equal(OpeningTimeResolver.FindZone("America/New_York"), FfxivVenues.Zone(loaded.Venue));
+    }
+
+    [Fact]
+    public void TheZoneIsTheFirstEntryWithOneTheRuntimeKnows()
+    {
+        var unknown = Opening(1, "20:00", "23:00").Replace("\"UTC\"", "\"Mars/Olympus\"", StringComparison.Ordinal);
+        var missing = Opening(2, "20:00", "23:00").Replace("\"timeZone\":\"UTC\",", "", StringComparison.Ordinal);
+        var sydney = Opening(3, "20:00", "23:00").Replace("\"UTC\"", "\"Australia/Sydney\"", StringComparison.Ordinal);
+        var venue = Cached(VenueJson(schedule: $"[{unknown},{missing},{sydney}]"));
+
+        Assert.Equal(OpeningTimeResolver.FindZone("Australia/Sydney"), FfxivVenues.Zone(venue.Venue));
+    }
+
+    [Fact]
+    public void AVenueWithNoScheduleZoneHasNone()
+    {
+        var missing = Opening(2, "20:00", "23:00").Replace("\"timeZone\":\"UTC\",", "", StringComparison.Ordinal);
+        Assert.Null(FfxivVenues.Zone(Cached(VenueJson(schedule: $"[{missing}]")).Venue));
+        Assert.Null(FfxivVenues.Zone(null));
+    }
+
+    [Fact]
     public void AnEntryWithoutAResolutionHasNone() =>
         Assert.Null(Assert.Single(Cached(VenueJson(schedule: $"[{Opening(1, "20:00", "23:00")}]")).Venue!.Schedule!)!.Resolution);
 

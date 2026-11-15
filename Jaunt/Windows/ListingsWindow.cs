@@ -24,7 +24,8 @@ namespace Jaunt.Windows;
 /// The listing browser: the day-grouped list of listings on the left and the selected listing's
 /// details on the right. Lists in-game and xivpf Party Finder ads with an address, FFXIV Venues venues
 /// with an address, Partake events and FFXIV RP Event Calendar events with an address or location, on
-/// worlds the character can travel to, at the openings <see cref="Schedules.Listed"/> picks.
+/// worlds the character can travel to, at the openings <see cref="Schedules.Listed"/> picks. Listings at
+/// one address with overlapping openings show as one entry (<see cref="Duplicates"/>).
 /// </summary>
 internal sealed class ListingsWindow : Window
 {
@@ -74,8 +75,9 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<(string Text, int Width), string> aboutCuts = [];
 
     /// <summary>
-    /// One listing as the browser shows it: its title, addresses and links, world, schedule, what is
-    /// shown of a Partake or RP calendar event, and an ad's text for About.
+    /// One entry as the browser shows it: its title, addresses and links, world, schedule, what is
+    /// shown of a Partake or RP calendar event, and an ad's text for About. A merged entry's
+    /// <see cref="Listing"/> is the member whose title it shows, and <see cref="Members"/> lists them all.
     /// </summary>
     private sealed record Row(
         CachedListing Listing,
@@ -88,6 +90,12 @@ internal sealed class ListingsWindow : Window
         RpEventCalendar.Shown? CalendarEvent = null)
     {
         public (ListingSource, string) Key => (Listing.Source, Listing.Id);
+
+        /// <summary>The rows of the listings shown as this entry, title first; set when the list is rebuilt.</summary>
+        public IReadOnlyList<Row> Members { get; init; } = [];
+
+        /// <summary>The openings listed, earliest first; set when the list is rebuilt.</summary>
+        public IReadOnlyList<Occurrence> Listed { get; init; } = [];
     }
 
     /// <summary>
@@ -219,7 +227,8 @@ internal sealed class ListingsWindow : Window
         var row = entry.Item;
         var start = ImGui.GetCursorScreenPos();
         using var id = ImRaii.PushId($"{(int)row.Listing.Source}:{row.Listing.Id}:{entry.When.Start?.UtcTicks}");
-        if (ImGui.Selectable("##row", selected == row.Key, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
+        var isSelected = selected is { } key && rowsByKey.TryGetValue(key, out var selectedRow) && ReferenceEquals(selectedRow, row);
+        if (ImGui.Selectable("##row", isSelected, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
             Select(row);
         var after = ImGui.GetCursorScreenPos();
 
@@ -275,13 +284,13 @@ internal sealed class ListingsWindow : Window
         DrawLocation(row);
         DrawAbout(row, width);
         DrawRating(row);
-        DrawFooter(row, now, locale);
+        DrawFooter(row);
     }
 
     /// <summary>The opening listed first, and for a recurring listing open now, the next.</summary>
     private void DrawDetailStatus(Row row, DateTimeOffset now, CultureInfo locale)
     {
-        var listed = Schedules.Listed(row.Schedule, now);
+        var listed = row.Listed;
         if (listed.Count == 0)
             return;
 
@@ -403,31 +412,33 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>Where the listing came from, with the credits its source needs.</summary>
-    private void DrawFooter(Row row, DateTimeOffset now, CultureInfo locale)
+    private static void DrawFooter(Row row)
     {
         ImGui.Spacing();
         ImGui.Separator();
-        var listing = row.Listing;
-        if (row.CalendarEvent is not null)
+        // Every source on one line, the calendar's name linking to it, with its licence after
+        var sources = row.Members.Select(m => m.Listing.Source).Distinct().ToList();
+        ImGui.TextDisabled("Listed on");
+        for (var i = 0; i < sources.Count; i++)
         {
-            ImGui.TextDisabled("Listed on");
-            ImGui.SameLine();
-            DrawLinkText(SourceName(ListingSource.RpEventCalendar), RpEventCalendar.SiteUrl);
+            ImGui.SameLine(0, 0);
+            ImGui.TextDisabled(i == 0 ? " " : ", ");
+            ImGui.SameLine(0, 0);
+            if (sources[i] == ListingSource.RpEventCalendar)
+                DrawLinkText(SourceName(sources[i]), RpEventCalendar.SiteUrl);
+            else
+                ImGui.TextDisabled(SourceName(sources[i]));
+        }
+
+        if (sources.Contains(ListingSource.RpEventCalendar))
+        {
             ImGui.SameLine();
             ImGui.TextDisabled("·");
             ImGui.SameLine();
             DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl);
-            var validated = listing.LastValidated is { } date
-                ? "Validated " + DisplayFormats.FormatDateWithYear(date, configuration.DateFormat, locale)
-                : "Never validated";
-            ImGui.TextDisabled(validated);
-        }
-        else
-        {
-            ImGui.TextDisabled($"Listed on {SourceName(listing.Source)} · {SeenAgo(now - listing.LastSeen)}");
         }
 
-        if (listing.Source == ListingSource.Partake)
+        if (row.Event is not null)
             ImGui.TextDisabled("Jaunt is not affiliated with or endorsed by Partake.");
     }
 
@@ -455,7 +466,7 @@ internal sealed class ListingsWindow : Window
 
     private void Select(Row row)
     {
-        if (SelectedKey == row.Key)
+        if (SelectedKey is { } key && row.Members.Any(m => m.Key == key))
             return;
         configuration.SelectedSource = row.Listing.Source;
         configuration.SelectedId = row.Listing.Id;
@@ -549,24 +560,34 @@ internal sealed class ListingsWindow : Window
         }
 
         var adRegion = travel.DataCentres.Select(Schedules.RegionOf).FirstOrDefault(r => r is not null) ?? PartyFinderRegion.Europe;
+        var rows = new List<(Row Row, AddressKey? Address)>();
         foreach (var listing in cache.Listings)
         {
             // A venue's world is checked once it is shown, as that corrects misspellings
             if (listing.Hidden || (listing.Source != ListingSource.FfxivVenues && !travel.Includes(listing)))
                 continue;
 
-            if (RowFor(listing, travel, adRegion, now) is not { } row)
-                continue;
+            if (RowFor(listing, travel, adRegion, now) is { } row)
+                rows.Add((row, row.Details.Addresses.Count > 0 ? AddressKey.Of(row.Details.Addresses[0]) : null));
+        }
 
+        var candidates = new List<MergeCandidate<Row>>(rows.Count);
+        foreach (var (row, address) in WithAddressZones(rows, adRegion, now))
+        {
             var listed = Schedules.Listed(row.Schedule, now);
-            if (listed.Count == 0)
-                continue;
+            if (listed.Count > 0)
+                candidates.Add(new MergeCandidate<Row>(row, address, row.Schedule, listed));
+        }
 
-            rowsByKey[row.Key] = row;
-            var key = $"{(int)listing.Source}:{listing.Id}";
-            foreach (var when in listed)
+        foreach (var merged in Duplicates.Merge(candidates, now))
+        {
+            var row = Entry(merged);
+            foreach (var member in row.Members)
+                rowsByKey[member.Key] = row;
+            var key = $"{(int)row.Listing.Source}:{row.Listing.Id}";
+            foreach (var when in row.Listed)
                 entries.Add(new BrowserEntry<Row>(row, row.Title, key, when, row.Schedule.AlwaysOpen));
-            showsPartake |= listing.Source == ListingSource.Partake;
+            showsPartake |= row.Event is not null;
         }
 
         groups = DayGroups.Group(entries, now, TimeZoneInfo.Local);
@@ -584,6 +605,87 @@ internal sealed class ListingsWindow : Window
             ClearSelection();
 
         Forget();
+    }
+
+    /// <summary>
+    /// The rows, with each ad's times that state no zone read in the zone of a venue or event at its
+    /// address (<see cref="Duplicates.UnstatedZone"/>) rather than the region default.
+    /// </summary>
+    private IEnumerable<(Row Row, AddressKey? Address)> WithAddressZones(List<(Row Row, AddressKey? Address)> rows, PartyFinderRegion adRegion, DateTimeOffset now)
+    {
+        var venueZones = new Dictionary<AddressKey, TimeZoneInfo>();
+        var starts = new Dictionary<AddressKey, HashSet<DateTimeOffset>>();
+        foreach (var (row, address) in rows)
+        {
+            if (address is not { } key || row.Listing.Source is not (ListingSource.FfxivVenues or ListingSource.Partake))
+                continue;
+            if (row.Listing.Source == ListingSource.FfxivVenues && FfxivVenues.Zone(row.Listing.Venue) is { } zone)
+                venueZones.TryAdd(key, zone);
+            if (!starts.TryGetValue(key, out var set))
+                starts[key] = set = [];
+            foreach (var occurrence in row.Schedule.Occurrences)
+            {
+                if (occurrence.Start is { } start)
+                    set.Add(start);
+            }
+        }
+
+        foreach (var (row, address) in rows)
+        {
+            if (address is not { } key || !starts.TryGetValue(key, out var there)
+                || row.Listing.Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf))
+            {
+                yield return (row, address);
+                continue;
+            }
+
+            var listing = row.Listing;
+            var times = AdTimes(listing);
+            if (Duplicates.UnstatedZone(times, listing.LastSeen, venueZones.GetValueOrDefault(key), there) is not { } unstated)
+            {
+                yield return (row, address);
+                continue;
+            }
+
+            var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
+            yield return (row with { Schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, unstated) }, address);
+        }
+    }
+
+    /// <summary>
+    /// The entry for listings shown as one: the title of the member <see cref="Duplicates.TitleRank"/>
+    /// puts first, the addresses and world of the one <see cref="Duplicates.AddressRank"/> does among
+    /// those naming a plot or apartment, every member's links once each, and the About of the ad that
+    /// stops being listed soonest.
+    /// </summary>
+    private Row Entry(MergedListing<Row> merged)
+    {
+        if (merged.Members.Count == 1)
+            return merged.Members[0] with { Members = merged.Members, Listed = merged.Listed };
+
+        var byTitle = merged.Members.OrderBy(m => Duplicates.TitleRank(m.Listing.Source)).ToList();
+        var byAddress = merged.Members
+            .OrderBy(m => m.Details.Addresses.Count == 0 || AddressKey.Of(m.Details.Addresses[0]) is not { WardOnly: false })
+            .ThenBy(m => Duplicates.AddressRank(m.Listing.Source))
+            .First();
+        var links = new List<WebLink>();
+        foreach (var link in byTitle.SelectMany(m => m.Details.Links))
+        {
+            if (!links.Exists(l => l.Uri == link.Uri))
+                links.Add(link);
+        }
+
+        var about = byTitle.Where(m => m.About is { Length: > 0 })
+            .MinBy(m => Schedules.ListedUntil(m.Listing.Source, m.Listing.LastSeen, configuration.RefreshCooldownMinutes))?.About;
+        var first = byTitle[0];
+        return new Row(
+            first.Listing, first.Title, byAddress.Details with { Links = links }, byAddress.World, merged.Schedule, about,
+            byTitle.Select(m => m.Event).FirstOrDefault(e => e is not null),
+            byTitle.Select(m => m.CalendarEvent).FirstOrDefault(e => e is not null))
+        {
+            Members = byTitle,
+            Listed = merged.Listed,
+        };
     }
 
     /// <summary>The row for a listing, or null when it isn't one the browser lists (such as an ad with no address).</summary>
@@ -729,15 +831,9 @@ internal sealed class ListingsWindow : Window
     private static string SourceName(ListingSource source) => source switch
     {
         ListingSource.FfxivVenues => "FFXIV Venues",
-        ListingSource.Xivpf => "Party Finder (xivpf)",
+        ListingSource.Xivpf => "xivpf",
         ListingSource.Partake => "Partake",
         ListingSource.RpEventCalendar => "FFXIV RP Event Calendar",
         _ => "Party Finder",
     };
-
-    private static string SeenAgo(TimeSpan ago) =>
-        ago.TotalMinutes < 1 ? "seen just now"
-        : ago.TotalHours < 1 ? $"seen {(int)ago.TotalMinutes} min ago"
-        : ago.TotalDays < 1 ? $"seen {(int)ago.TotalHours} h ago"
-        : $"seen {(int)ago.TotalDays} d ago";
 }
