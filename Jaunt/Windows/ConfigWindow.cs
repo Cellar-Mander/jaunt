@@ -116,18 +116,23 @@ public sealed class ConfigWindow : Window, IDisposable
     private static void DrawSources()
     {
         ImGui.TextUnformatted("Listings come from");
-        using var indent = ImRaii.PushIndent();
-        ImGui.TextDisabled(SourceName(ListingSource.InGamePartyFinder));
-        ListingsWindow.DrawLinkText(SourceName(ListingSource.Xivpf), Xivpf.SiteUrl);
-        ListingsWindow.DrawLinkText(SourceName(ListingSource.FfxivVenues), FfxivVenues.SiteUrl);
-        ListingsWindow.DrawLinkText(SourceName(ListingSource.Partake), Partake.SiteUrl);
-        using (ImRaii.PushIndent())
-            ImGui.TextDisabled(Partake.Disclaimer);
-        ListingsWindow.DrawLinkText(SourceName(ListingSource.RpEventCalendar), RpEventCalendar.SiteUrl);
+        ImGui.BulletText(SourceName(ListingSource.InGamePartyFinder));
+        Bulleted(SourceName(ListingSource.Xivpf), Xivpf.SiteUrl);
+        Bulleted(SourceName(ListingSource.FfxivVenues), FfxivVenues.SiteUrl);
+        Bulleted(SourceName(ListingSource.Partake), Partake.SiteUrl);
         ImGui.SameLine();
-        ImGui.TextDisabled("·");
+        ImGui.TextWrapped($"({Partake.Disclaimer})");
+        Bulleted(SourceName(ListingSource.RpEventCalendar), RpEventCalendar.SiteUrl);
         ImGui.SameLine();
-        ListingsWindow.DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl);
+        ImGui.TextUnformatted("·");
+        ImGui.SameLine();
+        ListingsWindow.DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl, dimmed: false);
+    }
+
+    private static void Bulleted(string text, Uri uri)
+    {
+        ImGui.Bullet();
+        ListingsWindow.DrawLinkText(text, uri, dimmed: false);
     }
 
     /// <summary>

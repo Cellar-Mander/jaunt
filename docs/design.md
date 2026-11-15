@@ -132,10 +132,10 @@ expanded until collapsed; which are expanded is saved too. Each change saves at 
   regions, and listings off the region's worlds are left out when recorded; after a switch to another
   region their listings arrive once that cooldown passes. Listings cached for another region are
   never purged for it; they expire as usual, and the list doesn't show them (see "List").
-- **Sources**: Data ends with "Listings come from" and each source: the in-game Party Finder, then
-  xivpf, FFXIV Venues, Partake and the FFXIV RP Event Calendar, each opening its site
-  (`SiteUrl`) when clicked. Partake's carries its disclaimer (`Partake.Disclaimer`) and the
-  calendar's its CC BY-SA 4.0 licence link. These are the app-wide credits; per-listing credits are
+- **Sources**: Data ends with "Listings come from" and a bulleted list of the sources, in normal
+  text colour: the in-game Party Finder, then xivpf, FFXIV Venues, Partake and the FFXIV RP Event
+  Calendar, each opening its site (`SiteUrl`) when clicked. Partake's carries its disclaimer
+  (`Partake.Disclaimer`) in brackets on the same line, and the calendar's its CC BY-SA 4.0 licence link. These are the app-wide credits; per-listing credits are
   in the detail footer (see "Detail pane").
   An in-game Party Finder ad on a world outside the region isn't recorded either; the game sends only
   the character's data centre, so this rarely drops one.

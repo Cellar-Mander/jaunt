@@ -35,9 +35,9 @@ expiry) are covered by `Jaunt.Core.Tests`.
 4. **Clear confirmation**: move the Settings window off-centre, then press Clear cached listings.
    The confirmation opens centred on the Settings window. Cancel and the title bar's close button
    remove nothing; Clear reports how many it removed.
-5. **Sources**: Data ends with "Listings come from": In-game Party Finder, xivpf, FFXIV Venues,
-   Partake (with "Jaunt is not affiliated with or endorsed by Partake." under it) and FFXIV RP Event
-   Calendar · CC BY-SA 4.0. Hovering each name but the in-game Party Finder shows its site with a hand
+5. **Sources**: Data ends with "Listings come from" and a bulleted list in the same colour:
+   In-game Party Finder, xivpf, FFXIV Venues, Partake "(Jaunt is not affiliated with or endorsed by
+   Partake.)" on the same line, and FFXIV RP Event Calendar · CC BY-SA 4.0. Hovering each name but the in-game Party Finder shows its site with a hand
    cursor and clicking opens it (`xivpf.com`, `ffxivvenues.com`, `partake.gg`, `ffxiv-rp.org`);
    "CC BY-SA 4.0" opens the licence page.
 6. `/xllog` shows no errors from Jaunt throughout.

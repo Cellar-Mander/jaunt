@@ -432,10 +432,13 @@ internal sealed class ListingsWindow : Window
         ImGui.TextDisabled(name);
     }
 
-    /// <summary>Dimmed text that shows its address on hover and opens it when clicked.</summary>
-    internal static void DrawLinkText(string text, Uri uri)
+    /// <summary>Text, dimmed unless asked otherwise, that shows its address on hover and opens it when clicked.</summary>
+    internal static void DrawLinkText(string text, Uri uri, bool dimmed = true)
     {
-        ImGui.TextDisabled(text);
+        if (dimmed)
+            ImGui.TextDisabled(text);
+        else
+            ImGui.TextUnformatted(text);
         if (ImGui.IsItemHovered())
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
