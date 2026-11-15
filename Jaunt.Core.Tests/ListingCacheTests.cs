@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Jaunt.Core.Browser;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
 
@@ -165,10 +166,58 @@ public class ListingCacheTests
     public void UnmarkedListingsExpireAMonthAfterTheyWereLastSeen(string lastSeen, bool expired)
     {
         var cache = new ListingCache();
-        cache.Seen(ListingSource.Xivpf, "1", "A", DateTimeOffset.Parse(lastSeen, System.Globalization.CultureInfo.InvariantCulture));
+        cache.Seen(ListingSource.FfxivVenues, "1", "A", DateTimeOffset.Parse(lastSeen, System.Globalization.CultureInfo.InvariantCulture));
 
         Assert.Equal(expired ? 1 : 0, cache.RemoveExpired(Now));
         Assert.Equal(expired ? 0 : 1, cache.Count);
+    }
+
+    [Theory]
+    // Two days: last seen 12 Nov 20:00 expires at 14 Nov 20:00
+    [InlineData(ListingSource.Xivpf, "2026-11-12T20:00:00Z", true)]
+    [InlineData(ListingSource.Xivpf, "2026-11-12T20:00:01Z", false)]
+    [InlineData(ListingSource.InGamePartyFinder, "2026-11-12T20:00:00Z", true)]
+    [InlineData(ListingSource.InGamePartyFinder, "2026-11-12T20:00:01Z", false)]
+    public void UnmarkedAdsStatingNoTimeExpireTwoDaysAfterTheyWereLastSeen(ListingSource source, string lastSeen, bool expired)
+    {
+        var cache = new ListingCache();
+        cache.SeenAd(source, "1", "OPEN NOW! Mist W5 P12", null, DateTimeOffset.Parse(lastSeen, System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.Equal(expired ? 1 : 0, cache.RemoveExpired(Now));
+        Assert.Equal(expired ? 0 : 1, cache.Count);
+    }
+
+    [Theory]
+    // Seen Monday 9 Nov: Saturday 9pm is 14 Nov 21:00, still ahead
+    [InlineData("Saturday 9pm ST Mist W5 P12", "2026-11-09T12:00:00Z", false)]
+    // Seen Tuesday 10 Nov: tonight 10pm-2am ended 11 Nov 02:00
+    [InlineData("Tonight 10pm-2am ST Mist W5 P12", "2026-11-10T12:00:00Z", true)]
+    // Ended 13 Nov 02:00, within two days of now, so it is kept a little longer
+    [InlineData("Tonight 10pm-2am ST Mist W5 P12", "2026-11-12T19:00:00Z", false)]
+    // 7pm-11pm on 12 Nov started before the cut-off at 20:00 but ended after it
+    [InlineData("Tonight 7pm-11pm ST Mist W5 P12", "2026-11-12T12:00:00Z", false)]
+    // Ended at the cut-off itself
+    [InlineData("Tonight 6pm-8pm ST Mist W5 P12", "2026-11-12T12:00:00Z", true)]
+    // A closing time on its own belongs to an opening while listed, which it no longer is
+    [InlineData("Open now until 23:00 ST Mist W5 P12", "2026-11-12T12:00:00Z", true)]
+    // Started 12 Nov 19:00, over two days ago, with no end: open only while listed, which it no longer is
+    [InlineData("Tonight from 7pm ST Mist W5 P12", "2026-11-12T12:00:00Z", true)]
+    // 24/7 is open only while listed
+    [InlineData("Open 24/7! Mist W5 P12", "2026-11-10T12:00:00Z", true)]
+    public void UnmarkedAdsAreKeptWhileATimeTheyStateIsAhead(string text, string lastSeen, bool expired)
+    {
+        var cache = new ListingCache();
+        cache.SeenAd(ListingSource.Xivpf, "1", text, "Lich", DateTimeOffset.Parse(lastSeen, System.Globalization.CultureInfo.InvariantCulture));
+
+        Assert.Equal(expired ? 1 : 0, cache.RemoveExpired(Now));
+    }
+
+    [Fact]
+    public void AdGraceCoversTheLongestAnAdCountsAsListed()
+    {
+        var listedFor = Schedules.ListedUntil(ListingSource.Xivpf, Now, RefreshPolicy.MaxCooldownMinutes) - Now;
+
+        Assert.True(ListingCache.AdGrace >= listedFor, $"an ad counts as listed for {listedFor}, longer than {ListingCache.AdGrace}");
     }
 
     [Theory]

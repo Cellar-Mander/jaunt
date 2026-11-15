@@ -199,7 +199,12 @@ On load:
   hidden and says how many it removed. Cancelling removes nothing.
 - **Expiry**: on load, a listing that is not favourited, visited or hidden is dropped once one
   calendar month has passed since it was last seen (last seen 14 Oct 20:00 → dropped from 14 Nov
-  20:00). Marked recurring listings are kept however old. Marked one-offs expire the same way as
+  20:00). An unmarked Party Finder ad (in-game or xivpf) is dropped sooner: once two days have
+  passed since it was last seen and its text states no time ending, or with no end starting, later
+  than two days before now (last seen 12 Nov 20:00 → dropped from 14 Nov 20:00, unless a time it
+  states is still ahead or ended after 12 Nov 20:00). The two days cover how long an ad may still
+  count as listed at the longest cooldown (25 hours) and how far the zone its times are read in may
+  move them. Marked recurring listings are kept however old. Marked one-offs expire the same way as
   unmarked listings, since they can't reliably be matched to a later listing; the window doesn't
   mention this. Clear still keeps marked one-offs.
 - **Hidden venues** lists hidden places by title, case-insensitively, each once with its address
