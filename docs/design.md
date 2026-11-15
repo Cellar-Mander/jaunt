@@ -30,7 +30,8 @@ instants. `OpeningTimesCorpusTests` checks every labelled corpus ad (`Corpus/REA
   month/day on a tie; a year is never written, so the nearest year is used.
 - **Resolving**: an undated start is today's in the ad's zone, unless yesterday's overnight opening
   is still running. A weekday is the next one, counting today. A closing time alone is the next one
-  after the ad was seen; with a day, one before 06:00 is after that day's midnight. An end at or
+  after the ad was first seen with its text, so it stays put while the ad stays listed; with a day,
+  one before 06:00 is after that day's midnight. An end at or
   before the start is the next day. A time skipped by a clock change reads as the hour after; a
   repeated one as the first.
 - Parsing is one pass over tokens per step, with no regex, so it stays linear in the ad's length.
@@ -486,7 +487,8 @@ and copy link (`6e2b5199`) are separate tasks.
     region default for the character's region (a European ad's language isn't
     known, so London). An ad is still listed for 1 hour after it was last seen (a PF ad's longest
     life), plus the source's cooldown for xivpf. "24/7" is always open while still listed. "Open
-    now", or a closing time alone, is open until that time while still listed. A start is listed as
+    now", or a closing time alone, is open until that time while still listed; once that time has
+    passed it is closed, even if the ad is still up. A start is listed as
     stated, with its end if given; with no end it counts as open from its start only while still
     listed. An ad with no time is open now while still listed (decision `ab014655`). One-off.
 - **Listed openings**: a recurring listing shows its current opening and the next one, or only the

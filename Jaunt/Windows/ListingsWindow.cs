@@ -889,7 +889,7 @@ internal sealed class ListingsWindow : Window
             }
 
             var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
-            yield return (row with { Schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, unstated) }, address);
+            yield return (row with { Schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, unstated, listing.FirstSeen) }, address);
         }
     }
 
@@ -1014,7 +1014,7 @@ internal sealed class ListingsWindow : Window
                     if (adDetails.Addresses.Count == 0)
                         return null;
                     var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
-                    var schedule = Schedules.ForAd(AdTimes(listing), listing.LastSeen, adRegion, stillListed, now);
+                    var schedule = Schedules.ForAd(AdTimes(listing), listing.LastSeen, adRegion, stillListed, now, firstSeen: listing.FirstSeen);
                     return new Row(listing, listing.Title, adDetails, adDetails.Addresses[0].World ?? listing.ListedOn, schedule, About(listing));
                 }
 

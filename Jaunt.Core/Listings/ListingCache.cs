@@ -55,6 +55,9 @@ public sealed partial class ListingCache
         if (listing.IsMarked && (listing.OneOff || !string.Equals(listing.Description, adText, StringComparison.Ordinal)))
             marksChanged = true;
         listing.OneOff = false;
+        // New text starts a new first sighting; the same text seen earlier moves it back
+        if (listing.FirstSeen is not { } first || now < first || !string.Equals(listing.Description, adText, StringComparison.Ordinal))
+            listing.FirstSeen = now;
         listing.Description = adText;
         listing.ListedOn = listedOn;
         return listing;

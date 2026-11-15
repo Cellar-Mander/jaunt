@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
 
@@ -50,6 +51,56 @@ public class ListingCacheTests
         Assert.Equal("New text", listing.Description);
         Assert.Null(listing.ListedOn);
         Assert.True(listing.Favourite);
+    }
+
+    [Fact]
+    public void AnAdIsFirstSeenWhenItsCurrentTextWasFirstSeen()
+    {
+        var cache = new ListingCache();
+        var listing = cache.SeenAd(ListingSource.Xivpf, "7", "Open until 1am", null, Now.AddHours(-2));
+        cache.SeenAd(ListingSource.Xivpf, "7", "Open until 1am", null, Now.AddHours(-1));
+        Assert.Equal(Now.AddHours(-2), listing.FirstSeen);
+
+        cache.SeenAd(ListingSource.Xivpf, "7", "Open until 2am", null, Now);
+        Assert.Equal(Now, listing.FirstSeen);
+    }
+
+    [Fact]
+    public void AnEarlierSightingOfTheSameTextMovesFirstSeenBack()
+    {
+        var cache = new ListingCache();
+        var listing = cache.SeenAd(ListingSource.Xivpf, "7", "Open until 1am", null, Now);
+
+        cache.SeenAd(ListingSource.Xivpf, "7", "Open until 1am", null, Now.AddHours(-1));
+
+        Assert.Equal((Now.AddHours(-1), Now), (listing.FirstSeen, listing.LastSeen));
+    }
+
+    [Theory]
+    [InlineData(ListingSource.InGamePartyFinder)]
+    [InlineData(ListingSource.Xivpf)]
+    public void AnAdsFirstSightingIsSaved(ListingSource source)
+    {
+        var cache = new ListingCache();
+        cache.SeenAd(source, "7", "Open until 1am", "Cuchulainn", Now.AddHours(-2));
+        cache.SeenAd(source, "7", "Open until 1am", "Cuchulainn", Now);
+
+        var back = SavedFiles.RoundTrip(cache).Find(source, "7")!;
+
+        Assert.Equal((Now.AddHours(-2), Now), (back.FirstSeen, back.LastSeen));
+    }
+
+    [Fact]
+    public void AnAdSavedWithoutItsFirstSightingWasFirstSeenWhenLastSeen()
+    {
+        var cache = new ListingCache();
+        cache.SeenAd(ListingSource.InGamePartyFinder, "7", "Open until 1am", null, Now.AddHours(-2));
+        cache.SeenAd(ListingSource.InGamePartyFinder, "7", "Open until 1am", null, Now);
+        var files = SavedFiles.All(cache).ToDictionary(f => f.Key, f => Regex.Replace(f.Value, "\"firstSeen\":\"[^\"]*\",?", ""));
+
+        var back = SavedFiles.Load(files).Find(ListingSource.InGamePartyFinder, "7")!;
+
+        Assert.Equal(Now, back.FirstSeen);
     }
 
     [Fact]
