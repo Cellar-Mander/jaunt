@@ -7,6 +7,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.ImGuiNotification;
+using Dalamud.Interface.ManagedFontAtlas;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -52,6 +53,7 @@ internal sealed class ListingsWindow : Window
     private readonly Configuration configuration;
     private readonly Action fetchSources;
     private readonly Func<TravelRegion?> region;
+    private readonly IFontHandle titleFont;
 
     // Parsed once per ad text or event location and world, and derived once per venue's fields, so
     // drawing doesn't re-parse every frame
@@ -62,6 +64,8 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<string, (CalendarFields Fields, RpEventCalendar.Shown Shown)> shownEvents = [];
 
     private IReadOnlyList<DayGroup<Row>> groups = [];
+    // Entries listed, each once however many of its openings are listed
+    private int listingCount;
     // Each listed row by its listing, for the detail pane; a listing listed twice (open now and next) is one row
     private readonly Dictionary<(ListingSource, string), Row> rowsByKey = [];
     private DateTimeOffset nextRebuild;
@@ -70,7 +74,7 @@ internal sealed class ListingsWindow : Window
     private bool aboutExpanded;
 
     // Texts cut to a width, worked out once per text and width rather than every frame
-    private readonly Dictionary<(string Text, int Width), string> fitted = [];
+    private readonly Dictionary<(string Text, int Width, int FontSize), string> fitted = [];
     private readonly Dictionary<(string Text, int Width), string> aboutCuts = [];
 
     /// <summary>
@@ -114,11 +118,13 @@ internal sealed class ListingsWindow : Window
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
     /// <param name="openSettings">Opens the Settings window, from the title bar's cog.</param>
+    /// <param name="titleFont">The larger font listing titles are drawn in; owned by the caller.</param>
     public ListingsWindow(
         ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
-        Func<TravelRegion?> region, Action openSettings)
+        Func<TravelRegion?> region, Action openSettings, IFontHandle titleFont)
         : base("Jaunt###JauntListings")
     {
+        this.titleFont = titleFont;
         this.region = region;
         this.fetchSources = fetchSources;
         this.cache = cache;
@@ -162,6 +168,11 @@ internal sealed class ListingsWindow : Window
             return;
         }
 
+        // Filters and search (d68d407e) go on this line, left of the count
+        var count = listingCount == 1 ? "1 listing" : $"{listingCount.ToString(CultureInfo.CurrentCulture)} listings";
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0, ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(count).X));
+        ImGui.TextDisabled(count);
+
         var listWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * 0.4f, 240 * ImGuiHelpers.GlobalScale, 420 * ImGuiHelpers.GlobalScale);
         using (var list = ImRaii.Child("##list", new Vector2(listWidth, 0), true))
         {
@@ -187,7 +198,10 @@ internal sealed class ListingsWindow : Window
 
         var locale = CultureInfo.CurrentCulture;
         var style = ImGui.GetStyle();
-        var rowHeight = (ImGui.GetTextLineHeight() * 3) + (style.ItemSpacing.Y * 2);
+        float titleHeight;
+        using (titleFont.Push())
+            titleHeight = ImGui.GetTextLineHeight();
+        var rowHeight = (ImGui.GetTextLineHeight() * 2) + titleHeight + (style.ItemSpacing.Y * 2);
         var selected = SelectedKey;
         foreach (var group in groups)
         {
@@ -240,7 +254,8 @@ internal sealed class ListingsWindow : Window
         else
             ImGui.TextUnformatted(Fit(status, width));
         ImGui.SetCursorScreenPos(new Vector2(textLeft, ImGui.GetCursorScreenPos().Y));
-        ImGui.TextUnformatted(Fit(ShownText.Title(row.Title), width));
+        using (titleFont.Push())
+            ImGui.TextUnformatted(Fit(ShownText.Title(row.Title), width));
         ImGui.SetCursorScreenPos(new Vector2(textLeft, ImGui.GetCursorScreenPos().Y));
         ImGui.TextDisabled(Fit(row.World ?? "", width));
 
@@ -268,7 +283,8 @@ internal sealed class ListingsWindow : Window
         ImGui.GetWindowDrawList().AddRectFilled(top, top + new Vector2(width, splashHeight), ImGui.GetColorU32(ImGuiCol.FrameBg), 4 * ImGuiHelpers.GlobalScale);
         ImGui.Dummy(new Vector2(width, splashHeight));
 
-        ImGui.TextWrapped(ShownText.Title(row.Title));
+        using (titleFont.Push())
+            ImGui.TextWrapped(ShownText.Title(row.Title));
         DrawDetailStatus(row, now, locale);
         if (row.World is { } world)
             ImGui.TextDisabled(world);
@@ -301,7 +317,7 @@ internal sealed class ListingsWindow : Window
             ImGui.TextDisabled("Next: " + StatusText.Detail(listed[1], false, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale));
     }
 
-    /// <summary>Travel to the first address, and open the first link.</summary>
+    /// <summary>Travel to the first address, and open the first link that isn't a Discord invite.</summary>
     private void DrawActions(Row row)
     {
         var address = row.Details.Addresses.Count > 0 ? row.Details.Addresses[0] : null;
@@ -322,11 +338,11 @@ internal sealed class ListingsWindow : Window
                 ImGui.SetTooltip(whyNot);
         }
 
-        if (row.Details.Links.Count > 0)
+        if (PageIndex(row.Details.Links) is var page and >= 0)
         {
             if (address is not null)
                 ImGui.SameLine();
-            var link = row.Details.Links[0];
+            var link = row.Details.Links[page];
             if (ImGui.Button("Open page"))
                 Util.OpenLink(link.Uri.AbsoluteUri);
             if (ImGui.IsItemHovered())
@@ -334,13 +350,20 @@ internal sealed class ListingsWindow : Window
         }
     }
 
-    /// <summary>Each address with Copy, a location the parser couldn't read as text, and any further links.</summary>
+    /// <summary>
+    /// Each address with Copy, a location the parser couldn't read as text, and any further links
+    /// (all but Open page's and the footer's Discord).
+    /// </summary>
     private void DrawLocation(Row row)
     {
         var freeText = row.Details.Addresses.Count == 0
             ? row.CalendarEvent?.Location ?? (row.Event is { Location.Length: > 0 } item ? item.Location : null)
             : null;
-        if (row.Details.Addresses.Count == 0 && freeText is null && row.Details.Links.Count < 2)
+        var links = row.Details.Links;
+        var page = PageIndex(links);
+        var discord = DiscordIndex(links);
+        var further = links.Count - (page >= 0 ? 1 : 0) - (discord >= 0 ? 1 : 0);
+        if (row.Details.Addresses.Count == 0 && freeText is null && further == 0)
             return;
 
         Section("Location");
@@ -367,10 +390,12 @@ internal sealed class ListingsWindow : Window
         if (freeText is not null)
             ImGui.TextWrapped(ShownText.Fold(freeText));
 
-        for (var i = 1; i < row.Details.Links.Count; i++)
+        for (var i = 0; i < links.Count; i++)
         {
+            if (i == page || i == discord)
+                continue;
             using var id = ImRaii.PushId($"l{i}");
-            var link = row.Details.Links[i];
+            var link = links[i];
             if (ImGui.SmallButton("Open"))
                 Util.OpenLink(link.Uri.AbsoluteUri);
             if (ImGui.IsItemHovered())
@@ -406,21 +431,32 @@ internal sealed class ListingsWindow : Window
         ImGui.TextUnformatted(rating);
     }
 
-    /// <summary>Where the listing came from, with the credits its source needs.</summary>
+    /// <summary>
+    /// The Discord invite, then where the listing came from, with the credits its source needs.
+    /// "Listed by" (the ad's poster) goes first once d12eb2c4 keeps it.
+    /// </summary>
     private static void DrawFooter(Row row)
     {
         ImGui.Spacing();
         ImGui.Separator();
-        // Every source on one line, the calendar's name linking to it, with its licence after
+        if (DiscordIndex(row.Details.Links) is var discord and >= 0)
+        {
+            DrawLinkText("Discord", row.Details.Links[discord].Uri);
+            ImGui.SameLine();
+            ImGui.TextDisabled("·");
+            ImGui.SameLine();
+        }
+
+        // Every source on one line, each linking to its site (the in-game Party Finder has none), with the calendar's licence after
         var sources = row.Members.Select(m => m.Listing.Source).Distinct().ToList();
-        ImGui.TextDisabled("Listed on");
+        ImGui.TextDisabled("Sources:");
         for (var i = 0; i < sources.Count; i++)
         {
             ImGui.SameLine(0, 0);
             ImGui.TextDisabled(i == 0 ? " " : ", ");
             ImGui.SameLine(0, 0);
-            if (sources[i] == ListingSource.RpEventCalendar)
-                DrawLinkText(SourceName(sources[i]), RpEventCalendar.SiteUrl);
+            if (SiteUrl(sources[i]) is { } site)
+                DrawLinkText(SourceName(sources[i]), site);
             else
                 ImGui.TextDisabled(SourceName(sources[i]));
         }
@@ -437,19 +473,46 @@ internal sealed class ListingsWindow : Window
             ImGui.TextDisabled(Partake.Disclaimer);
     }
 
+    /// <summary>The first link that isn't a Discord invite, for Open page, or -1.</summary>
+    private static int PageIndex(IReadOnlyList<WebLink> links)
+    {
+        for (var i = 0; i < links.Count; i++)
+        {
+            if (!Core.Text.WebLinks.IsDiscordInvite(links[i].Uri))
+                return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>The first Discord invite, for the footer, or -1.</summary>
+    private static int DiscordIndex(IReadOnlyList<WebLink> links)
+    {
+        for (var i = 0; i < links.Count; i++)
+        {
+            if (Core.Text.WebLinks.IsDiscordInvite(links[i].Uri))
+                return i;
+        }
+
+        return -1;
+    }
+
     private static void Section(string name)
     {
         ImGui.Spacing();
         ImGui.TextDisabled(name);
     }
 
-    /// <summary>Text, dimmed unless asked otherwise, that shows its address on hover and opens it when clicked.</summary>
-    internal static void DrawLinkText(string text, Uri uri, bool dimmed = true)
+    /// <summary>
+    /// Text that looks like a link (link colour, underlined), shows its address and a hand cursor on
+    /// hover, and opens it when clicked.
+    /// </summary>
+    internal static void DrawLinkText(string text, Uri uri)
     {
-        if (dimmed)
-            ImGui.TextDisabled(text);
-        else
-            ImGui.TextUnformatted(text);
+        ImGui.TextColored(ImGuiColors.TankBlue, text);
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        ImGui.GetWindowDrawList().AddLine(new Vector2(min.X, max.Y), max, ImGui.GetColorU32(ImGuiColors.TankBlue), Math.Max(1, ImGuiHelpers.GlobalScale));
         if (ImGui.IsItemHovered())
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
@@ -486,7 +549,8 @@ internal sealed class ListingsWindow : Window
         if (ImGui.CalcTextSize(text).X <= width)
             return text;
 
-        var key = (text, (int)width);
+        // The title font is larger, so a cut fits one font only
+        var key = (text, (int)width, (int)ImGui.GetFontSize());
         if (fitted.TryGetValue(key, out var shown))
             return shown;
 
@@ -532,7 +596,8 @@ internal sealed class ListingsWindow : Window
         return cut;
     }
 
-    private static void Remember(Dictionary<(string, int), string> memo, (string, int) key, string value)
+    private static void Remember<TKey>(Dictionary<TKey, string> memo, TKey key, string value)
+        where TKey : notnull
     {
         // Enough for every row at a few widths; past it the memo starts again rather than grow
         if (memo.Count >= 8192)
@@ -548,6 +613,7 @@ internal sealed class ListingsWindow : Window
     private void Rebuild(DateTimeOffset now)
     {
         rowsByKey.Clear();
+        listingCount = 0;
         var entries = new List<BrowserEntry<Row>>();
         var travel = region();
         loggedOut = travel is null;
@@ -580,6 +646,7 @@ internal sealed class ListingsWindow : Window
         foreach (var merged in Duplicates.Merge(candidates, now))
         {
             var row = Entry(merged);
+            listingCount++;
             foreach (var member in row.Members)
                 rowsByKey[member.Key] = row;
             var key = $"{(int)row.Listing.Source}:{row.Listing.Id}";
@@ -824,6 +891,15 @@ internal sealed class ListingsWindow : Window
 
     private void Notify(string text, NotificationType type) =>
         notifications.AddNotification(new Notification { Title = "Jaunt", Content = text, Type = type });
+
+    private static Uri? SiteUrl(ListingSource source) => source switch
+    {
+        ListingSource.FfxivVenues => FfxivVenues.SiteUrl,
+        ListingSource.Xivpf => Xivpf.SiteUrl,
+        ListingSource.Partake => Partake.SiteUrl,
+        ListingSource.RpEventCalendar => RpEventCalendar.SiteUrl,
+        _ => null,
+    };
 
     private static string SourceName(ListingSource source) => source switch
     {
