@@ -298,7 +298,7 @@ internal sealed class ListingsWindow : Window
         DrawFooter(row);
     }
 
-    /// <summary>The opening listed first, and for a recurring listing open now, the next.</summary>
+    /// <summary>The opening listed first.</summary>
     private void DrawDetailStatus(Row row, DateTimeOffset now, CultureInfo locale)
     {
         var listed = row.Listed;
@@ -312,9 +312,6 @@ internal sealed class ListingsWindow : Window
             ImGui.TextColored(ImGuiColors.HealerGreen, text);
         else
             ImGui.TextUnformatted(text);
-
-        if (!row.Schedule.OneOff && listed.Count > 1)
-            ImGui.TextDisabled("Next: " + StatusText.Detail(listed[1], false, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale));
     }
 
     /// <summary>Travel to the first address, and open the first link that isn't a Discord invite.</summary>
