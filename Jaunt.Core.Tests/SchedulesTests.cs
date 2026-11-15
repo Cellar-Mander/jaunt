@@ -233,6 +233,7 @@ public class SchedulesTests
     [Fact]
     public void AStartedOpeningStillCountsFromWhenTheAdWasLastSeen()
     {
+        // revert-check: not revert-sensitive (old code ignores the first sighting; this pins that starts still do)
         // Only a closing time alone counts from the first sighting; "today" is the day it was last seen
         var times = Schedules.ParseAd("Today 10pm-11pm ST", Now);
 
