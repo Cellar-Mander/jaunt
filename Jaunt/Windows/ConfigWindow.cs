@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
@@ -43,6 +44,18 @@ public sealed class ConfigWindow : Window, IDisposable
     private readonly Configuration configuration;
     private string? clearResult;
 
+    // Worked out at most once a second, or when a format or the minute changes, rather than every
+    // frame, as formatting and listing the hidden venues allocate
+    private static readonly TimeSpan HiddenRefreshInterval = TimeSpan.FromSeconds(1);
+    private IReadOnlyList<PlaceMark> hiddenPlaces = [];
+    private IReadOnlyList<CachedListing> hiddenListings = [];
+    private DateTimeOffset nextHiddenRefresh;
+    private (long Minute, TimeFormat Time, DateFormat Date) nowShownFor = (-1, default, default);
+    private string nowText = "";
+
+    /// <summary>What <see cref="Draw"/> allocates, for the self-test; see "Per-frame code" in CONTRIBUTING.md.</summary>
+    internal AllocationWatch DrawAllocations { get; } = new();
+
     public ConfigWindow(Plugin plugin) : base("Jaunt Settings###JauntConfig")
     {
         this.plugin = plugin;
@@ -56,7 +69,22 @@ public sealed class ConfigWindow : Window, IDisposable
 
     public override void OnClose() => clearResult = null;
 
+    public override void OnOpen() => nextHiddenRefresh = DateTimeOffset.MinValue;
+
     public override void Draw()
+    {
+        DrawAllocations.Start();
+        try
+        {
+            DrawSections();
+        }
+        finally
+        {
+            DrawAllocations.Stop();
+        }
+    }
+
+    private void DrawSections()
     {
         if (DrawSectionHeader(SettingsSection.Data, "Data###Data"))
             DrawData();
@@ -219,18 +247,36 @@ public sealed class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        // The time shows minutes, so the line changes only with the minute or a format
         var now = DateTime.Now;
-        var locale = CultureInfo.CurrentCulture;
-        ImGui.TextDisabled(
-            $"Now: {DisplayFormats.FormatDate(now, configuration.DateFormat, locale)} {DisplayFormats.FormatTime(now, configuration.TimeFormat, locale)}");
+        var shownFor = (now.Ticks / TimeSpan.TicksPerMinute, configuration.TimeFormat, configuration.DateFormat);
+        if (shownFor != nowShownFor)
+        {
+            AllocationWatch.Filled();
+            var locale = CultureInfo.CurrentCulture;
+            nowText = $"Now: {DisplayFormats.FormatDate(now, configuration.DateFormat, locale)} {DisplayFormats.FormatTime(now, configuration.TimeFormat, locale)}";
+            nowShownFor = shownFor;
+        }
+
+        ImGui.TextDisabled(nowText);
     }
 
     private void DrawListings()
     {
         ImGui.TextUnformatted("Hidden venues");
 
-        var places = plugin.ListingCache.HiddenPlaces();
-        var hidden = plugin.ListingCache.HiddenListings();
+        // The browser's Hide button and fetches change these, so they are listed again each second
+        var now = DateTimeOffset.UtcNow;
+        if (now >= nextHiddenRefresh)
+        {
+            AllocationWatch.Filled();
+            hiddenPlaces = plugin.ListingCache.HiddenPlaces();
+            hiddenListings = plugin.ListingCache.HiddenListings();
+            nextHiddenRefresh = now + HiddenRefreshInterval;
+        }
+
+        var places = hiddenPlaces;
+        var hidden = hiddenListings;
         if (places.Count == 0 && hidden.Count == 0)
         {
             ImGui.TextDisabled("None. Hide a venue from the listing browser to keep it out of the list.");
@@ -255,8 +301,10 @@ public sealed class ConfigWindow : Window, IDisposable
             ImGui.TextDisabled(places[i].ShownAddress);
         }
 
-        foreach (var listing in hidden)
+        // Indexed, as enumerating through the list's interface allocates
+        for (var i = 0; i < hidden.Count; i++)
         {
+            var listing = hidden[i];
             using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
             if (ImGui.SmallButton("Un-hide"))
             {
@@ -271,24 +319,35 @@ public sealed class ConfigWindow : Window, IDisposable
         }
 
         if (unhid)
+        {
             plugin.SaveListingCache();
+            nextHiddenRefresh = DateTimeOffset.MinValue;
+        }
     }
 
     private static bool Combo<T>(string label, (T Value, string Label)[] options, ref T value) where T : struct, Enum
     {
+        // Drawn every frame, so a loop rather than LINQ, and EqualityComparer, which doesn't box an enum as Equals(object) does
         var current = value;
-        var preview = options.FirstOrDefault(o => o.Value.Equals(current)).Label ?? current.ToString();
+        var comparer = EqualityComparer<T>.Default;
+        string? preview = null;
+        foreach (var (option, optionLabel) in options)
+        {
+            if (comparer.Equals(option, current))
+                preview = optionLabel;
+        }
+
         var changed = false;
 
         ImGui.SetNextItemWidth(ImGuiHelpers.GlobalScale * 160f);
-        if (ImGui.BeginCombo(label, preview))
+        if (ImGui.BeginCombo(label, preview ?? current.ToString()))
         {
             foreach (var (option, optionLabel) in options)
             {
-                if (ImGui.Selectable(optionLabel, option.Equals(current)))
+                if (ImGui.Selectable(optionLabel, comparer.Equals(option, current)))
                 {
                     value = option;
-                    changed = !option.Equals(current);
+                    changed = !comparer.Equals(option, current);
                 }
             }
 

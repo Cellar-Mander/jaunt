@@ -38,6 +38,7 @@ internal static class ShownText
         if (memo.TryGetValue(text, out var shown))
             return shown;
 
+        AllocationWatch.Filled();
         // ImGui's characters are 16-bit here, so it never has a glyph beyond U+FFFF
         shown = FontFallback.Fold(text, c => c <= char.MaxValue && font.FindGlyphNoFallback((ushort)c) != null);
         if (memo.Count >= MaxRemembered)
