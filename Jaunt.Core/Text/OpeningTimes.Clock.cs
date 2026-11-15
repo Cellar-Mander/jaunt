@@ -30,11 +30,11 @@ public static partial class OpeningTimes
 
             var (c1, z1, ji1, next1) = first.Value;
 
-            // A range: a separator, then a second time.
+            // A range: a separator, then a second time. A dash may run on ("--") or end in an arrow ("->").
             if (IsRangeSeparator(At(tokens, next1)))
             {
                 var j = next1 + 1;
-                while (IsSymbol(At(tokens, j), '-'))
+                while (IsSymbol(At(tokens, j), '-') || IsSymbol(At(tokens, j), '>'))
                     j++;
                 var second = At(tokens, j) is { Kind: Kind.Number } && !used[j] ? ReadClock(tokens, j) : null;
                 if (second is not null && (Qualified(c1, z1, ji1) || Qualified(second.Value.Clock, second.Value.Zone, second.Value.Ji)))

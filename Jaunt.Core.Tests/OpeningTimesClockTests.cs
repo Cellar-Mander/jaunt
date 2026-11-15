@@ -147,6 +147,7 @@ public class OpeningTimesClockTests
     [InlineData("7–10 PM PT", "19:00-22:00 PT")] // en dash
     [InlineData("7—10 PM PT", "19:00-22:00 PT")] // em dash
     [InlineData("9pm--2am", "21:00-02:00")] // more than one dash
+    [InlineData("9PM->1AM EST", "21:00-01:00 EST")] // an arrow
     [InlineData("9pm till 2am", "21:00-02:00")]
     [InlineData("9pm until 2am", "21:00-02:00")]
     [InlineData("8PM PST to 11PM EST", "20:00-23:00 EST")] // the end's zone wins
