@@ -104,8 +104,11 @@ internal sealed class ListingsWindow : Window
         /// <summary>The openings listed, earliest first; set when the list is rebuilt.</summary>
         public IReadOnlyList<Occurrence> Listed { get; init; } = [];
 
-        /// <summary>The cached listings of <see cref="Members"/>, for their marks; set when the list is rebuilt.</summary>
-        public IReadOnlyList<CachedListing> Listings { get; init; } = [];
+        /// <summary>The entry as its marks see it; set when the list is rebuilt.</summary>
+        public MarkEntry Marks { get; init; } = new([], [], "", "", []);
+
+        /// <summary>The place whose marks the entry carries, or null; set when the list is rebuilt and when a button marks one.</summary>
+        public PlaceMark? Place { get; set; }
     }
 
     /// <summary>
@@ -282,8 +285,8 @@ internal sealed class ListingsWindow : Window
     /// </summary>
     private static float DrawRowMarks(Row row, Vector2 min, Vector2 max)
     {
-        var favourite = EntryMarks.Has(row.Listings, EntryMark.Favourite);
-        var visited = EntryMarks.Has(row.Listings, EntryMark.Visited);
+        var favourite = EntryMarks.Has(row.Marks, row.Place, EntryMark.Favourite);
+        var visited = EntryMarks.Has(row.Marks, row.Place, EntryMark.Visited);
         if (!favourite && !visited)
             return max.X;
 
@@ -395,29 +398,31 @@ internal sealed class ListingsWindow : Window
         var spacing = ImGui.GetStyle().ItemSpacing.X;
         var width = (size.X * 3) + (spacing * 2);
         ImGui.SetCursorPosX(ImGui.GetContentRegionMax().X - width);
-        var changed = MarkButton(row, EntryMark.Favourite, FontAwesomeIcon.Star, ImGuiColors.DalamudYellow, size,
-            "Remove from favourites", "Favourite the {0}");
+        var changed = MarkButton(row, EntryMark.Favourite, FontAwesomeIcon.Star, ImGuiColors.DalamudYellow, size, "Remove from favourites");
         ImGui.SameLine();
-        changed |= MarkButton(row, EntryMark.Visited, FontAwesomeIcon.Check, ImGuiColors.HealerGreen, size,
-            "Mark not visited", "Mark the {0} visited");
+        changed |= MarkButton(row, EntryMark.Visited, FontAwesomeIcon.Check, ImGuiColors.HealerGreen, size, "Mark not visited");
         ImGui.SameLine();
-        if (MarkButton(row, EntryMark.Hidden, FontAwesomeIcon.EyeSlash, ImGuiColors.DalamudGrey, size, "Un-hide", "Hide the {0}"))
+        if (MarkButton(row, EntryMark.Hidden, FontAwesomeIcon.EyeSlash, ImGuiColors.DalamudGrey, size, "Un-hide"))
         {
             changed = true;
-            nextRebuild = DateTimeOffset.MinValue;
             Notify($"Hid {ShownText.Title(row.Title)}. Un-hide it in Settings under Hidden venues.", NotificationType.Info);
         }
 
         if (changed)
+        {
+            // Other entries at the same place show the change too, and a hidden one leaves the list
+            nextRebuild = DateTimeOffset.MinValue;
             saveCache();
+        }
+
         return width;
     }
 
     /// <summary>One mark's button: its icon in <paramref name="on"/> while the entry shows the mark; returns whether it was clicked.</summary>
-    /// <param name="setTip">The tooltip while unmarked, with {0} for what the mark goes on ("venue", "event", "ads").</param>
-    private static bool MarkButton(Row row, EntryMark mark, FontAwesomeIcon icon, Vector4 on, Vector2 size, string clearTip, string setTip)
+    /// <param name="clearTip">The tooltip while marked; while unmarked it says what the mark goes on (<see cref="SetTip"/>).</param>
+    private bool MarkButton(Row row, EntryMark mark, FontAwesomeIcon icon, Vector4 on, Vector2 size, string clearTip)
     {
-        var marked = EntryMarks.Has(row.Listings, mark);
+        var marked = EntryMarks.Has(row.Marks, row.Place, mark);
         bool clicked;
         using (ImRaii.PushId((int)mark))
             clicked = ImGui.Button("##mark", size);
@@ -425,21 +430,33 @@ internal sealed class ListingsWindow : Window
         var centre = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
         DrawIcon(ImGui.GetWindowDrawList(), icon, centre, size.Y * 0.55f, marked ? ImGui.GetColorU32(on) : ImGui.GetColorU32(ImGuiCol.Text));
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(marked ? clearTip : string.Format(CultureInfo.CurrentCulture, setTip, TargetNoun(row, mark)));
-        if (clicked)
-            EntryMarks.Toggle(row.Listings, mark);
-        return clicked;
+            ImGui.SetTooltip(marked ? clearTip : SetTip(row, mark));
+        if (!clicked)
+            return false;
+
+        var place = row.Place;
+        EntryMarks.Toggle(cache, row.Marks, ref place, mark);
+        row.Place = place;
+        return true;
     }
 
-    /// <summary>What a mark goes on, for its button's tooltip.</summary>
-    private static string TargetNoun(Row row, EntryMark mark)
+    /// <summary>
+    /// What a button will mark, so it is clear which later listings will carry it: everything at an
+    /// address names the address.
+    /// </summary>
+    private static string SetTip(Row row, EntryMark mark)
     {
-        var targets = EntryMarks.Targets(row.Listings, mark);
-        return targets[0].Source switch
+        var (verb, after) = mark switch
         {
-            ListingSource.FfxivVenues => "venue",
-            ListingSource.Partake or ListingSource.RpEventCalendar => "event",
-            _ => targets.Count == 1 ? "ad" : "ads",
+            EntryMark.Favourite => ("Favourite", ""),
+            EntryMark.Visited => ("Mark", " visited"),
+            _ => ("Hide", ""),
+        };
+        return EntryMarks.Target(row.Marks, mark) switch
+        {
+            MarkTarget.Place => $"{verb} {row.Marks.ShownAddress}{after}: every listing there, from any source, now or later",
+            MarkTarget.Event => $"{verb} this event{after}",
+            _ => row.Marks.Members.Count == 1 ? $"{verb} this ad{after}" : $"{verb} these ads{after}",
         };
     }
 
@@ -773,7 +790,7 @@ internal sealed class ListingsWindow : Window
         foreach (var listing in cache.Listings)
         {
             // A venue's world is checked once it is shown, as that corrects misspellings. Hidden
-            // listings are merged too, so hiding a venue also hides the ads listed as it
+            // listings and places are merged too, so hiding a venue also hides the ads listed as it
             if (listing.Source != ListingSource.FfxivVenues && !travel.Includes(listing))
                 continue;
 
@@ -789,10 +806,15 @@ internal sealed class ListingsWindow : Window
                 candidates.Add(new MergeCandidate<Row>(row, address, row.Schedule, listed));
         }
 
-        foreach (var merged in Duplicates.Merge(candidates, now))
+        var merged = Duplicates.Merge(candidates, now).Select(Entry).ToList();
+        var places = PlaceMarks.Match(cache, [.. merged.Select(m => m.Marks)]);
+        if (cache.MarksUnsaved)
+            saveCache();
+        for (var i = 0; i < merged.Count; i++)
         {
-            var row = Entry(merged);
-            if (EntryMarks.Has(row.Listings, EntryMark.Hidden))
+            var row = merged[i];
+            row.Place = places[i];
+            if (EntryMarks.Has(row.Marks, row.Place, EntryMark.Hidden))
                 continue;
             listingCount++;
             foreach (var member in row.Members)
@@ -873,7 +895,10 @@ internal sealed class ListingsWindow : Window
     private Row Entry(MergedListing<Row> merged)
     {
         if (merged.Members.Count == 1)
-            return merged.Members[0] with { Members = merged.Members, Listed = merged.Listed, Listings = [merged.Members[0].Listing] };
+        {
+            var only = merged.Members[0];
+            return only with { Members = merged.Members, Listed = merged.Listed, Marks = MarksOf(only, merged.Members) };
+        }
 
         var byTitle = merged.Members.OrderBy(m => Duplicates.TitleRank(m.Listing.Source)).ToList();
         var byAddress = merged.Members
@@ -890,15 +915,32 @@ internal sealed class ListingsWindow : Window
         var about = byTitle.Where(m => m.About is { Length: > 0 })
             .MinBy(m => Schedules.ListedUntil(m.Listing.Source, m.Listing.LastSeen, configuration.RefreshCooldownMinutes))?.About;
         var first = byTitle[0];
-        return new Row(
+        var row = new Row(
             first.Listing, first.Title, byAddress.Details with { Links = links }, byAddress.World, merged.Schedule, about,
             byTitle.Select(m => m.Event).FirstOrDefault(e => e is not null),
             byTitle.Select(m => m.CalendarEvent).FirstOrDefault(e => e is not null))
         {
             Members = byTitle,
             Listed = merged.Listed,
-            Listings = [.. byTitle.Select(m => m.Listing)],
         };
+        return row with { Marks = MarksOf(row, byTitle) };
+    }
+
+    /// <summary>
+    /// The entry as its marks see it: its listings, every plot or apartment its members give (the one
+    /// it shows first), its title and first address as shown, and its links.
+    /// </summary>
+    private static MarkEntry MarksOf(Row row, IReadOnlyList<Row> members)
+    {
+        var places = new List<AddressKey>();
+        foreach (var address in row.Details.Addresses.Take(1).Concat(members.SelectMany(m => m.Details.Addresses.Take(1))))
+        {
+            if (AddressKey.Of(address) is { WardOnly: false } key && !places.Contains(key))
+                places.Add(key);
+        }
+
+        var shown = row.Details.Addresses.Count > 0 ? AddressText.Format(row.Details.Addresses[0]) : "";
+        return new MarkEntry([.. members.Select(m => m.Listing)], places, ShownText.Title(row.Title), shown, [.. row.Details.Links.Select(l => l.Uri)]);
     }
 
     /// <summary>The row for a listing, or null when it isn't one the browser lists (such as an ad with no address).</summary>

@@ -1,4 +1,5 @@
 using Jaunt.Core.Listings;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Browser;
 
@@ -10,57 +11,108 @@ public enum EntryMark
     Hidden,
 }
 
+/// <summary>What carries a mark set on an entry, for its button's tooltip.</summary>
+public enum MarkTarget
+{
+    /// <summary>The entry's housing address (<see cref="PlaceMark"/>).</summary>
+    Place,
+
+    /// <summary>A Partake or FFXIV RP Event Calendar event, by its ID.</summary>
+    Event,
+
+    /// <summary>Each of the entry's listings, by ID: ads with no plot or apartment to mark.</summary>
+    Listings,
+}
+
+/// <summary>One entry as the marks see it.</summary>
+/// <param name="Members">Its listings, title first.</param>
+/// <param name="Places">The plot or apartment addresses its listings give, the one it shows first; empty when none names more than the ward.</param>
+/// <param name="Title">As shown, for the hidden list.</param>
+/// <param name="ShownAddress">Its first address as shown and copied, for the hidden list.</param>
+/// <param name="Links">Every member's links.</param>
+public sealed record MarkEntry(IReadOnlyList<CachedListing> Members, IReadOnlyList<AddressKey> Places, string Title, string ShownAddress, IReadOnlyList<Uri> Links)
+{
+    /// <summary>Its Partake or RP calendar event, if it has one.</summary>
+    public CachedListing? Event => Members.FirstOrDefault(m => m.Source is ListingSource.Partake or ListingSource.RpEventCalendar);
+}
+
 /// <summary>
-/// Which of an entry's listings carry its favourite, visited and hidden marks. A venue is an FFXIV
-/// Venues listing; an event is a Partake or FFXIV RP Event Calendar one. See "Marks" under "Listing
-/// browser" in <c>docs/design.md</c>.
+/// The favourite, visited and hidden buttons. A mark goes on the entry's housing address, so it
+/// carries over to every listing there; visited on a Partake or RP calendar event goes on that event,
+/// so a venue's regular nights aren't marked by one event there. See "Marks" under "Listing browser"
+/// in <c>docs/design.md</c>.
 /// </summary>
 public static class EntryMarks
 {
     /// <summary>
-    /// The listings a mark is set on: for favourite and hidden the venue, else the event; for visited
-    /// the event, else the venue. An entry with neither (only ads) marks every ad, so a venue's several
-    /// ads all carry it.
+    /// What a mark goes on: visited on the event if there is one; otherwise the address, if the entry
+    /// names a plot or apartment; otherwise the event, else each listing.
     /// </summary>
-    /// <param name="members">The entry's listings, title first.</param>
-    public static IReadOnlyList<CachedListing> Targets(IReadOnlyList<CachedListing> members, EntryMark mark)
+    public static MarkTarget Target(MarkEntry entry, EntryMark mark)
     {
-        var venue = members.FirstOrDefault(m => m.Source == ListingSource.FfxivVenues);
-        var item = members.FirstOrDefault(m => m.Source is ListingSource.Partake or ListingSource.RpEventCalendar);
-        var target = mark == EntryMark.Visited ? item ?? venue : venue ?? item;
-        return target is null ? members : [target];
+        if (mark == EntryMark.Visited && entry.Event is not null)
+            return MarkTarget.Event;
+        if (entry.Places.Count > 0)
+            return MarkTarget.Place;
+        return entry.Event is not null ? MarkTarget.Event : MarkTarget.Listings;
     }
 
-    /// <summary>Whether the entry shows the mark: any of its listings carries it, whoever set it.</summary>
-    public static bool Has(IReadOnlyList<CachedListing> members, EntryMark mark) => members.Any(m => Get(m, mark));
+    /// <summary>Whether the entry shows the mark: its place carries it, or any of its listings does.</summary>
+    /// <param name="place">The place <see cref="PlaceMarks.Match"/> found for the entry, or null.</param>
+    public static bool Has(MarkEntry entry, PlaceMark? place, EntryMark mark) =>
+        (place is not null && Get(place, mark)) || entry.Members.Any(m => Get(m, mark));
 
     /// <summary>
-    /// Sets the mark on its <see cref="Targets"/> when the entry doesn't show it; otherwise clears it
-    /// from every listing, so a mark set before the entry merged with another still comes off.
+    /// Sets the mark on its <see cref="Target"/> when the entry doesn't show it, keeping what is seen
+    /// at a newly marked place; otherwise clears it from the place and every listing, whoever set it.
     /// </summary>
+    /// <param name="place">The entry's place, or null; set to the place marked, if one is.</param>
     /// <returns>Whether the entry shows the mark afterwards.</returns>
-    public static bool Toggle(IReadOnlyList<CachedListing> members, EntryMark mark)
+    public static bool Toggle(ListingCache cache, MarkEntry entry, ref PlaceMark? place, EntryMark mark)
     {
-        if (Has(members, mark))
+        if (Has(entry, place, mark))
         {
-            foreach (var member in members)
+            if (place is not null)
+                Set(place, mark, false);
+            foreach (var member in entry.Members)
                 Set(member, mark, false);
             return false;
         }
 
-        foreach (var target in Targets(members, mark))
-            Set(target, mark, true);
+        switch (Target(entry, mark))
+        {
+            case MarkTarget.Place:
+                place ??= cache.Place(entry.Places[0]);
+                Set(place, mark, true);
+                PlaceMarks.Learn(place, entry, retitle: true);
+                break;
+            case MarkTarget.Event:
+                Set(entry.Event!, mark, true);
+                break;
+            default:
+                foreach (var member in entry.Members)
+                    Set(member, mark, true);
+                break;
+        }
+
         return true;
     }
 
-    private static bool Get(CachedListing listing, EntryMark mark) => mark switch
+    internal static bool Get(CachedListing listing, EntryMark mark) => mark switch
     {
         EntryMark.Favourite => listing.Favourite,
         EntryMark.Visited => listing.Visited,
         _ => listing.Hidden,
     };
 
-    private static void Set(CachedListing listing, EntryMark mark, bool value)
+    private static bool Get(PlaceMark place, EntryMark mark) => mark switch
+    {
+        EntryMark.Favourite => place.Favourite,
+        EntryMark.Visited => place.Visited,
+        _ => place.Hidden,
+    };
+
+    internal static void Set(CachedListing listing, EntryMark mark, bool value)
     {
         switch (mark)
         {
@@ -72,6 +124,22 @@ public static class EntryMarks
                 break;
             default:
                 listing.Hidden = value;
+                break;
+        }
+    }
+
+    private static void Set(PlaceMark place, EntryMark mark, bool value)
+    {
+        switch (mark)
+        {
+            case EntryMark.Favourite:
+                place.Favourite = value;
+                break;
+            case EntryMark.Visited:
+                place.Visited = value;
+                break;
+            default:
+                place.Hidden = value;
                 break;
         }
     }
