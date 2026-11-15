@@ -1,4 +1,5 @@
 using Jaunt.Core.Browser;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Listings;
 
@@ -9,8 +10,8 @@ namespace Jaunt.Core.Listings;
 /// <see cref="RefreshPolicy"/>; clearing listings never resets those times.
 /// </summary>
 /// <remarks>
-/// Unmarked listings expire one month after they were last seen (<see cref="RemoveExpired"/>);
-/// marked ones are kept. Lookups are by source and ID, so recording a listing costs the same however
+/// Unmarked listings expire one month after they were last seen, or for Party Finder ads once they
+/// are no longer listed and state no upcoming time (<see cref="RemoveExpired"/>); marked ones are kept. Lookups are by source and ID, so recording a listing costs the same however
 /// many are cached. It remembers which sources, marks and fetch times changed, so a save writes only
 /// those files (<see cref="TakeChanges"/>). Not thread-safe: use from one thread.
 /// </remarks>
@@ -164,12 +165,36 @@ public sealed partial class ListingCache
     public int ClearUnmarked() => RemoveWhere(l => !l.IsMarked);
 
     /// <summary>
-    /// Removes listings last seen a month or more before <paramref name="now"/>, unless they are
-    /// marked and recurring.
+    /// How long an unmarked Party Finder ad is kept after it was last seen, and how far before now a
+    /// time it states may end and still keep it. It covers the time the ad may still count as listed
+    /// (<see cref="Schedules.ListedUntil"/>: up to 25 hours at the longest cooldown) and how far the
+    /// zone its times are read in may shift them from London's, which depends on the player's region
+    /// and the venues at its address (up to 14 hours).
+    /// </summary>
+    public static readonly TimeSpan AdGrace = TimeSpan.FromDays(2);
+
+    /// <summary>
+    /// Removes unmarked Party Finder ads last seen <see cref="AdGrace"/> or more before
+    /// <paramref name="now"/> whose text states no time ending (or, with no end, starting) after
+    /// <paramref name="now"/> less <see cref="AdGrace"/>, and other listings last seen a month or more
+    /// before it. Marked listings are kept unless they are one-off.
     /// </summary>
     /// <returns>How many were removed.</returns>
     public int RemoveExpired(DateTimeOffset now) =>
-        RemoveWhere(l => (l.OneOff || !l.IsMarked) && l.LastSeen.AddMonths(1) <= now);
+        RemoveWhere(l => l.Source is ListingSource.InGamePartyFinder or ListingSource.Xivpf && !l.IsMarked
+            ? AdExpired(l, now)
+            : (l.OneOff || !l.IsMarked) && l.LastSeen.AddMonths(1) <= now);
+
+    private static bool AdExpired(CachedListing ad, DateTimeOffset now)
+    {
+        var since = now - AdGrace;
+        if (ad.LastSeen > since)
+            return false;
+        // Read as no longer listed; the grace covers any zone the browser might read its times in
+        var schedule = Schedules.ForAd(Schedules.ParseAd(ad.Description, ad.LastSeen), ad.LastSeen, PartyFinderRegion.Europe,
+            listed: false, since, firstSeen: ad.FirstSeen);
+        return !schedule.Occurrences.Any(o => (o.End ?? o.Start) > since);
+    }
 
     private int RemoveWhere(Func<CachedListing, bool> predicate)
     {
