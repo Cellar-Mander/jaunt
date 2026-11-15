@@ -229,8 +229,9 @@ public sealed class ConfigWindow : Window, IDisposable
     {
         ImGui.TextUnformatted("Hidden venues");
 
+        var places = plugin.ListingCache.HiddenPlaces();
         var hidden = plugin.ListingCache.HiddenListings();
-        if (hidden.Count == 0)
+        if (places.Count == 0 && hidden.Count == 0)
         {
             ImGui.TextDisabled("None. Hide a venue from the listing browser to keep it out of the list.");
             return;
@@ -238,6 +239,22 @@ public sealed class ConfigWindow : Window, IDisposable
 
         var unhid = false;
         using var indent = ImRaii.PushIndent();
+        // A hidden address hides every listing there, so it shows once, with where it is
+        for (var i = 0; i < places.Count; i++)
+        {
+            using var id = ImRaii.PushId($"place{i}");
+            if (ImGui.SmallButton("Un-hide"))
+            {
+                places[i].Hidden = false;
+                unhid = true;
+            }
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted(ShownText.Title(places[i].Title));
+            ImGui.SameLine();
+            ImGui.TextDisabled(places[i].ShownAddress);
+        }
+
         foreach (var listing in hidden)
         {
             using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");

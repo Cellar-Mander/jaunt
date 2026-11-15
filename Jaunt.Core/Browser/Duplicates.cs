@@ -16,6 +16,10 @@ public readonly record struct AddressKey(string World, District District, int Wa
     /// <summary>The ward-only key for the ward this address is in.</summary>
     public AddressKey InWard => new(World, District, Ward, null, null, false);
 
+    // The generated one prints every property, and InWard has an InWard, without end
+    public override string ToString() =>
+        $"{World} {District} W{Ward}" + (Plot is { } plot ? $" P{plot}" : "") + (Apartment is { } apartment ? $" A{apartment}{(Subdivision ? " sub" : "")}" : "");
+
     /// <summary>The key for an address, or null when it lacks a world or a district.</summary>
     public static AddressKey? Of(HousingAddress address)
     {

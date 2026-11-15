@@ -1,3 +1,5 @@
+using Jaunt.Core.Browser;
+
 namespace Jaunt.Core.Listings;
 
 /// <summary>
@@ -18,6 +20,8 @@ public sealed partial class ListingCache
     // Keyed by source and data centre: "" for a source fetched for every region at once (RefreshPolicy.ByDataCentre)
     private readonly Dictionary<(ListingSource Source, string DataCentre), DateTimeOffset> lastFetched = [];
     private readonly HashSet<ListingSource> changedSources = [];
+    // Marks on housing addresses; one with no mark left is dropped at the next save
+    private readonly Dictionary<AddressKey, PlaceMark> places = [];
     private bool marksChanged;
     private bool fetchTimesChanged;
 
@@ -100,6 +104,58 @@ public sealed partial class ListingCache
     public IReadOnlyList<CachedListing> HiddenListings() =>
         [.. Listings.Where(l => l.Hidden).OrderBy(l => l.ShownTitle, StringComparer.CurrentCultureIgnoreCase)];
 
+    /// <summary>The addresses with a mark (<see cref="PlaceMark"/>).</summary>
+    public IEnumerable<PlaceMark> Places => places.Values.Where(p => p.IsMarked);
+
+    /// <summary>The marked place at an address, or null.</summary>
+    public PlaceMark? PlaceAt(AddressKey address) => places.TryGetValue(address, out var place) && place.IsMarked ? place : null;
+
+    /// <summary>Hidden places, by title as last shown.</summary>
+    public IReadOnlyList<PlaceMark> HiddenPlaces() =>
+        [.. Places.Where(p => p.Hidden).OrderBy(p => p.Title, StringComparer.CurrentCultureIgnoreCase)];
+
+    /// <summary>The place at an address, added with no marks if there is none; marks set on it are saved.</summary>
+    public PlaceMark Place(AddressKey address)
+    {
+        if (!places.TryGetValue(address, out var place))
+        {
+            place = new PlaceMark(address) { Owner = this };
+            places.Add(address, place);
+        }
+
+        return place;
+    }
+
+    /// <summary>
+    /// Moves a place's marks to another address. If that address has marks already, the two become
+    /// one there, with every mark and everything seen at either.
+    /// </summary>
+    /// <returns>The place now at <paramref name="to"/>.</returns>
+    internal PlaceMark Move(PlaceMark place, AddressKey to)
+    {
+        if (place.Address == to)
+            return place;
+        places.Remove(place.Address);
+        marksChanged = true;
+        if (!places.TryGetValue(to, out var there))
+        {
+            place.Address = to;
+            places.Add(to, place);
+            return place;
+        }
+
+        there.Favourite |= place.Favourite;
+        there.Visited |= place.Visited;
+        there.Hidden |= place.Hidden;
+        there.VenueIds.UnionWith(place.VenueIds);
+        there.Websites.UnionWith(place.Websites);
+        there.Discords.UnionWith(place.Discords);
+        // Its address now names where its marks went, for anything still holding it
+        place.Address = to;
+        place.Owner = null;
+        return there;
+    }
+
     /// <summary>Removes every listing that is not favourite, visited or hidden.</summary>
     /// <returns>How many were removed.</returns>
     public int ClearUnmarked() => RemoveWhere(l => !l.IsMarked);
@@ -164,4 +220,7 @@ public sealed partial class ListingCache
         RefreshPolicy.ShouldFetch(source, settingMinutes, LastFetched(source, dataCentre), now);
 
     internal void MarksChanged() => marksChanged = true;
+
+    /// <summary>Whether a mark changed since the last save, so a caller that changes them without a click knows to save.</summary>
+    public bool MarksUnsaved => marksChanged;
 }

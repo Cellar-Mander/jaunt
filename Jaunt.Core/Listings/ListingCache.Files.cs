@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using Jaunt.Core.Browser;
 
 namespace Jaunt.Core.Listings;
 
@@ -62,7 +63,14 @@ public sealed partial class ListingCache
                 Visited = l.Visited,
                 Hidden = l.Hidden,
             })];
-            files.Add(new ListingFile(MarksFile, MarksBackupFile, () => Serialise(new SavedMarks { Marks = marks })));
+            foreach (var unmarked in places.Values.Where(p => !p.IsMarked).ToList())
+            {
+                places.Remove(unmarked.Address);
+                unmarked.Owner = null;
+            }
+
+            List<SavedPlace?> saved = [.. places.Values.Select(SavedPlace.Of)];
+            files.Add(new ListingFile(MarksFile, MarksBackupFile, () => Serialise(new SavedMarks { Marks = marks, Places = saved })));
         }
 
         changedSources.Clear();
@@ -254,6 +262,21 @@ public sealed partial class ListingCache
             listing.Visited = mark.Visited;
             listing.Hidden = mark.Hidden;
         }
+
+        foreach (var saved in Deserialise<SavedMarks>(json)?.Places ?? [])
+        {
+            if (saved?.Key() is not { } key || !(saved.Favourite || saved.Visited || saved.Hidden))
+                continue;
+            var place = Place(key);
+            place.Title = saved.Title ?? "";
+            place.ShownAddress = saved.ShownAddress ?? "";
+            place.Favourite |= saved.Favourite;
+            place.Visited |= saved.Visited;
+            place.Hidden |= saved.Hidden;
+            place.VenueIds.UnionWith(Present(saved.VenueIds));
+            place.Websites.UnionWith(Present(saved.Websites));
+            place.Discords.UnionWith(Present(saved.Discords));
+        }
     }
 
     // Only a source's name: a number would follow a renumbering
@@ -295,6 +318,53 @@ public sealed partial class ListingCache
     private sealed class SavedMarks : SavedFile
     {
         public List<SavedMark?>? Marks { get; set; }
+        public List<SavedPlace?>? Places { get; set; }
+    }
+
+    /// <summary>A place's address and marks; the district by name, so a renumbering can't move it.</summary>
+    private sealed class SavedPlace
+    {
+        public string? World { get; set; }
+        public string? District { get; set; }
+        public int Ward { get; set; }
+        public int? Plot { get; set; }
+        public int? Apartment { get; set; }
+        public bool Subdivision { get; set; }
+        public string? Title { get; set; }
+        public string? ShownAddress { get; set; }
+        public bool Favourite { get; set; }
+        public bool Visited { get; set; }
+        public bool Hidden { get; set; }
+        public List<string?>? VenueIds { get; set; }
+        public List<string?>? Websites { get; set; }
+        public List<string?>? Discords { get; set; }
+
+        public static SavedPlace? Of(PlaceMark place) => new()
+        {
+            World = place.Address.World,
+            District = place.Address.District.ToString(),
+            Ward = place.Address.Ward,
+            Plot = place.Address.Plot,
+            Apartment = place.Address.Apartment,
+            Subdivision = place.Address.Subdivision,
+            Title = place.Title,
+            ShownAddress = place.ShownAddress,
+            Favourite = place.Favourite,
+            Visited = place.Visited,
+            Hidden = place.Hidden,
+            VenueIds = [.. place.VenueIds.Order(StringComparer.Ordinal)],
+            Websites = [.. place.Websites.Order(StringComparer.Ordinal)],
+            Discords = [.. place.Discords.Order(StringComparer.Ordinal)],
+        };
+
+        /// <summary>The address, or null when a hand edit left it without a world, a known district, a ward, or exactly one of plot and apartment.</summary>
+        public AddressKey? Key()
+        {
+            if (string.IsNullOrWhiteSpace(World) || !Enum.TryParse<Text.District>(District, out var district) || !Enum.IsDefined(district)
+                || district.ToString() != District || Ward is < 1 or > 30 || Plot is null == Apartment is null || Plot is < 1 or > 60 || Apartment < 1)
+                return null;
+            return new AddressKey(World.ToUpperInvariant(), district, Ward, Plot, Apartment, Apartment is not null && Subdivision);
+        }
     }
 
     private sealed class SavedMark
