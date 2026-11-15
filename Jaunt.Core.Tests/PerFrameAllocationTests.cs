@@ -49,6 +49,7 @@ public class PerFrameAllocationTests
     [Fact]
     public void OccurrenceIsOpenDoesNotAllocatePerFrame()
     {
+        // revert-check: not revert-sensitive (IsOpen allocated nothing before this change either; this guards against one being added)
         Occurrence[] openings =
         [
             new(Now.AddHours(-1), Now.AddHours(1)),
