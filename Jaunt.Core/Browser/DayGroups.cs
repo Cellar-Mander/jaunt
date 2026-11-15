@@ -26,10 +26,14 @@ public sealed record DayGroup<T>(DayGroupKind Kind, DateOnly Date, IReadOnlyList
 /// <summary>
 /// Groups listed openings by the local day they start on: "Open now" first, then today's later
 /// openings, "Tomorrow", then one group per date. Within a group, earliest start first, then title.
-/// In "Open now", openings with no known start come after those with one, and 24/7 venues last.
+/// "Open now" lists the soonest to close first, taking an opening with a start but no end to close
+/// <see cref="AssumedLength"/> after it starts; openings with neither come after, and 24/7 venues last.
 /// </summary>
 public static class DayGroups
 {
+    /// <summary>How long "Open now" assumes an opening with no closing time lasts, for sorting only.</summary>
+    public static readonly TimeSpan AssumedLength = TimeSpan.FromHours(3);
+
     public static IReadOnlyList<DayGroup<T>> Group<T>(IEnumerable<BrowserEntry<T>> entries, DateTimeOffset now, TimeZoneInfo zone)
     {
         var today = LocalDate(now, zone);
@@ -92,13 +96,20 @@ public static class DayGroups
         if (byAlways != 0)
             return byAlways;
 
-        // A known start before an unknown one
-        var byKnown = (a.When.Start is null).CompareTo(b.When.Start is null);
+        // Soonest to close first; an opening with no known close after those with one
+        var aClose = SortingClose(a.When);
+        var bClose = SortingClose(b.When);
+        var byKnown = (aClose is null).CompareTo(bClose is null);
         if (byKnown != 0)
             return byKnown;
+        var byClose = Nullable.Compare(aClose, bClose);
+        if (byClose != 0)
+            return byClose;
 
         return CompareUpcoming(a, b);
     }
+
+    private static DateTimeOffset? SortingClose(Occurrence when) => when.End ?? when.Start + AssumedLength;
 
     private static int CompareUpcoming<T>(BrowserEntry<T> a, BrowserEntry<T> b)
     {
