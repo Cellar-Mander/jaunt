@@ -4,11 +4,15 @@ using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
+using Dalamud.Interface.Colors;
 using Dalamud.Interface.ImGuiNotification;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility;
+using Jaunt.Core.Browser;
 using Jaunt.Core.Display;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
@@ -17,14 +21,27 @@ using Jaunt.Travel;
 namespace Jaunt.Windows;
 
 /// <summary>
-/// The MVP listing window: Party Finder venue ads (in-game and from xivpf) with a parsed address,
-/// FFXIV Venues venues with an address, Partake events that haven't ended and FFXIV RP Event Calendar
-/// events with an address or a location, newest first, each address with Travel and Copy address and
-/// each link with Open. The two-pane browser (cdd9e95f) replaces it.
+/// The listing browser: the day-grouped list of listings on the left and the selected listing's
+/// details on the right. Lists in-game and xivpf Party Finder ads with an address, FFXIV Venues venues
+/// with an address, Partake events and FFXIV RP Event Calendar events with an address or location, on
+/// worlds the character can travel to, at the openings <see cref="Schedules.Listed"/> picks.
 /// </summary>
 internal sealed class ListingsWindow : Window
 {
     private static readonly TimeSpan RebuildInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>Shown when there is nothing to list; one is picked each time the list becomes empty.</summary>
+    private static readonly string[] EmptyLines =
+    [
+        "No one here but us chickens.",
+        "The wards are quiet. Too quiet.",
+        "Even the bartenders have gone home.",
+        "Nothing on tonight. Perhaps host something?",
+        "Tumbleweeds roll through the plaza.",
+    ];
+
+    /// <summary>Lines of About shown before "Read more".</summary>
+    private const int AboutLines = 6;
 
     private readonly ListingCache cache;
     private readonly Gazetteer gazetteer;
@@ -38,20 +55,40 @@ internal sealed class ListingsWindow : Window
     // Parsed once per ad text or event location and world, and derived once per venue's fields, so
     // drawing doesn't re-parse every frame
     private readonly Dictionary<(ListingSource, string), (string Text, string? ListedOn, ListingDetails Details)> parsed = [];
+    private readonly Dictionary<(ListingSource, string), (string Text, DateOnly Seen, IReadOnlyList<OpeningTime> Times)> adTimes = [];
+    private readonly Dictionary<(ListingSource, string), (string Text, string About)> abouts = [];
     private readonly Dictionary<string, (string Name, FfxivVenues.Fields? Fields, FfxivVenues.Shown Shown)> shownVenues = [];
     private readonly Dictionary<string, (CalendarFields Fields, RpEventCalendar.Shown Shown)> shownEvents = [];
-    private List<Row> rows = [];
-    private readonly Dictionary<(ListingSource, string), (int Lines, float Height)> rowHeights = [];
+
+    private IReadOnlyList<DayGroup<Row>> groups = [];
+    // Each listed row by its listing, for the detail pane; a listing listed twice (open now and next) is one row
+    private readonly Dictionary<(ListingSource, string), Row> rowsByKey = [];
     private DateTimeOffset nextRebuild;
     private bool showsPartake;
     private bool loggedOut;
+    private int emptyLine = -1;
+    private bool aboutExpanded;
+
+    // Texts cut to a width, worked out once per text and width rather than every frame
+    private readonly Dictionary<(string Text, int Width), string> fitted = [];
+    private readonly Dictionary<(string Text, int Width), string> aboutCuts = [];
 
     /// <summary>
-    /// One row: the listing, its title as shown, its addresses and links, whether it is open 24/7, and
-    /// for a Partake or RP calendar event what is shown of it, worked out from the values it was sent with.
+    /// One listing as the browser shows it: its title, addresses and links, world, schedule, what is
+    /// shown of a Partake or RP calendar event, and an ad's text for About.
     /// </summary>
     private sealed record Row(
-        CachedListing Listing, string Title, ListingDetails Details, bool AlwaysOpen, Partake.Shown? Event = null, RpEventCalendar.Shown? CalendarEvent = null);
+        CachedListing Listing,
+        string Title,
+        ListingDetails Details,
+        string? World,
+        ListingSchedule Schedule,
+        string? About,
+        Partake.Shown? Event = null,
+        RpEventCalendar.Shown? CalendarEvent = null)
+    {
+        public (ListingSource, string) Key => (Listing.Source, Listing.Id);
+    }
 
     /// <summary>
     /// A calendar event's fields that <see cref="RpEventCalendar.Show"/> reads. Recording a fetch assigns
@@ -69,9 +106,10 @@ internal sealed class ListingsWindow : Window
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
+    /// <param name="openSettings">Opens the Settings window, from the title bar's cog.</param>
     public ListingsWindow(
         ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
-        Func<TravelRegion?> region)
+        Func<TravelRegion?> region, Action openSettings)
         : base("Jaunt###JauntListings")
     {
         this.region = region;
@@ -82,15 +120,24 @@ internal sealed class ListingsWindow : Window
         this.lifestream = lifestream;
         this.notifications = notifications;
         this.configuration = configuration;
-        Size = new Vector2(520, 560);
+        Size = new Vector2(900, 600);
         SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 240), MaximumSize = new Vector2(1600, 1600) };
+        // Fits a Steam Deck (1280×800) at a raised font scale; the single-column layout for narrower windows is 2dce5769
+        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(560, 320), MaximumSize = new Vector2(2400, 1600) };
+        TitleBarButtons.Add(new TitleBarButton
+        {
+            Icon = FontAwesomeIcon.Cog,
+            IconOffset = new Vector2(2, 1),
+            Click = _ => openSettings(),
+            ShowTooltip = () => ImGui.SetTooltip("Settings"),
+        });
     }
 
     public override void OnOpen()
     {
         fetchSources();
         nextRebuild = DateTimeOffset.MinValue;
+        aboutExpanded = false;
     }
 
     public override void Draw()
@@ -108,110 +155,286 @@ internal sealed class ListingsWindow : Window
             return;
         }
 
-        if (rows.Count == 0)
+        var listWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * 0.4f, 240 * ImGuiHelpers.GlobalScale, 420 * ImGuiHelpers.GlobalScale);
+        using (var list = ImRaii.Child("##list", new Vector2(listWidth, 0), true))
         {
-            ImGui.TextWrapped("No venues with an address yet. Wait for xivpf, FFXIV Venues, Partake and the FFXIV RP Event Calendar to load, or open the Party Finder and browse the None category.");
+            if (list.Success)
+                DrawList(now);
+        }
+
+        ImGui.SameLine();
+        using (var detail = ImRaii.Child("##detail", Vector2.Zero, true))
+        {
+            if (detail.Success)
+                DrawDetail(now);
+        }
+    }
+
+    private void DrawList(DateTimeOffset now)
+    {
+        if (groups.Count == 0)
+        {
+            ImGui.TextWrapped(EmptyLines[emptyLine]);
             return;
         }
 
-        var travelAvailable = lifestream.Available;
-        var lineHeight = ImGui.GetTextLineHeightWithSpacing();
-        foreach (var row in rows)
+        var locale = CultureInfo.CurrentCulture;
+        var style = ImGui.GetStyle();
+        var rowHeight = (ImGui.GetTextLineHeight() * 3) + (style.ItemSpacing.Y * 2);
+        var selected = SelectedKey;
+        foreach (var group in groups)
         {
-            // FFXIV Venues alone lists over a thousand venues, so rows out of view are only spaced, not drawn
-            var (listing, _, details, _, item, calendarEvent) = row;
-            var key = (listing.Source, listing.Id);
-            var top = ImGui.GetCursorPosY();
-            var lines = 1 + EventLines(item, details) + CalendarLines(calendarEvent) + details.Addresses.Count + details.Links.Count;
-            var height = rowHeights.TryGetValue(key, out var measured) && measured.Lines == lines
-                ? measured.Height
-                : lines * lineHeight;
-            if (!ImGui.IsRectVisible(new Vector2(1, height)))
+            var (main, dimmed) = DayGroups.Heading(group, configuration.DateFormat, locale);
+            ImGui.TextUnformatted(main);
+            if (dimmed.Length > 0)
             {
-                ImGui.SetCursorPosY(top + height);
-                continue;
+                ImGui.SameLine();
+                ImGui.TextDisabled(dimmed);
             }
 
-            DrawRow(row, now, travelAvailable);
-            rowHeights[key] = (lines, ImGui.GetCursorPosY() - top);
+            ImGui.Separator();
+            for (var i = 0; i < group.Entries.Count; i++)
+            {
+                // FFXIV Venues alone lists hundreds of venues, so rows out of view are only spaced, not drawn
+                if (!ImGui.IsRectVisible(new Vector2(1, rowHeight)))
+                {
+                    ImGui.Dummy(new Vector2(1, rowHeight));
+                    continue;
+                }
+
+                DrawRow(group.Entries[i], selected, rowHeight, now, locale);
+            }
+
+            ImGui.Spacing();
         }
 
         // Partake's terms ask apps not to imply endorsement
         if (showsPartake)
             ImGui.TextDisabled("Events from Partake (partake.gg). Jaunt is not affiliated with or endorsed by Partake.");
-
-        // Keeps the content height right when the last row was only spaced
-        ImGui.Dummy(Vector2.Zero);
     }
 
-    /// <summary>The lines an event adds under its title: its times and world, and its location when no address was read from it.</summary>
-    private static int EventLines(Partake.Shown? item, ListingDetails details) =>
-        item is null ? 0 : 1 + (details.Addresses.Count == 0 && item.Location.Length > 0 ? 1 : 0);
-
-    /// <summary>The lines a calendar event adds under its title: when and validation, then its location when it has no address.</summary>
-    private static int CalendarLines(RpEventCalendar.Shown? calendarEvent) =>
-        calendarEvent is null ? 0 : calendarEvent.Location is null ? 1 : 2;
-
-    private void DrawRow(Row row, DateTimeOffset now, bool travelAvailable)
+    /// <summary>A placeholder icon, then the status line, the title cut to fit and the world.</summary>
+    private void DrawRow(BrowserEntry<Row> entry, (ListingSource, string)? selected, float rowHeight, DateTimeOffset now, CultureInfo locale)
     {
-        var (listing, title, details, alwaysOpen, item, calendarEvent) = row;
-        using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
-        ImGui.TextUnformatted(ShownText.Title(title));
-        ImGui.SameLine();
-        if (calendarEvent is not null)
-            DrawCalendarCredit();
+        var row = entry.Item;
+        var start = ImGui.GetCursorScreenPos();
+        using var id = ImRaii.PushId($"{(int)row.Listing.Source}:{row.Listing.Id}:{entry.When.Start?.UtcTicks}");
+        if (ImGui.Selectable("##row", selected == row.Key, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
+            Select(row);
+        var after = ImGui.GetCursorScreenPos();
+
+        // Icons and images are 185b66ad; a plain square holds their place
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        ImGui.GetWindowDrawList().AddRectFilled(start, start + new Vector2(rowHeight, rowHeight), ImGui.GetColorU32(ImGuiCol.FrameBg), 4 * ImGuiHelpers.GlobalScale);
+        var textLeft = start.X + rowHeight + spacing;
+        var width = ImGui.GetContentRegionMax().X + ImGui.GetWindowPos().X - textLeft;
+
+        ImGui.SetCursorScreenPos(new Vector2(textLeft, start.Y));
+        var status = StatusText.Row(entry.When, entry.AlwaysOpen, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale);
+        if (entry.AlwaysOpen || entry.When.IsOpen(now))
+            ImGui.TextColored(ImGuiColors.HealerGreen, Fit(status, width));
         else
-            ImGui.TextDisabled(SourceName(listing.Source));
-        if (alwaysOpen)
+            ImGui.TextUnformatted(Fit(status, width));
+        ImGui.SetCursorScreenPos(new Vector2(textLeft, ImGui.GetCursorScreenPos().Y));
+        ImGui.TextUnformatted(Fit(ShownText.Title(row.Title), width));
+        ImGui.SetCursorScreenPos(new Vector2(textLeft, ImGui.GetCursorScreenPos().Y));
+        ImGui.TextDisabled(Fit(row.World ?? "", width));
+
+        ImGui.SetCursorScreenPos(after);
+    }
+
+    private void DrawDetail(DateTimeOffset now)
+    {
+        // With nothing listed, the list's own line says so and the help text would only add noise
+        if (groups.Count == 0)
+            return;
+
+        if (SelectedKey is not { } key || !rowsByKey.TryGetValue(key, out var row))
         {
+            ImGui.TextDisabled("Select a listing on the left to see its details.");
+            return;
+        }
+
+        var locale = CultureInfo.CurrentCulture;
+        var width = ImGui.GetContentRegionAvail().X;
+
+        // Splash images are 185b66ad; a plain band holds their place
+        var top = ImGui.GetCursorScreenPos();
+        var splashHeight = Math.Min(width * 0.3f, 140 * ImGuiHelpers.GlobalScale);
+        ImGui.GetWindowDrawList().AddRectFilled(top, top + new Vector2(width, splashHeight), ImGui.GetColorU32(ImGuiCol.FrameBg), 4 * ImGuiHelpers.GlobalScale);
+        ImGui.Dummy(new Vector2(width, splashHeight));
+
+        ImGui.TextWrapped(ShownText.Title(row.Title));
+        DrawDetailStatus(row, now, locale);
+        if (row.World is { } world)
+            ImGui.TextDisabled(world);
+
+        ImGui.Spacing();
+        DrawActions(row);
+
+        DrawLocation(row);
+        DrawAbout(row, width);
+        DrawRating(row);
+        DrawFooter(row, now, locale);
+    }
+
+    /// <summary>The opening listed first, and for a recurring listing open now, the next.</summary>
+    private void DrawDetailStatus(Row row, DateTimeOffset now, CultureInfo locale)
+    {
+        var listed = Schedules.Listed(row.Schedule, now);
+        if (listed.Count == 0)
+            return;
+
+        var first = listed[0];
+        var always = row.Schedule.AlwaysOpen;
+        var text = StatusText.Detail(first, always, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale);
+        if (always || first.IsOpen(now))
+            ImGui.TextColored(ImGuiColors.HealerGreen, text);
+        else
+            ImGui.TextUnformatted(text);
+
+        if (!row.Schedule.OneOff && listed.Count > 1)
+            ImGui.TextDisabled("Next: " + StatusText.Detail(listed[1], false, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale));
+    }
+
+    /// <summary>Travel to the first address, and open the first link.</summary>
+    private void DrawActions(Row row)
+    {
+        var address = row.Details.Addresses.Count > 0 ? row.Details.Addresses[0] : null;
+        if (address is not null)
+        {
+            var request = TravelRequest.From(address);
+            var whyNot = !lifestream.Available ? "Install and enable Lifestream to travel from Jaunt."
+                : request is null ? "This address is missing a world, district, plot or apartment, so Lifestream can't travel there."
+                : null;
+
+            using (ImRaii.Disabled(whyNot is not null))
+            {
+                if (ImGui.Button("Travel") && request is not null && lifestream.Travel(request) is { } error)
+                    Notify(error, NotificationType.Warning);
+            }
+
+            if (whyNot is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(whyNot);
+        }
+
+        if (row.Details.Links.Count > 0)
+        {
+            if (address is not null)
+                ImGui.SameLine();
+            var link = row.Details.Links[0];
+            if (ImGui.Button("Open page"))
+                Util.OpenLink(link.Uri.AbsoluteUri);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(link.Uri.AbsoluteUri);
+        }
+    }
+
+    /// <summary>Each address with Copy, a location the parser couldn't read as text, and any further links.</summary>
+    private void DrawLocation(Row row)
+    {
+        var freeText = row.Details.Addresses.Count == 0
+            ? row.CalendarEvent?.Location ?? (row.Event is { Location.Length: > 0 } item ? item.Location : null)
+            : null;
+        if (row.Details.Addresses.Count == 0 && freeText is null && row.Details.Links.Count < 2)
+            return;
+
+        Section("Location");
+        for (var i = 0; i < row.Details.Addresses.Count; i++)
+        {
+            using var id = ImRaii.PushId($"a{i}");
+            var address = row.Details.Addresses[i];
+            var text = AddressText.Format(address);
+            if (ImGui.SmallButton("Copy"))
+            {
+                ImGui.SetClipboardText(text);
+                Notify($"Copied {text}", NotificationType.Success);
+            }
+
             ImGui.SameLine();
-            ImGui.TextDisabled("· open 24/7");
+            ImGui.TextUnformatted(text);
+            if (address.WorldFrom == WorldSource.Listing)
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled("(world the ad is listed on)");
+            }
         }
 
-        ImGui.SameLine();
-        ImGui.TextDisabled("· " + SeenAgo(now - listing.LastSeen));
+        if (freeText is not null)
+            ImGui.TextWrapped(ShownText.Fold(freeText));
 
-        using (ImRaii.PushIndent())
+        for (var i = 1; i < row.Details.Links.Count; i++)
         {
-            if (item is not null && listing.StartsAt is { } start && listing.EndsAt is { } end)
-                DrawEventLines(item, details, start, end, now);
-            if (calendarEvent is not null)
-                DrawCalendarLines(listing, calendarEvent, now);
+            using var id = ImRaii.PushId($"l{i}");
+            var link = row.Details.Links[i];
+            if (ImGui.SmallButton("Open"))
+                Util.OpenLink(link.Uri.AbsoluteUri);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(link.Uri.AbsoluteUri);
+            ImGui.SameLine();
+            ImGui.TextUnformatted(link.Text);
+        }
+    }
 
-            for (var i = 0; i < details.Addresses.Count; i++)
-            {
-                using var addressId = ImRaii.PushId($"a{i}");
-                DrawAddress(details.Addresses[i], travelAvailable);
-            }
+    /// <summary>An ad's text, cut to <see cref="AboutLines"/> lines with "Read more" when longer.</summary>
+    private void DrawAbout(Row row, float width)
+    {
+        if (row.About is not { Length: > 0 } about)
+            return;
 
-            for (var i = 0; i < details.Links.Count; i++)
-            {
-                using var linkId = ImRaii.PushId($"l{i}");
-                DrawLink(details.Links[i]);
-            }
+        Section("About");
+        var cut = aboutExpanded ? about : CutToLines(about, width);
+        ImGui.TextWrapped(cut);
+        if (!ReferenceEquals(cut, about) || aboutExpanded)
+        {
+            if (ImGui.SmallButton(aboutExpanded ? "Show less" : "Read more"))
+                aboutExpanded = !aboutExpanded;
+        }
+    }
+
+    /// <summary>The content rating a calendar event gives, as information.</summary>
+    private static void DrawRating(Row row)
+    {
+        if (row.CalendarEvent?.Rating is not { } rating)
+            return;
+
+        Section("Age / rating");
+        ImGui.TextUnformatted(rating);
+    }
+
+    /// <summary>Where the listing came from, with the credits its source needs.</summary>
+    private void DrawFooter(Row row, DateTimeOffset now, CultureInfo locale)
+    {
+        ImGui.Spacing();
+        ImGui.Separator();
+        var listing = row.Listing;
+        if (row.CalendarEvent is not null)
+        {
+            ImGui.TextDisabled("Listed on");
+            ImGui.SameLine();
+            DrawLinkText(SourceName(ListingSource.RpEventCalendar), RpEventCalendar.SiteUrl);
+            ImGui.SameLine();
+            ImGui.TextDisabled("·");
+            ImGui.SameLine();
+            DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl);
+            var validated = listing.LastValidated is { } date
+                ? "Validated " + DisplayFormats.FormatDateWithYear(date, configuration.DateFormat, locale)
+                : "Never validated";
+            ImGui.TextDisabled(validated);
+        }
+        else
+        {
+            ImGui.TextDisabled($"Listed on {SourceName(listing.Source)} · {SeenAgo(now - listing.LastSeen)}");
         }
 
-        ImGui.Separator();
+        if (listing.Source == ListingSource.Partake)
+            ImGui.TextDisabled("Jaunt is not affiliated with or endorsed by Partake.");
     }
 
-    private void DrawEventLines(Partake.Shown item, ListingDetails details, DateTimeOffset start, DateTimeOffset end, DateTimeOffset now)
+    private static void Section(string name)
     {
-        var times = DisplayFormats.FormatSpan(
-            start.ToLocalTime().DateTime, end.ToLocalTime().DateTime, configuration.TimeFormat, configuration.DateFormat, CultureInfo.CurrentCulture);
-        var world = item.DataCentre is { } dataCentre ? $"{item.World} ({dataCentre})" : item.World;
-        ImGui.TextUnformatted(start <= now ? $"{times} · on now · {world}" : $"{times} · {world}");
-        if (details.Addresses.Count == 0 && item.Location.Length > 0)
-            ImGui.TextWrapped(ShownText.Title(item.Location));
-    }
-
-    /// <summary>The calendar's name and licence, each opening its page: its listings are CC BY-SA, which needs both.</summary>
-    private static void DrawCalendarCredit()
-    {
-        DrawLinkText(SourceName(ListingSource.RpEventCalendar), RpEventCalendar.SiteUrl);
-        ImGui.SameLine();
-        ImGui.TextDisabled("·");
-        ImGui.SameLine();
-        DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl);
+        ImGui.Spacing();
+        ImGui.TextDisabled(name);
     }
 
     private static void DrawLinkText(string text, Uri uri)
@@ -227,162 +450,215 @@ internal sealed class ListingsWindow : Window
             Util.OpenLink(uri.AbsoluteUri);
     }
 
-    private void DrawCalendarLines(CachedListing listing, RpEventCalendar.Shown calendarEvent, DateTimeOffset now)
-    {
-        var locale = CultureInfo.CurrentCulture;
-        var when = ListingOpening.Next(listing.Openings, now) is { } opening
-            ? OpeningText(opening, now, locale)
-            : "No upcoming dates";
-        var validated = listing.LastValidated is { } date
-            ? "validated " + DisplayFormats.FormatDateWithYear(date, configuration.DateFormat, locale)
-            : "never validated";
-        ImGui.TextDisabled($"{when} · {validated}");
+    private (ListingSource, string)? SelectedKey =>
+        configuration.SelectedSource is { } source && configuration.SelectedId is { } id ? (source, id) : null;
 
-        if (calendarEvent.Location is { } location)
-            ImGui.TextWrapped(ShownText.Fold(location));
+    private void Select(Row row)
+    {
+        if (SelectedKey == row.Key)
+            return;
+        configuration.SelectedSource = row.Listing.Source;
+        configuration.SelectedId = row.Listing.Id;
+        configuration.Save();
+        aboutExpanded = false;
     }
 
-    /// <summary>"On now until 23:00", or "Next Sat 15 Nov 20:00–23:00", in local time.</summary>
-    private string OpeningText(ListingOpening opening, DateTimeOffset now, CultureInfo locale)
+    private void ClearSelection()
     {
-        var start = opening.Start.ToLocalTime().DateTime;
-        var end = opening.End.ToLocalTime().DateTime;
-        return opening.Start <= now
-            ? $"On now until {DisplayFormats.FormatTime(end, configuration.TimeFormat, locale)}"
-            : "Next " + DisplayFormats.FormatSpan(start, end, configuration.TimeFormat, configuration.DateFormat, locale);
+        configuration.SelectedSource = null;
+        configuration.SelectedId = null;
+        configuration.Save();
     }
 
-    private void DrawAddress(HousingAddress address, bool travelAvailable)
+    /// <summary>The text cut with "…" to fit <paramref name="width"/> pixels.</summary>
+    private string Fit(string text, float width)
     {
-        var text = AddressText.Format(address);
-        var request = TravelRequest.From(address);
-        var whyNot = !travelAvailable ? "Install and enable Lifestream to travel from Jaunt."
-            : request is null ? "This address is missing a world, district, plot or apartment, so Lifestream can't travel there."
-            : null;
+        if (ImGui.CalcTextSize(text).X <= width)
+            return text;
 
-        using (ImRaii.Disabled(whyNot is not null))
+        var key = (text, (int)width);
+        if (fitted.TryGetValue(key, out var shown))
+            return shown;
+
+        // The longest prefix that fits with the ellipsis, by binary search over its length
+        int low = 0, high = text.Length;
+        while (low < high)
         {
-            if (ImGui.SmallButton("Travel") && request is not null)
-            {
-                if (lifestream.Travel(request) is { } error)
-                    Notify(error, NotificationType.Warning);
-            }
+            var mid = (low + high + 1) / 2;
+            if (ImGui.CalcTextSize(text[..mid].TrimEnd() + "…").X <= width)
+                low = mid;
+            else
+                high = mid - 1;
         }
 
-        if (whyNot is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(whyNot);
-
-        ImGui.SameLine();
-        if (ImGui.SmallButton("Copy address"))
-        {
-            ImGui.SetClipboardText(text);
-            Notify($"Copied {text}", NotificationType.Success);
-        }
-
-        ImGui.SameLine();
-        ImGui.TextUnformatted(text);
-        if (address.WorldFrom == WorldSource.Listing)
-        {
-            ImGui.SameLine();
-            ImGui.TextDisabled("(world the ad is listed on)");
-        }
+        shown = text[..low].TrimEnd() + "…";
+        Remember(fitted, key, shown);
+        return shown;
     }
 
-    private static void DrawLink(WebLink link)
+    /// <summary>The text cut with "…" to <see cref="AboutLines"/> wrapped lines, or the text itself when it fits.</summary>
+    private string CutToLines(string text, float width)
     {
-        if (ImGui.SmallButton("Open"))
-            Util.OpenLink(link.Uri.AbsoluteUri);
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(link.Uri.AbsoluteUri);
+        var maxHeight = ImGui.GetTextLineHeight() * AboutLines;
+        if (ImGui.CalcTextSize(text, false, width).Y <= maxHeight + 1)
+            return text;
 
-        ImGui.SameLine();
-        ImGui.TextUnformatted(link.Text);
+        var key = (text, (int)width);
+        if (aboutCuts.TryGetValue(key, out var cut))
+            return cut;
+
+        int low = 0, high = text.Length;
+        while (low < high)
+        {
+            var mid = (low + high + 1) / 2;
+            if (ImGui.CalcTextSize(text[..mid].TrimEnd() + "…", false, width).Y <= maxHeight + 1)
+                low = mid;
+            else
+                high = mid - 1;
+        }
+
+        cut = text[..low].TrimEnd() + "…";
+        Remember(aboutCuts, key, cut);
+        return cut;
+    }
+
+    private static void Remember(Dictionary<(string, int), string> memo, (string, int) key, string value)
+    {
+        // Enough for every row at a few widths; past it the memo starts again rather than grow
+        if (memo.Count >= 8192)
+            memo.Clear();
+        memo[key] = value;
     }
 
     /// <summary>
-    /// Lists the visible listings on worlds the character can travel to that have an address, Partake events that haven't ended and RP
-    /// calendar events with an address or location, newest first and then by title, parsing only ad
-    /// text, locations and venue and event fields that changed. An xivpf ad the game has also sent
-    /// shows once, as the in-game copy.
+    /// Works out the listed rows and groups them by day, parsing only ad text, locations and venue and
+    /// event fields that changed. An xivpf ad the game has also sent shows once, as the in-game copy.
+    /// Forgets the selection when its listing is no longer listed.
     /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
-        var next = new List<Row>();
+        rowsByKey.Clear();
+        var entries = new List<BrowserEntry<Row>>();
         showsPartake = false;
         var travel = region();
         loggedOut = travel is null;
-        foreach (var listing in travel is null ? [] : cache.Listings)
+        if (travel is null)
+        {
+            groups = [];
+            return;
+        }
+
+        var adRegion = travel.DataCentres.Select(Schedules.RegionOf).FirstOrDefault(r => r is not null) ?? PartyFinderRegion.Europe;
+        foreach (var listing in cache.Listings)
         {
             // A venue's world is checked once it is shown, as that corrects misspellings
-            if (listing.Hidden || (listing.Source != ListingSource.FfxivVenues && !travel!.Includes(listing)))
+            if (listing.Hidden || (listing.Source != ListingSource.FfxivVenues && !travel.Includes(listing)))
                 continue;
 
-            if (listing.Source == ListingSource.FfxivVenues)
-            {
-                // Recording a fetch assigns new name and field objects, so a reference check finds every change
-                if (!shownVenues.TryGetValue(listing.Id, out var venue)
-                    || !ReferenceEquals(venue.Name, listing.Title) || !ReferenceEquals(venue.Fields, listing.Venue))
-                {
-                    venue = (listing.Title, listing.Venue, FfxivVenues.Show(listing, gazetteer));
-                    shownVenues[listing.Id] = venue;
-                }
-
-                var shown = venue.Shown;
-                if (shown.Address is { } address && travel!.Includes(shown))
-                    next.Add(new Row(listing, shown.Title, new ListingDetails([address], WebLinks(shown.Links)), shown.AlwaysOpen));
-
-                continue;
-            }
-
-            if (listing.Source == ListingSource.Partake)
-            {
-                // Shown without an address too: the location is free text the parser may not read
-                if (!Partake.NotEnded(listing, now))
-                    continue;
-                var item = Partake.Show(listing, gazetteer);
-                var location = Parsed(listing, item.Location, item.World);
-                next.Add(new Row(listing, item.Title, location with { Links = WebLinks(item.Links) }, AlwaysOpen: false, item));
-                showsPartake = true;
-                continue;
-            }
-
-            if (listing.Source == ListingSource.RpEventCalendar)
-            {
-                var fields = CalendarFields.Of(listing);
-                if (!shownEvents.TryGetValue(listing.Id, out var calendar) || !calendar.Fields.Same(fields))
-                {
-                    calendar = (fields, RpEventCalendar.Show(listing, parser));
-                    shownEvents[listing.Id] = calendar;
-                }
-
-                // Events in the open world have only a location, which the row shows as text
-                var calendarEvent = calendar.Shown;
-                if (calendarEvent.Address is not null || calendarEvent.Location is not null)
-                {
-                    var details = new ListingDetails(calendarEvent.Address is { } at ? [at] : [], WebLinks(calendarEvent.Links));
-                    next.Add(new Row(listing, calendarEvent.Title, details, AlwaysOpen: false, CalendarEvent: calendarEvent));
-                }
-
-                continue;
-            }
-
-            if (listing.Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf) || Xivpf.ShownInGame(cache, listing))
+            if (RowFor(listing, travel, adRegion, now) is not { } row)
                 continue;
 
-            var adDetails = Parsed(listing, listing.Description, listing.ListedOn);
-            if (adDetails.Addresses.Count > 0)
-                next.Add(new Row(listing, listing.Title, adDetails, AlwaysOpen: false));
+            var listed = Schedules.Listed(row.Schedule, now);
+            if (listed.Count == 0)
+                continue;
+
+            rowsByKey[row.Key] = row;
+            var key = $"{(int)listing.Source}:{listing.Id}";
+            foreach (var when in listed)
+                entries.Add(new BrowserEntry<Row>(row, row.Title, key, when, row.Schedule.AlwaysOpen));
+            showsPartake |= listing.Source == ListingSource.Partake;
         }
 
-        rows = [.. next.OrderByDescending(r => r.Listing.LastSeen).ThenBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
-
-        // Forget ads, venues and events the cache no longer holds (cleared or expired)
-        if (parsed.Count > cache.Count)
+        groups = DayGroups.Group(entries, now, TimeZoneInfo.Local);
+        if (groups.Count == 0)
         {
-            foreach (var key in parsed.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
-                parsed.Remove(key);
+            if (emptyLine < 0)
+                emptyLine = Random.Shared.Next(EmptyLines.Length);
+        }
+        else
+        {
+            emptyLine = -1;
         }
 
+        if (SelectedKey is { } selected && !rowsByKey.ContainsKey(selected))
+            ClearSelection();
+
+        Forget();
+    }
+
+    /// <summary>The row for a listing, or null when it isn't one the browser lists (such as an ad with no address).</summary>
+    private Row? RowFor(CachedListing listing, TravelRegion travel, PartyFinderRegion adRegion, DateTimeOffset now)
+    {
+        switch (listing.Source)
+        {
+            case ListingSource.FfxivVenues:
+                {
+                    // Recording a fetch assigns new name and field objects, so a reference check finds every change
+                    if (!shownVenues.TryGetValue(listing.Id, out var venue)
+                        || !ReferenceEquals(venue.Name, listing.Title) || !ReferenceEquals(venue.Fields, listing.Venue))
+                    {
+                        venue = (listing.Title, listing.Venue, FfxivVenues.Show(listing, gazetteer));
+                        shownVenues[listing.Id] = venue;
+                    }
+
+                    var shown = venue.Shown;
+                    if (shown.Address is not { } address || !travel.Includes(shown))
+                        return null;
+                    return new Row(listing, shown.Title, new ListingDetails([address], WebLinks(shown.Links)), address.World,
+                        Schedules.ForVenue(listing.Venue, now), About: null);
+                }
+
+            case ListingSource.Partake:
+                {
+                    // Shown without an address too: the location is free text the parser may not read
+                    var item = Partake.Show(listing, gazetteer);
+                    var location = Parsed(listing, item.Location, item.World);
+                    var world = item.DataCentre is { } dataCentre ? $"{item.World} ({dataCentre})" : item.World;
+                    return new Row(listing, item.Title, location with { Links = WebLinks(item.Links) }, world,
+                        Schedules.ForEvent(listing.StartsAt, listing.EndsAt), About: null, Event: item);
+                }
+
+            case ListingSource.RpEventCalendar:
+                {
+                    var fields = CalendarFields.Of(listing);
+                    if (!shownEvents.TryGetValue(listing.Id, out var calendar) || !calendar.Fields.Same(fields))
+                    {
+                        calendar = (fields, RpEventCalendar.Show(listing, parser));
+                        shownEvents[listing.Id] = calendar;
+                    }
+
+                    // Events in the open world have only a location, which the detail shows as text
+                    var calendarEvent = calendar.Shown;
+                    if (calendarEvent.Address is null && calendarEvent.Location is null)
+                        return null;
+                    var details = new ListingDetails(calendarEvent.Address is { } at ? [at] : [], WebLinks(calendarEvent.Links));
+                    return new Row(listing, calendarEvent.Title, details, calendarEvent.Address?.World ?? listing.ListedOn,
+                        Schedules.ForOpenings(listing.Openings, listing.OneOff), About: null, CalendarEvent: calendarEvent);
+                }
+
+            case ListingSource.InGamePartyFinder or ListingSource.Xivpf:
+                {
+                    if (Xivpf.ShownInGame(cache, listing))
+                        return null;
+                    var adDetails = Parsed(listing, listing.Description, listing.ListedOn);
+                    if (adDetails.Addresses.Count == 0)
+                        return null;
+                    var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
+                    var schedule = Schedules.ForAd(AdTimes(listing), listing.LastSeen, adRegion, stillListed, now);
+                    return new Row(listing, listing.Title, adDetails, adDetails.Addresses[0].World ?? listing.ListedOn, schedule, About(listing));
+                }
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>Forgets ads, venues and events the cache no longer holds (cleared or expired).</summary>
+    private void Forget()
+    {
+        ForgetMissing(parsed);
+        ForgetMissing(adTimes);
+        ForgetMissing(abouts);
         if (shownVenues.Count > cache.Count)
         {
             foreach (var key in shownVenues.Keys.Where(k => cache.Find(ListingSource.FfxivVenues, k) is null).ToList())
@@ -394,12 +670,14 @@ internal sealed class ListingsWindow : Window
             foreach (var key in shownEvents.Keys.Where(k => cache.Find(ListingSource.RpEventCalendar, k) is null).ToList())
                 shownEvents.Remove(key);
         }
+    }
 
-        if (rowHeights.Count > cache.Count)
-        {
-            foreach (var key in rowHeights.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
-                rowHeights.Remove(key);
-        }
+    private void ForgetMissing<T>(Dictionary<(ListingSource, string), T> memo)
+    {
+        if (memo.Count <= cache.Count)
+            return;
+        foreach (var key in memo.Keys.Where(k => cache.Find(k.Item1, k.Item2) is null).ToList())
+            memo.Remove(key);
     }
 
     // Equals checks the reference first, so an unchanged ad costs no character comparison
@@ -414,6 +692,33 @@ internal sealed class ListingsWindow : Window
         }
 
         return entry.Details;
+    }
+
+    /// <summary>An ad's opening times as written, parsed once per text and day seen.</summary>
+    private IReadOnlyList<OpeningTime> AdTimes(CachedListing listing)
+    {
+        var key = (listing.Source, listing.Id);
+        var seen = DateOnly.FromDateTime(listing.LastSeen.UtcDateTime);
+        if (!adTimes.TryGetValue(key, out var entry) || entry.Seen != seen || !string.Equals(entry.Text, listing.Description, StringComparison.Ordinal))
+        {
+            entry = (listing.Description, seen, Schedules.ParseAd(listing.Description, listing.LastSeen));
+            adTimes[key] = entry;
+        }
+
+        return entry.Times;
+    }
+
+    /// <summary>An ad's text for About, with the game's glyphs decoded, worked out once per text.</summary>
+    private string About(CachedListing listing)
+    {
+        var key = (listing.Source, listing.Id);
+        if (!abouts.TryGetValue(key, out var entry) || !string.Equals(entry.Text, listing.Description, StringComparison.Ordinal))
+        {
+            entry = (listing.Description, PartyFinderText.Normalise(listing.Description).Text);
+            abouts[key] = entry;
+        }
+
+        return ShownText.Fold(entry.About);
     }
 
     private static IReadOnlyList<WebLink> WebLinks(IEnumerable<Uri> links) => [.. links.Select(uri => new WebLink(uri.OriginalString, uri))];

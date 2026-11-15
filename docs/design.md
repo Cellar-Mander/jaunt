@@ -199,12 +199,12 @@ On load:
 once for each data centre in the travel region (see "Settings"; the API matches the name exactly,
 ignoring case, and has no region filter), in one fetch: approved venues (the API's default, pinned) with an opening in the coming week, as the API
 works out from each venue's schedule. A venue left out stays in the cache with its fields and marks,
-and in the venue list, until it expires (see "Listing cache"). `FfxivVenues`
+and in the browser while it has openings to list, until it expires (see "Listing cache"). `FfxivVenues`
 records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
 the API sent them: its name as the title, and its location, website, Discord and schedule. The title,
 address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
 to how they are read applies to cached venues without fetching again. A venue cached without them
-shows no address until the next fetch. Opening the venue list asks for each data centre in the region
+shows no address until the next fetch. Opening the browser asks for each data centre in the region
 whose cooldown (8 hours, or the Settings cooldown if longer) has passed, one request after another;
 each request is recorded before it is sent, so a failed one counts too. Download and parsing run off the game thread.
 
@@ -215,7 +215,7 @@ each request is recorded before it is sent, so a failed one counts too. Download
   apartment. A world the game data doesn't know is corrected to the one world sharing its longest
   beginning of at least 5 letters ("Bismark" → Bismarck), and otherwise kept as written. A venue with
   no world, an unknown district or a ward outside 1–30 (such as one giving only a free-text location)
-  has no address and isn't in the venue list.
+  has no address and isn't in the browser.
 - **Links**: the website then the Discord, http or https only. One without a scheme is read like a
   link in ad text (`discord.gg/abc` opens as https); any other scheme is dropped, including in a
   hand-edited cache. The same link twice is kept once.
@@ -233,7 +233,7 @@ each request is recorded before it is sent, so a failed one counts too. Download
 
 `Xivpf` reads `https://xivpf.com/api/listings`, every Party Finder listing xivpf holds in one
 response, and records each ad in the None category in the listing cache as `Xivpf`, keyed by its PF
-listing ID, the same ID the game gives the listing. Opening the venue list fetches it, unless the
+listing ID, the same ID the game gives the listing. Opening the browser fetches it, unless the
 source is within its cooldown (the Settings cooldown, 10 minutes at least); the request is recorded
 before it is sent, so a failed one counts too. Download and parsing run off the game thread.
 
@@ -261,7 +261,7 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
 `RpEventCalendar` reads `https://api.ffxiv-rp.org/api/Events/GetWeekTranslatableEvents`, about three
 weeks of events with one row per occurrence, and records each event in the listing cache as
 `RpEventCalendar`, keyed by its calendar ID (`uId`, trimmed), which its occurrences share. Opening
-the venue list fetches it, unless the source is within its cooldown (8 hours, or the Settings
+the browser fetches it, unless the source is within its cooldown (8 hours, or the Settings
 cooldown if longer, so at most 3 fetches a day); the request is recorded before it is sent, so a
 failed one counts too. Download and parsing run off the game thread. An event whose `server` isn't
 a world in the travel region, or is missing, isn't recorded; the week endpoint has no region filter.
@@ -301,7 +301,7 @@ again. The list derives them once per change to those fields, not every frame.
 
 `Partake` reads FFXIV events from Partake's public GraphQL API, `POST https://api.partake.gg/` with
 no authentication, and records each in the listing cache as `Partake`, keyed by the event's ID, as a
-one-off. Opening the venue list fetches it, unless the source is within its cooldown (8 hours, or
+one-off. Opening the browser fetches it, unless the source is within its cooldown (8 hours, or
 the Settings cooldown if longer); the request is recorded before it is sent, so a failed one counts
 too. Download and parsing run off the game thread. An event is recorded only when its world or its
 data centre is in the travel region; the API has no region filter.
@@ -359,37 +359,77 @@ Hidden venues' matching keep it as written), in one pass:
 - Whitespace is always kept. ImGui's characters are 16-bit, so nothing beyond U+FFFF counts as in the font.
 - Text that needs no change is returned as it is. Each title is folded once per font, not per frame.
 
-### Venue list (MVP)
+### Listing browser
 
-`/jaunt` and the installer's Open button toggle the venue list; `/jaunt config` opens Settings. The
-two-pane browser (`cdd9e95f`) replaces this list.
+`/jaunt` and the installer's Open button toggle the browser; `/jaunt config` and the cog in its title
+bar open Settings. The window has the list on the left and the selected listing's details on the
+right. Filters and search (`d68d407e`), the narrow single-column layout (`2dce5769`), favourite,
+visited and hide (`deb3b4be`), icons and splash images (`185b66ad`, plain placeholders until then)
+and copy link (`6e2b5199`) are separate tasks.
 
 - **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
   cache as `InGamePartyFinder`, keyed by the PF listing ID, with its text (`description`, glyphs
   included) and the world it is listed on (`listedOn`). Its title is the first line of the
   normalised text, cut to 60 characters with "…" when longer. The cache is saved 5 seconds after
   the first change since the last save, and on unload, not once per listing.
-- **List**: in-game and xivpf Party Finder listings with at least one parsed address, FFXIV
-  Venues venues with an address, Partake events that haven't ended and FFXIV RP Event Calendar
-  events with an address or a location, not hidden and in the travel region, most recently seen
-  first and then by title,
-  each with its source ("Party Finder", "Party Finder (xivpf)", "FFXIV Venues", "Partake", or the
-  calendar's credit). Partake events show their times and world on a second line (see "Partake").
-  An xivpf ad the game has
-  also sent shows once, as the in-game copy (see "xivpf"). Each row shows "open 24/7" when it is,
-  and "seen … ago". A calendar event also shows, in local time and the Settings formats, "On now
-  until 23:00" for an opening in progress, else "Next Sat 15 Nov 20:00–23:00" for the next one,
-  else "No upcoming dates"; then "validated 30 Aug 2025" (the date with its year) or "never
-  validated"; then its location when it has no address. Titles are drawn as in "Text the font can't draw". Each ad is parsed once per text, not per frame. Rows out of view
-  are spaced by their last drawn height and not drawn.
+- **Which listings**: in-game and xivpf Party Finder ads with at least one parsed address, FFXIV
+  Venues venues with an address, Partake events, and FFXIV RP Event Calendar events with an address
+  or a location, not hidden and in the travel region. An xivpf ad the game has also sent shows once,
+  as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
+- **Openings** (`Schedules`), all instants in UTC:
+  - FFXIV Venues: 24/7 (see "FFXIV Venues") is always open. Otherwise each schedule entry's
+    `resolution`, the occurrence the API worked out when fetched, is carried forward by whole weeks of
+    UTC for an entry repeating every N weeks (interval type 0) until it hasn't ended, and gives that
+    occurrence and the one N weeks later. An entry repeating by week of the month keeps only its
+    resolution, until it ends. An entry without a resolution (a venue cached before it was kept)
+    gives none until the next fetch. Recurring. Schedule overrides are ignored.
+  - Partake: its start and end. One-off.
+  - FFXIV RP Event Calendar: its occurrences; one-off when the calendar says it doesn't recur.
+  - Party Finder ads: the times read from the text (see "Opening times in Party Finder ads"), in the
+    zone it writes or the region default for the character's region (a European ad's language isn't
+    known, so London). An ad is still listed for 1 hour after it was last seen (a PF ad's longest
+    life), plus the source's cooldown for xivpf. "24/7" is always open while still listed. "Open
+    now", or a closing time alone, is open until that time while still listed. A start is listed as
+    stated, with its end if given; with no end it counts as open from its start only while still
+    listed. An ad with no time is open now while still listed (decision `ab014655`). One-off.
+- **Listed openings**: a recurring listing shows its current opening and the next one, or only the
+  next when it isn't open. A one-off shows each opening that hasn't ended and starts within 30 days.
+  A 24/7 listing shows once, as open now. An opening ending exactly now is over.
+- **Groups**, by the local day an opening starts on: "Open now" for openings in progress, then
+  "Today" with the weekday dimmed for later today, "Tomorrow" and the weekday ("Tomorrow Monday"), then
+  one group per date, the date in the Settings date format without its weekday ("17 Nov", "Nov 17"
+  or "2026-11-17") and the weekday dimmed. Within a group, earliest start first, then title (case
+  ignored), then source and ID, so the order is stable. In "Open now", openings with a known start
+  come first, then those without one, then 24/7 listings. Times show in the local time zone in the
+  Settings time format.
+- **Rows**: a placeholder square for the icon, then three lines, each cut with "…" to the pane's
+  width: the status, the title, and the world dimmed. The status is "Open now · until 23:00" in green
+  ("until Mon 16 Nov 23:00" when it closes more than a day ahead), "Open now" when the end isn't
+  known, "Open now · 24h", or for a later opening its times ("20:00–23:00", or "20:00" without an end).
+  Rows out of view are spaced, not drawn. The list is rebuilt every second.
+- **Detail pane**, top to bottom, each part only when the listing has it: a placeholder band for the
+  splash image; the title; the status as in the rows, but a later opening with its date ("Sat 21 Nov
+  20:00–23:00"), and for a recurring listing open now "Next: " and its next opening; the world;
+  Travel and Open page; Location: each address with Copy, a location given only as text, and any
+  further links; About: an ad's normalised text, cut with "…" to 6 lines with "Read more" (then "Show
+  less"); Age / rating: an RP calendar event's rating; then a footer with the source and "seen … ago", or
+  for an RP calendar event the calendar's credit and licence links and when it was last validated,
+  and for a Partake event the line that Jaunt is not affiliated with or endorsed by Partake.
+- **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
+  selection is saved in the settings (`SelectedSource`, `SelectedId`), so it shows again when the
+  window is reopened or the game restarted, and is forgotten once the listing is no longer listed. A
+  saved selection with an unknown source, or only one of the two, is cleared on load.
+- **Empty states**: with nothing selected the detail pane says "Select a listing on the left to see
+  its details." With nothing to list, the list shows a line picked at random from a few ("No one here
+  but us chickens."), chosen again each time the list becomes empty, and the detail pane is blank.
 - **Region in the list**: a listing is in the travel region by the same fields it is filtered on
   when recorded (`TravelRegion.Includes`): the world it is listed on, or for a Partake event that
   world or its data centre; an FFXIV Venues venue by its address's world as shown, misspellings
-  corrected. The list is rebuilt every second, so it follows a character switch within a second.
-  While no character is logged in (or its home world is unknown) it shows no listings, only "Log
-  in to a character to see the venues it can travel to." Nothing else in the window mentions the
-  region. Hidden venues in Settings lists every hidden listing, whatever its region.
-- **Copy address** copies "World, District, W20, P28": a missing world or district is left out; an
+  corrected. The list follows a character switch within a second.
+  While no character is logged in (or its home world is unknown) the window shows only "Log in to a
+  character to see the venues it can travel to." Nothing else in the window mentions the region.
+  Hidden venues in Settings lists every hidden listing, whatever its region.
+- **Copy** beside an address copies "World, District, W20, P28": a missing world or district is left out; an
   apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
   ", Room B1". Districts use their English names. This is the shape Lifestream's address book reads.
   A world taken from the listing is marked "(world the ad is listed on)".
@@ -399,7 +439,7 @@ two-pane browser (`cdd9e95f`) replaces this list.
   why, when Lifestream isn't loaded or the address lacks a world, district, or both plot and
   apartment. A plot wins over an apartment; a room is not sent. If Lifestream is busy or fails, a
   notification says so and suggests copying the address (risk `de04e687`).
-- **Open** opens the link's URI in the browser. `WebLinks` only ever returns http or https URIs,
+- **Open page** opens the first link's URI (any further links are listed under Location, each with Open) in the browser. `WebLinks` only ever returns http or https URIs,
   so another player's ad can't make it open anything else; the button's tooltip shows the full URI.
 
 ## Limits

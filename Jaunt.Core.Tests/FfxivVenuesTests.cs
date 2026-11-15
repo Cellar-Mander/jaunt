@@ -58,6 +58,27 @@ public class FfxivVenuesTests
     }
 
     [Fact]
+    public void KeepsEachScheduleEntrysResolutionThroughTheCache()
+    {
+        var schedule = """
+            [{"day":5,"start":{"hour":19,"minute":0,"timeZone":"UTC","nextDay":false},"end":{"hour":2,"minute":0,"timeZone":"UTC","nextDay":true},
+              "interval":{"intervalType":0,"intervalArgument":1},
+              "resolution":{"start":"2026-11-14T19:00:00+00:00","end":"2026-11-15T02:00:00+00:00","isNow":true,"isWithinWeek":true}}]
+            """;
+        var cache = new ListingCache();
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(schedule: schedule)}]"), Now);
+
+        var loaded = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!;
+
+        var expected = new FfxivVenues.Resolution(new DateTimeOffset(2026, 11, 14, 19, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 15, 2, 0, 0, TimeSpan.Zero));
+        Assert.Equal(expected, Assert.Single(loaded.Venue!.Schedule!)!.Resolution);
+    }
+
+    [Fact]
+    public void AnEntryWithoutAResolutionHasNone() =>
+        Assert.Null(Assert.Single(Cached(VenueJson(schedule: $"[{Opening(1, "20:00", "23:00")}]")).Venue!.Schedule!)!.Resolution);
+
+    [Fact]
     public void ReadsAnApartmentWithItsSubdivisionAndRoom()
     {
         var venue = Single(VenueJson(location: """

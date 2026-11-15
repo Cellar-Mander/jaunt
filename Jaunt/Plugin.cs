@@ -65,13 +65,14 @@ public sealed class Plugin : IDalamudPlugin
         ffxivVenuesListings = FetchedListings.FfxivVenues(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
         partakeListings = FetchedListings.Partake(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
         rpEventCalendarListings = FetchedListings.RpEventCalendar(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
-        ListingsWindow = new ListingsWindow(ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, region.Get);
+        ListingsWindow = new ListingsWindow(
+            ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, region.Get, () => ConfigWindow.IsOpen = true);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open the venue listings. /jaunt config → open the settings"
+            HelpMessage = "Open the listing browser. /jaunt config → open the settings"
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;

@@ -52,6 +52,27 @@ public class ConfigurationRoundTripTests
     }
 
     [Fact]
+    public void TheSelectedListingLoadsBack()
+    {
+        var loaded = SaveAndLoad(new TestConfiguration { SelectedSource = ListingSource.Partake, SelectedId = "42" });
+
+        Assert.Equal(ListingSource.Partake, loaded.SelectedSource);
+        Assert.Equal("42", loaded.SelectedId);
+    }
+
+    [Theory]
+    [InlineData(99, "42")]
+    [InlineData(3, null)]
+    [InlineData(null, "42")]
+    public void AnIncompleteOrUnknownSelectionIsCleared(int? source, string? id)
+    {
+        var loaded = SaveAndLoad(new TestConfiguration { SelectedSource = (ListingSource?)source, SelectedId = id });
+
+        Assert.Null(loaded.SelectedSource);
+        Assert.Null(loaded.SelectedId);
+    }
+
+    [Fact]
     public void DefaultsAreTenMinutesAndTheSystemFormats()
     {
         var config = new TestConfiguration();

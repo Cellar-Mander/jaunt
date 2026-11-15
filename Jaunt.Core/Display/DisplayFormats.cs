@@ -84,6 +84,15 @@ public static class DisplayFormats
             _ => date.ToString("ddd d MMM", English),
         };
 
+    /// <summary>A date in the coming weeks, without its weekday or year: "17 Nov", "Nov 17" or "2026-11-17".</summary>
+    public static string FormatDayMonth(DateOnly date, DateFormat format, CultureInfo locale) =>
+        Resolve(format, locale) switch
+        {
+            DateFormat.MonthDay => date.ToString("MMM d", English),
+            DateFormat.Iso => date.ToString("yyyy-MM-dd", English),
+            _ => date.ToString("d MMM", English),
+        };
+
     /// <summary>
     /// A date that may be years away, with its year and without its weekday: "30 Aug 2025",
     /// "Aug 30 2025" or "2025-08-30".
