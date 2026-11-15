@@ -1,6 +1,6 @@
 # Labelled Party Finder corpus
 
-`pf-listings.jsonl` holds 391 Party Finder ads from category `None` (venues, events and everything
+`pf-listings.jsonl` holds 392 Party Finder ads from category `None` (venues, events and everything
 else posted there), each labelled by hand for kind, name, addresses, times, URLs and the people it names. The parsers for
 addresses (`eceb260e`), links (`368d1e40`) and opening times (`a7558238`) are tested against it, and
 the performer spike (`fe1b7d02`) measures against the people labels.
@@ -22,6 +22,9 @@ Captured 2026-11-05 to 2026-11-07 from two sources:
 
 The keyword filter skews the sample towards ads that look like venues; the non-venue samples only
 partly offset that.
+
+Ads with `"selection": "bug-report"` were added by hand after the sample, each one an ad a bug was
+found on in-game. `select_pf.py` doesn't produce them, so keep them when regenerating the file.
 
 Poster names, content IDs and home worlds are never read. Ads can still name people (DJs,
 performers, characters); `privacy` lists what each entry contains. Every flagged entry was reviewed
