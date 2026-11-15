@@ -122,6 +122,12 @@ public static class OpeningTimeResolver
     /// <summary>The Windows ID for an IANA ID this class uses.</summary>
     internal static string WindowsId(string ianaId) => WindowsIds[ianaId];
 
+    /// <summary>
+    /// How long after a closing time on its own an ad seen then still means that one: it was put up
+    /// before it closed, rather than announcing the next day's.
+    /// </summary>
+    public static readonly TimeSpan JustClosed = TimeSpan.FromHours(6);
+
     /// <summary>Places an opening on the calendar.</summary>
     /// <param name="time">The opening as the ad writes it.</param>
     /// <param name="seen">When the ad was seen; "today", weekdays and undated times count from here.</param>
@@ -129,7 +135,8 @@ public static class OpeningTimeResolver
     /// <remarks>
     /// An undated start is today's in <paramref name="zone"/>, unless yesterday's opening is still
     /// running (9PM-2AM seen at 1AM). A weekday is the next one, counting today. A closing time on
-    /// its own is the next one after <paramref name="seen"/>; with a day, one before 06:00 falls after
+    /// its own is the next one after <paramref name="seen"/>, unless one passed at most
+    /// <see cref="JustClosed"/> before it, which it then is; with a day, one before 06:00 falls after
     /// that day's midnight ("tonight until 2am"). An end at or before the start is the next day.
     /// </remarks>
     public static OpeningWindow Resolve(OpeningTime time, DateTimeOffset seen, TimeZoneInfo zone)
@@ -172,9 +179,14 @@ public static class OpeningTimeResolver
             }
             else
             {
-                closes = Instant(today, closing, zone);
-                if (closes <= seen)
-                    closes = Instant(today.AddDays(1), closing, zone);
+                // "Open until 9pm" first seen at 9:12pm was up before it closed, so it is over, not tomorrow's
+                var todays = Instant(today, closing, zone);
+                var passed = todays <= seen ? todays : Instant(today.AddDays(-1), closing, zone);
+                if (seen - passed <= JustClosed)
+                    closes = passed;
+                else
+                    // Stryker disable once Equality : when todays equals seen, passed is todays and the branch above took it
+                    closes = todays <= seen ? Instant(today.AddDays(1), closing, zone) : todays;
             }
 
             return new OpeningWindow(time.Now, time.Always, day, null, closes);

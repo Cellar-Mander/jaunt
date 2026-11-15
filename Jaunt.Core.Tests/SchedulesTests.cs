@@ -231,6 +231,19 @@ public class SchedulesTests
     }
 
     [Fact]
+    public void AnAdFirstSeenJustAfterItsClosingTimeIsClosed()
+    {
+        // The Highshelf ad: "open until 9PST" first seen at 21:12 PST, still listed at 22:34 PST
+        var firstSeen = new DateTimeOffset(2026, 11, 15, 5, 12, 0, TimeSpan.Zero);
+        var now = new DateTimeOffset(2026, 11, 15, 6, 34, 0, TimeSpan.Zero);
+        var times = Schedules.ParseAd("Highshelf: Athenaeum & Reliquotheca is open until 9PST!", now);
+
+        var schedule = Schedules.ForAd(times, now, PartyFinderRegion.NorthAmerica, listed: true, now, firstSeen: firstSeen);
+
+        Assert.Empty(Schedules.Listed(schedule, now));
+    }
+
+    [Fact]
     public void AStartedOpeningStillCountsFromWhenTheAdWasLastSeen()
     {
         // revert-check: not revert-sensitive (old code ignores the first sighting; this pins that starts still do)
