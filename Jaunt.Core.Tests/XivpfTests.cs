@@ -241,6 +241,7 @@ public class XivpfTests
     [Fact]
     public void TheInGameCopyIsShownOnceTheGameSendsItAgain()
     {
+        // revert-check: not revert-sensitive (the old code always showed the in-game copy; this pins it when the game saw it last)
         var cache = new ListingCache();
         Xivpf.Record(cache, [new Xivpf.Ad("12", "Elezen meet up", "Siren")], Now.AddMinutes(-5));
         var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", " Elezen  meet up", "Siren", Now);
@@ -253,6 +254,7 @@ public class XivpfTests
     [Fact]
     public void TheInGameCopyIsShownWhenBothWereSeenTogether()
     {
+        // revert-check: not revert-sensitive (the old code always showed the in-game copy; this pins the tie going to the game)
         var cache = new ListingCache();
         var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "In-game text", "Siren", Now);
         var xivpf = cache.SeenAd(ListingSource.Xivpf, "12", "xivpf text", "Siren", Now);
@@ -264,6 +266,7 @@ public class XivpfTests
     [Fact]
     public void AnInGameListingXivpfNeverSentIsShownItself()
     {
+        // revert-check: not revert-sensitive (the old code never hid an in-game listing; this pins that only an xivpf copy can)
         var cache = new ListingCache();
         var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "A", null, Now.AddHours(-1));
         cache.SeenAd(ListingSource.Xivpf, "13", "B", null, Now);
