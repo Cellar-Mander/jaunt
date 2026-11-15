@@ -371,7 +371,7 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
     {
         var time = new ManualTime();
         var cache = new ListingCache();
-        var inGame = cache.Seen(ListingSource.InGamePartyFinder, "9000002", "Self-test Den", time.Now.AddDays(-1));
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "9000002", "Self-test Den Goblet W3 P7", "Gilgamesh", time.Now.AddDays(-1));
         var start = time.Now;
         var saves = 0;
         using var listings = FetchedListings.Xivpf(() => gazetteer.TravelRegion("Cuchulainn"), cache, new Configuration(), Plugin.Framework, Plugin.Log, () => saves++, new FakeSource(XivpfJson), time);
