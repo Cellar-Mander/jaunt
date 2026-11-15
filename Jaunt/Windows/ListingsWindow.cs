@@ -52,6 +52,7 @@ internal sealed class ListingsWindow : Window
     private readonly INotificationManager notifications;
     private readonly Configuration configuration;
     private readonly Action fetchSources;
+    private readonly Action saveCache;
     private readonly Func<TravelRegion?> region;
     private readonly IFontHandle titleFont;
 
@@ -99,6 +100,9 @@ internal sealed class ListingsWindow : Window
 
         /// <summary>The openings listed, earliest first; set when the list is rebuilt.</summary>
         public IReadOnlyList<Occurrence> Listed { get; init; } = [];
+
+        /// <summary>The cached listings of <see cref="Members"/>, for their marks; set when the list is rebuilt.</summary>
+        public IReadOnlyList<CachedListing> Listings { get; init; } = [];
     }
 
     /// <summary>
@@ -116,17 +120,19 @@ internal sealed class ListingsWindow : Window
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
+    /// <param name="saveCache">Saves the listing cache, after a mark changes.</param>
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
     /// <param name="openSettings">Opens the Settings window, from the title bar's cog.</param>
     /// <param name="titleFont">The larger font listing titles are drawn in; owned by the caller.</param>
     public ListingsWindow(
         ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
-        Func<TravelRegion?> region, Action openSettings, IFontHandle titleFont)
+        Action saveCache, Func<TravelRegion?> region, Action openSettings, IFontHandle titleFont)
         : base("Jaunt###JauntListings")
     {
         this.titleFont = titleFont;
         this.region = region;
         this.fetchSources = fetchSources;
+        this.saveCache = saveCache;
         this.cache = cache;
         this.gazetteer = gazetteer;
         parser = new AddressParser(gazetteer);
@@ -247,12 +253,15 @@ internal sealed class ListingsWindow : Window
         var textLeft = start.X + rowHeight + spacing;
         var width = ImGui.GetContentRegionMax().X + ImGui.GetWindowPos().X - textLeft;
 
+        // Favourite and visited show as icons at the right of the status line, which is cut to leave room
+        var marksWidth = DrawRowMarks(row, new Vector2(textLeft + width, start.Y));
+        var statusWidth = marksWidth > 0 ? width - marksWidth - spacing : width;
         ImGui.SetCursorScreenPos(new Vector2(textLeft, start.Y));
         var status = StatusText.Row(entry.When, entry.AlwaysOpen, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale);
         if (entry.AlwaysOpen || entry.When.IsOpen(now))
-            ImGui.TextColored(ImGuiColors.HealerGreen, Fit(status, width));
+            ImGui.TextColored(ImGuiColors.HealerGreen, Fit(status, statusWidth));
         else
-            ImGui.TextUnformatted(Fit(status, width));
+            ImGui.TextUnformatted(Fit(status, statusWidth));
         ImGui.SetCursorScreenPos(new Vector2(textLeft, ImGui.GetCursorScreenPos().Y));
         using (titleFont.Push())
             ImGui.TextUnformatted(Fit(ShownText.Title(row.Title), width));
@@ -260,6 +269,32 @@ internal sealed class ListingsWindow : Window
         ImGui.TextDisabled(Fit(row.World ?? "", width));
 
         ImGui.SetCursorScreenPos(after);
+    }
+
+    /// <summary>The favourite star and visited tick, right-aligned to <paramref name="topRight"/>; returns their width, 0 for none.</summary>
+    private static float DrawRowMarks(Row row, Vector2 topRight)
+    {
+        var favourite = EntryMarks.Has(row.Listings, EntryMark.Favourite);
+        var visited = EntryMarks.Has(row.Listings, EntryMark.Visited);
+        if (!favourite && !visited)
+            return 0;
+
+        using var font = ImRaii.PushFont(UiBuilder.IconFont);
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var star = FontAwesomeIcon.Star.ToIconString();
+        var tick = FontAwesomeIcon.Check.ToIconString();
+        var width = (favourite ? ImGui.CalcTextSize(star).X : 0) + (visited ? ImGui.CalcTextSize(tick).X : 0) + (favourite && visited ? spacing : 0);
+        ImGui.SetCursorScreenPos(new Vector2(topRight.X - width, topRight.Y));
+        if (favourite)
+        {
+            ImGui.TextColored(ImGuiColors.DalamudYellow, star);
+            if (visited)
+                ImGui.SameLine();
+        }
+
+        if (visited)
+            ImGui.TextColored(ImGuiColors.HealerGreen, tick);
+        return width;
     }
 
     private void DrawDetail(DateTimeOffset now)
@@ -283,8 +318,18 @@ internal sealed class ListingsWindow : Window
         ImGui.GetWindowDrawList().AddRectFilled(top, top + new Vector2(width, splashHeight), ImGui.GetColorU32(ImGuiCol.FrameBg), 4 * ImGuiHelpers.GlobalScale);
         ImGui.Dummy(new Vector2(width, splashHeight));
 
+        // The mark buttons sit at the right of the title, which wraps short of them
+        var titleTop = ImGui.GetCursorPos();
+        var buttonsWidth = DrawMarkButtons(row);
+        ImGui.SetCursorPos(titleTop);
         using (titleFont.Push())
-            ImGui.TextWrapped(ShownText.Title(row.Title));
+        {
+            ImGui.PushTextWrapPos(ImGui.GetContentRegionMax().X - buttonsWidth - ImGui.GetStyle().ItemSpacing.X);
+            ImGui.TextUnformatted(ShownText.Title(row.Title));
+            ImGui.PopTextWrapPos();
+        }
+
+        ImGui.SetCursorPosY(Math.Max(ImGui.GetCursorPosY(), titleTop.Y + ImGui.GetFrameHeightWithSpacing()));
         DrawDetailStatus(row, now, locale);
         if (row.World is { } world)
             ImGui.TextDisabled(world);
@@ -296,6 +341,63 @@ internal sealed class ListingsWindow : Window
         DrawAbout(row, width);
         DrawRating(row);
         DrawFooter(row);
+    }
+
+    /// <summary>
+    /// Favourite, Visited and Hide as square icon buttons at the top right, each lit while the entry
+    /// shows its mark; returns their width. Hide takes the entry out of the list at once.
+    /// </summary>
+    private float DrawMarkButtons(Row row)
+    {
+        var size = new Vector2(ImGui.GetFrameHeight());
+        var spacing = ImGui.GetStyle().ItemSpacing.X;
+        var width = (size.X * 3) + (spacing * 2);
+        ImGui.SetCursorPosX(ImGui.GetContentRegionMax().X - width);
+        var changed = MarkButton(row, EntryMark.Favourite, FontAwesomeIcon.Star, ImGuiColors.DalamudYellow, size,
+            "Remove from favourites", "Favourite the {0}");
+        ImGui.SameLine();
+        changed |= MarkButton(row, EntryMark.Visited, FontAwesomeIcon.Check, ImGuiColors.HealerGreen, size,
+            "Mark not visited", "Mark the {0} visited");
+        ImGui.SameLine();
+        if (MarkButton(row, EntryMark.Hidden, FontAwesomeIcon.EyeSlash, ImGuiColors.DalamudGrey, size, "Un-hide", "Hide the {0}"))
+        {
+            changed = true;
+            nextRebuild = DateTimeOffset.MinValue;
+            Notify($"Hid {ShownText.Title(row.Title)}. Un-hide it in Settings under Hidden venues.", NotificationType.Info);
+        }
+
+        if (changed)
+            saveCache();
+        return width;
+    }
+
+    /// <summary>One mark's button: its icon in <paramref name="on"/> while the entry shows the mark; returns whether it was clicked.</summary>
+    /// <param name="setTip">The tooltip while unmarked, with {0} for what the mark goes on ("venue", "event", "ads").</param>
+    private static bool MarkButton(Row row, EntryMark mark, FontAwesomeIcon icon, Vector4 on, Vector2 size, string clearTip, string setTip)
+    {
+        var marked = EntryMarks.Has(row.Listings, mark);
+        bool clicked;
+        using (ImRaii.PushId((int)mark))
+        using (ImRaii.PushColor(ImGuiCol.Text, on, marked))
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+            clicked = ImGui.Button(icon.ToIconString(), size);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(marked ? clearTip : string.Format(CultureInfo.CurrentCulture, setTip, TargetNoun(row, mark)));
+        if (clicked)
+            EntryMarks.Toggle(row.Listings, mark);
+        return clicked;
+    }
+
+    /// <summary>What a mark goes on, for its button's tooltip.</summary>
+    private static string TargetNoun(Row row, EntryMark mark)
+    {
+        var targets = EntryMarks.Targets(row.Listings, mark);
+        return targets[0].Source switch
+        {
+            ListingSource.FfxivVenues => "venue",
+            ListingSource.Partake or ListingSource.RpEventCalendar => "event",
+            _ => targets.Count == 1 ? "ad" : "ads",
+        };
     }
 
     /// <summary>The opening listed first, and for a recurring listing open now, the next.</summary>
@@ -627,8 +729,9 @@ internal sealed class ListingsWindow : Window
         var rows = new List<(Row Row, AddressKey? Address)>();
         foreach (var listing in cache.Listings)
         {
-            // A venue's world is checked once it is shown, as that corrects misspellings
-            if (listing.Hidden || (listing.Source != ListingSource.FfxivVenues && !travel.Includes(listing)))
+            // A venue's world is checked once it is shown, as that corrects misspellings. Hidden
+            // listings are merged too, so hiding a venue also hides the ads listed as it
+            if (listing.Source != ListingSource.FfxivVenues && !travel.Includes(listing))
                 continue;
 
             if (RowFor(listing, travel, adRegion, now) is { } row)
@@ -646,6 +749,8 @@ internal sealed class ListingsWindow : Window
         foreach (var merged in Duplicates.Merge(candidates, now))
         {
             var row = Entry(merged);
+            if (EntryMarks.Has(row.Listings, EntryMark.Hidden))
+                continue;
             listingCount++;
             foreach (var member in row.Members)
                 rowsByKey[member.Key] = row;
@@ -725,7 +830,7 @@ internal sealed class ListingsWindow : Window
     private Row Entry(MergedListing<Row> merged)
     {
         if (merged.Members.Count == 1)
-            return merged.Members[0] with { Members = merged.Members, Listed = merged.Listed };
+            return merged.Members[0] with { Members = merged.Members, Listed = merged.Listed, Listings = [merged.Members[0].Listing] };
 
         var byTitle = merged.Members.OrderBy(m => Duplicates.TitleRank(m.Listing.Source)).ToList();
         var byAddress = merged.Members
@@ -749,6 +854,7 @@ internal sealed class ListingsWindow : Window
         {
             Members = byTitle,
             Listed = merged.Listed,
+            Listings = [.. byTitle.Select(m => m.Listing)],
         };
     }
 

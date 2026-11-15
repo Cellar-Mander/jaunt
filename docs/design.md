@@ -413,8 +413,7 @@ again.
 
 `/jaunt` and the installer's Open button toggle the browser; `/jaunt config` and the cog in its title
 bar open Settings. The window has the list on the left and the selected listing's details on the
-right. Filters and search (`d68d407e`), the narrow single-column layout (`2dce5769`), favourite,
-visited and hide (`deb3b4be`), icons and splash images (`185b66ad`, plain placeholders until then)
+right. Filters and search (`d68d407e`), the narrow single-column layout (`2dce5769`), icons and splash images (`185b66ad`, plain placeholders until then)
 and copy link (`6e2b5199`) are separate tasks.
 
 - **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
@@ -424,7 +423,7 @@ and copy link (`6e2b5199`) are separate tasks.
   the first change since the last save, and on unload, not once per listing.
 - **Which listings**: in-game and xivpf Party Finder ads with at least one parsed address, FFXIV
   Venues venues with an address, Partake events, and FFXIV RP Event Calendar events with an address
-  or a location, not hidden and in the travel region. An xivpf ad the game has also sent shows once,
+  or a location, in the travel region. An entry with a hidden member (below) isn't shown. An xivpf ad the game has also sent shows once,
   as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
   Duplicates show as one entry (below).
 - **Openings** (`Schedules`), all instants in UTC:
@@ -506,6 +505,22 @@ and copy link (`6e2b5199`) are separate tasks.
   in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
   and open in the browser when clicked. Who listed an ad
   ("Listed by …") is `d12eb2c4`.
+- **Marks** (`EntryMarks`): three square icon buttons at the right of the detail pane's title, which
+  wraps short of them: a star (Favourite), a tick (Visited) and a crossed-out eye (Hide). A venue is
+  an FFXIV Venues listing; an event is a Partake or RP calendar one.
+  - The star favourites the entry's venue, else its event; the tick marks its event visited, else its
+    venue; the eye hides its venue, else its event. An entry of only ads marks every ad in it.
+  - An entry shows a mark when any member carries it, whoever set it, so a starred venue shows starred
+    in every entry it is in. Its button is lit (the star yellow, the tick green), and its row shows
+    the star and tick at the right of the status line, which is cut short of them.
+  - Clicking a lit button clears that mark from every member, so a mark set before the entry merged
+    with another still comes off. Each button's tooltip says what it marks ("Favourite the venue",
+    "Mark the event visited", "Hide the ads") or "Remove from favourites" and "Mark not visited".
+  - Hidden listings are merged like any other, and an entry with a hidden member isn't listed, so
+    hiding a venue also hides the ads listed as it. Hide takes the entry out of the list at once and
+    says where to un-hide it (Settings → Hidden venues). The Favourites, Hide visited and Show hidden
+    filters are `d68d407e`.
+  - Marks are saved to `marks.json` (see "Listing cache") as soon as one changes.
 - **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
   selection is saved in the settings (`SelectedSource`, `SelectedId`), so it shows again when the
   window is reopened or the game restarted, and is forgotten once the listing is no longer listed. A
