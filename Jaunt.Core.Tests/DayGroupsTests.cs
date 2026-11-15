@@ -99,6 +99,7 @@ public class DayGroupsTests
     [Fact]
     public void OpenNowClosingTogetherIsInStartOrder()
     {
+        // revert-check: not revert-sensitive (the old start order gives the same tie-break; this pins it under close-time sorting)
         // Both sort as closing in 2h: one by its end, the other by the assumed length
         var group = Assert.Single(DayGroups.Group([Entry("No end", -1, null), Entry("Ends", -2, 2)], Now, MinusFive));
         Assert.Equal(["Ends", "No end"], Titles(group));
