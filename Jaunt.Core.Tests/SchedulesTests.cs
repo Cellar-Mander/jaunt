@@ -35,7 +35,7 @@ public class SchedulesTests
     }
 
     [Fact]
-    public void AnOpeningEndingNowIsOver()
+    public void ARecurringOpeningEndingNowIsOver()
     {
         var next = At(24, 27);
         Assert.Equal([next], Schedules.Listed(Recurring(At(-3, 0), next), Now));
