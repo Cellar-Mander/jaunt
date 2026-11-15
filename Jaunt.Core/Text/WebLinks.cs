@@ -48,6 +48,21 @@ public static class WebLinks
     public static bool IsWeb(Uri? uri) =>
         uri is { IsAbsoluteUri: true } && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
+    /// <summary>
+    /// Whether a link is a Discord server invite: any path on <c>discord.gg</c>, or an
+    /// <c>/invite/</c> path on <c>discord.com</c> or <c>discordapp.com</c>, with or without "www.".
+    /// </summary>
+    public static bool IsDiscordInvite(Uri uri)
+    {
+        if (!IsWeb(uri))
+            return false;
+        var host = uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host;
+        if (host.Equals("discord.gg", StringComparison.OrdinalIgnoreCase))
+            return uri.AbsolutePath.Length > 1;
+        return (host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) || host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase))
+            && uri.AbsolutePath.StartsWith("/invite/", StringComparison.OrdinalIgnoreCase) && uri.AbsolutePath.Length > "/invite/".Length;
+    }
+
     private static bool IsUrlChar(char c) => char.IsAsciiLetterOrDigit(c) || c == '_' || UrlPunctuation.Contains(c);
 
     /// <summary>Reads one run of URL characters as a link, or returns null when it isn't one.</summary>

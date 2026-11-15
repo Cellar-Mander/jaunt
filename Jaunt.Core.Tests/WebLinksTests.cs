@@ -130,4 +130,21 @@ public class WebLinksTests
         else
             Assert.Equal(expected, actual);
     }
+    [Theory]
+    [InlineData("https://discord.gg/abc", true)]
+    [InlineData("https://www.discord.gg/abc", true)]
+    [InlineData("http://DISCORD.GG/abc", true)]
+    [InlineData("https://discord.com/invite/abc", true)]
+    [InlineData("https://discordapp.com/invite/abc", true)]
+    [InlineData("https://www.discord.com/invite/abc", true)]
+    [InlineData("https://discord.gg/", false)] // no invite code
+    [InlineData("https://discord.com/invite/", false)]
+    [InlineData("https://discord.com/channels/1/2", false)] // a channel, not an invite
+    [InlineData("https://discord.com/", false)]
+    [InlineData("https://notdiscord.gg/abc", false)]
+    [InlineData("https://discord.gg.example.com/abc", false)]
+    [InlineData("https://example.com/invite/abc", false)]
+    [InlineData("ftp://discord.gg/abc", false)] // Jaunt opens only http and https
+    public void TellsDiscordInvitesApart(string uri, bool expected) =>
+        Assert.Equal(expected, WebLinks.IsDiscordInvite(new Uri(uri)));
 }
