@@ -171,12 +171,12 @@ public class XivpfTests
     {
         // revert-check: not revert-sensitive (pins that xivpf leaves the in-game copy's text, title and world alone, as before)
         var cache = new ListingCache();
-        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "In-game text", "Siren", Now.AddDays(-2));
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "Ad text", "Siren", Now.AddDays(-2));
 
-        Xivpf.Record(cache, [new Xivpf.Ad("12", "xivpf text", "Cuchulainn")], Now);
+        Xivpf.Record(cache, [new Xivpf.Ad("12", "Ad text", "Cuchulainn")], Now);
 
         Assert.Equal(Now, inGame.LastSeen);
-        Assert.Equal(("In-game text", "In-game text", "Siren"), (inGame.Description, inGame.Title, inGame.ListedOn));
+        Assert.Equal(("Ad text", "Ad text", "Siren"), (inGame.Description, inGame.Title, inGame.ListedOn));
         Assert.NotNull(cache.Find(ListingSource.Xivpf, "12"));
     }
 
@@ -212,6 +212,68 @@ public class XivpfTests
 
         Assert.True(Xivpf.ShownInGame(cache, xivpf));
         Assert.False(Xivpf.ShownInGame(cache, inGame));
+    }
+
+    [Fact]
+    public void AnAdXivpfSentWithOtherTextLeavesTheInGameCopysLastSeen()
+    {
+        // The game's copy wasn't listed with that text, so it isn't seen now
+        var cache = new ListingCache();
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "Open until 9PST", "Siren", Now.AddHours(-1));
+
+        Xivpf.Record(cache, [new Xivpf.Ad("12", "Open FOREVER", "Siren")], Now);
+
+        Assert.Equal((Now.AddHours(-1), "Open until 9PST"), (inGame.LastSeen, inGame.Description));
+    }
+
+    [Fact]
+    public void NewerTextFromXivpfIsShownInsteadOfTheInGameCopy()
+    {
+        var cache = new ListingCache();
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "Open until 9PST", "Siren", Now.AddHours(-1));
+        Xivpf.Record(cache, [new Xivpf.Ad("12", "Open FOREVER", "Siren")], Now);
+        var xivpf = cache.Find(ListingSource.Xivpf, "12")!;
+
+        Assert.False(Xivpf.ShownInGame(cache, xivpf));
+        Assert.True(Xivpf.ShownFromXivpf(cache, inGame));
+    }
+
+    [Fact]
+    public void TheInGameCopyIsShownOnceTheGameSendsItAgain()
+    {
+        // revert-check: not revert-sensitive (the old code always showed the in-game copy; this pins it when the game saw it last)
+        var cache = new ListingCache();
+        Xivpf.Record(cache, [new Xivpf.Ad("12", "Elezen meet up", "Siren")], Now.AddMinutes(-5));
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", " Elezen  meet up", "Siren", Now);
+        var xivpf = cache.Find(ListingSource.Xivpf, "12")!;
+
+        Assert.True(Xivpf.ShownInGame(cache, xivpf));
+        Assert.False(Xivpf.ShownFromXivpf(cache, inGame));
+    }
+
+    [Fact]
+    public void TheInGameCopyIsShownWhenBothWereSeenTogether()
+    {
+        // revert-check: not revert-sensitive (the old code always showed the in-game copy; this pins the tie going to the game)
+        var cache = new ListingCache();
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "In-game text", "Siren", Now);
+        var xivpf = cache.SeenAd(ListingSource.Xivpf, "12", "xivpf text", "Siren", Now);
+
+        Assert.True(Xivpf.ShownInGame(cache, xivpf));
+        Assert.False(Xivpf.ShownFromXivpf(cache, inGame));
+    }
+
+    [Fact]
+    public void AnInGameListingXivpfNeverSentIsShownItself()
+    {
+        // revert-check: not revert-sensitive (the old code never hid an in-game listing; this pins that only an xivpf copy can)
+        var cache = new ListingCache();
+        var inGame = cache.SeenAd(ListingSource.InGamePartyFinder, "12", "A", null, Now.AddHours(-1));
+        cache.SeenAd(ListingSource.Xivpf, "13", "B", null, Now);
+        var venue = cache.Seen(ListingSource.FfxivVenues, "12", "C", Now);
+
+        Assert.False(Xivpf.ShownFromXivpf(cache, inGame));
+        Assert.False(Xivpf.ShownFromXivpf(cache, venue));
     }
 
     [Fact]

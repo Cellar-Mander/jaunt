@@ -264,8 +264,11 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
 - **Listed on**: the world the ad was put up on (`created_world.name`), trimmed, as the in-game
   Party Finder gives it; none when it is missing or blank.
 - **Seen in both**: when the in-game Party Finder has sent a listing with the same ID, the list
-  shows only the in-game copy, whatever its marks; the xivpf copy stays in the cache. Recording an
-  xivpf ad moves the in-game copy's last seen time up to now (never back), since it was listed then.
+  shows only one copy, whatever its marks; the other stays in the cache. That is the in-game copy,
+  unless xivpf has seen the ad with other text since the game last sent it, as after the recruiter
+  edits it; a sighting at the same time goes to the game. Recording an xivpf ad with the in-game
+  copy's text moves that copy's last seen time up to now (never back), since it was listed then.
+  Texts can differ without an edit, as xivpf leaves out auto-translate phrases.
 - A listing without a whole-number ID of 0 or more, or whose fields have the wrong types, is skipped
   without failing the others. A response that isn't a JSON array fails the fetch, which is logged,
   and the cached ads stay.
@@ -471,7 +474,7 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Which listings**: in-game and xivpf Party Finder ads with at least one parsed address, FFXIV
   Venues venues with an address, Partake events, and FFXIV RP Event Calendar events with an address
   or a location, in the travel region. An entry with a hidden member (below) isn't shown. An xivpf ad the game has also sent shows once,
-  as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
+  usually as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
   Duplicates show as one entry (below).
 - **Openings** (`Schedules`), all instants in UTC:
   - FFXIV Venues: 24/7 (see "FFXIV Venues") is always open. Otherwise each schedule entry's

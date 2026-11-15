@@ -1198,7 +1198,7 @@ internal sealed class ListingsWindow : Window
 
             case ListingSource.InGamePartyFinder or ListingSource.Xivpf:
                 {
-                    if (Xivpf.ShownInGame(cache, listing))
+                    if (Xivpf.ShownInGame(cache, listing) || Xivpf.ShownFromXivpf(cache, listing))
                         return null;
                     var adDetails = Parsed(listing, listing.Description, listing.ListedOn);
                     if (adDetails.Addresses.Count == 0)

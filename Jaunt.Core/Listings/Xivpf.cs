@@ -50,8 +50,9 @@ public static class Xivpf
     }
 
     /// <summary>
-    /// Records that xivpf listed these ads now. An ad the in-game Party Finder has also sent counts as
-    /// seen now there too, so the in-game copy, which the list prefers, shows when it was last listed.
+    /// Records that xivpf listed these ads now. An ad the in-game Party Finder has also sent, with the
+    /// same text, counts as seen now there too, so the in-game copy, which the list prefers, shows
+    /// when it was last listed. With other text the in-game copy is out of date and is left alone.
     /// </summary>
     /// <param name="region">
     /// The worlds the character can travel to; an ad put up on another world, or on none xivpf names, is
@@ -65,17 +66,31 @@ public static class Xivpf
                 continue;
 
             cache.SeenAd(ListingSource.Xivpf, ad.Id, ad.Description, ad.ListedOn, now);
-            if (cache.Find(ListingSource.InGamePartyFinder, ad.Id) is { } inGame)
+            if (cache.Find(ListingSource.InGamePartyFinder, ad.Id) is { } inGame
+                && string.Equals(inGame.Description, ad.Description, StringComparison.Ordinal))
                 cache.SeenElsewhere(inGame, now);
         }
     }
 
     /// <summary>
-    /// Whether the list shows the in-game copy of this listing instead: it is from xivpf and the
-    /// in-game Party Finder has sent the same listing.
+    /// Whether the list shows the in-game copy of this listing instead: it is from xivpf, the in-game
+    /// Party Finder has sent the same listing, and xivpf hasn't seen other text since the game last did.
     /// </summary>
     public static bool ShownInGame(ListingCache cache, CachedListing listing) =>
-        listing.Source == ListingSource.Xivpf && cache.Find(ListingSource.InGamePartyFinder, listing.Id) is not null;
+        listing.Source == ListingSource.Xivpf && cache.Find(ListingSource.InGamePartyFinder, listing.Id) is { } inGame
+        && InGameIsCurrent(inGame, listing);
+
+    /// <summary>
+    /// Whether the list shows the xivpf copy of this listing instead: it is from the in-game Party
+    /// Finder, and xivpf has since seen it with other text, such as an edit made after the game sent it.
+    /// </summary>
+    public static bool ShownFromXivpf(ListingCache cache, CachedListing listing) =>
+        listing.Source == ListingSource.InGamePartyFinder && cache.Find(ListingSource.Xivpf, listing.Id) is { } xivpf
+        && !InGameIsCurrent(listing, xivpf);
+
+    // xivpf leaves out auto-translate phrases, so texts can differ without an edit; the later sighting wins, the game on a tie
+    private static bool InGameIsCurrent(CachedListing inGame, CachedListing xivpf) =>
+        inGame.LastSeen >= xivpf.LastSeen || string.Equals(inGame.Description, xivpf.Description, StringComparison.Ordinal);
 
     private static Ad? Read(JsonElement element)
     {
