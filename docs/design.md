@@ -468,7 +468,7 @@ and copy link (`6e2b5199`) are separate tasks.
     With two or more, it joins none of them, as a busy ward can have several venues open at once.
   - The entry lists every member's listed openings, overlapping ones combined into one from the
     earliest start to the latest end; it is 24/7 when any member is, and one-off only when every member
-    is (so "Next:" shows when one is a recurring venue).
+    is.
   - Its title is FFXIV Venues' name, else a Partake event's, else an RP calendar event's, else an ad's.
     Its addresses and world are those of a member naming a plot or apartment rather than only the
     ward: a Party Finder ad's, as an ad can name the room, else FFXIV Venues', else the calendar's, else
@@ -499,7 +499,7 @@ and copy link (`6e2b5199`) are separate tasks.
   Rows out of view are spaced, not drawn. The list is rebuilt every second.
 - **Detail pane**, top to bottom, each part only when the listing has it: a placeholder band for the
   splash image; the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
-  20:00–23:00"), and for a recurring listing open now "Next: " and its next opening; the world;
+  20:00–23:00"); the world;
   Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
   a location given only as text, and any further links; About: an ad's normalised text, cut with "…" to 6 lines with "Read more" (then "Show
   less"); Age / rating: an RP calendar event's rating; then a footer line: "Discord" linking to the
