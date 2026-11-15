@@ -20,8 +20,11 @@ public enum Interests
     /// <summary>Live music and open stage.</summary>
     LiveMusic = 1 << 3,
 
-    /// <summary>Games and gambling.</summary>
+    /// <summary>Games, contests and giveaways, other than gambling.</summary>
     Games = 1 << 4,
+
+    /// <summary>Betting gil on chance: casino games, deathroll, raffles.</summary>
+    Gambling = 1 << 11,
 
     Roleplay = 1 << 5,
 
@@ -68,9 +71,11 @@ public static class ListingTags
             "bard", "open stage", "open mic", "live music", "concert", "singer", "singing", "band", "karaoke",
             "performance", "performer", "musician", "rock show", "ライブ", "演奏"),
         .. Each(Interests.Games,
-            "gamba", "gambling", "gamble", "casino", "blackjack", "bj", "deathroll", "drt", "roulette",
-            "poker", "holdem", "bingo", "raffle", "prize", "giveaway", "50/50", "triple triad", "truth or dare",
-            "game", "trivia", "tournament", "fightclub", "fight club", "mahjong", "カジノ", "ギャンブル", "ビンゴ"),
+            "game", "triple triad", "truth or dare", "trivia", "mahjong", "bingo", "tournament", "fightclub",
+            "fight club", "giveaway", "prize", "ビンゴ"),
+        .. Each(Interests.Gambling,
+            "gamba", "gambling", "gamble", "casino", "blackjack", "bj", "deathroll", "drt", "roulette", "poker",
+            "holdem", "raffle", "50/50", "カジノ", "ギャンブル"),
         .. Each(Interests.Roleplay,
             "rp", "roleplay", "role play", "rper", "ic", "in character", "ロールプレイ"),
         .. Each(Interests.Spa,
@@ -107,12 +112,12 @@ public static class ListingTags
         ["Open stage"] = Interests.LiveMusic,
         ["Performances"] = Interests.LiveMusic,
         ["Shows and Performances"] = Interests.LiveMusic,
-        ["Gambling"] = Interests.Games,
-        ["Casino"] = Interests.Games,
-        ["Deathroll"] = Interests.Games,
-        ["Blackjack"] = Interests.Games,
-        ["Roulette"] = Interests.Games,
-        ["Texas holdem"] = Interests.Games,
+        ["Gambling"] = Interests.Gambling,
+        ["Casino"] = Interests.Gambling,
+        ["Deathroll"] = Interests.Gambling,
+        ["Blackjack"] = Interests.Gambling,
+        ["Roulette"] = Interests.Gambling,
+        ["Texas holdem"] = Interests.Gambling,
         ["Bingo"] = Interests.Games,
         ["Triple triad"] = Interests.Games,
         ["Truth or dare"] = Interests.Games,
@@ -137,8 +142,8 @@ public static class ListingTags
         ["Cafes, Taverns & Inns"] = Interests.Cafes | Interests.Bars,
         ["Live Performances"] = Interests.LiveMusic,
         ["Performance & Shows"] = Interests.LiveMusic,
-        ["Gambling Available"] = Interests.Games,
-        ["Casino & Gambling"] = Interests.Games,
+        ["Gambling Available"] = Interests.Gambling,
+        ["Casino & Gambling"] = Interests.Gambling,
         ["Includes giveaways"] = Interests.Games,
         ["Tournaments & Competitions"] = Interests.Games,
         ["Casual RP"] = Interests.Roleplay,

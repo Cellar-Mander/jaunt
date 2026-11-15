@@ -377,8 +377,8 @@ fields the source sent, so a change to the keyword lists applies to cached listi
 again.
 
 - **Interests**: Clubs (and DJs), Bars (and taverns), Cafes (and food), Live music (and open stage),
-  Games (and gambling), Roleplay, Spa (and baths), Art, Photography, Tarot, and Chill (AFK, open
-  house, 24/7). A listing has any number of them; the median venue ad has two.
+  Games (contests and giveaways too), Gambling, Roleplay, Spa (and baths), Art, Photography, Tarot,
+  and Chill (AFK, open house, 24/7). A listing has any number of them; the median venue ad has two.
 - **Keywords**: developer-maintained lists in `ListingTags`, read from an ad's text, an event's
   title or a venue's name after Party Finder glyphs are decoded (boxed letters read as letters) and
   case is folded. A word is a run of letters and digits, keeping `/` between digits (`24/7`,
@@ -386,8 +386,8 @@ again.
   `twitch.tv/name` give their words. Keywords match whole words, or a phrase's consecutive words,
   and a word ending in "s" also matches without it (`bars`, `hot springs`); "starts" is not "art"
   and "team" is not "tea". Japanese keywords (喫茶, 雑談, 読書, 見学, 珈琲, ...) match anywhere in the
-  text. Gambling shorthand (`DRT`, `BJ`, `50/50`, raffle, prizes) counts as Games, a Twitch link or
-  "party" as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
+  text. Gambling shorthand (`DRT`, `BJ`, `50/50`, raffle) counts as Gambling, and bingo, trivia,
+  prizes and giveaways as Games; a Twitch link or "party" counts as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
   lists were tuned on those ads.
 - **Source tags**: FFXIV Venues' owner-chosen tags and Partake's event tags map to interests,
   ignoring case and surrounding spaces ("Bath house" → Spa, "Live DJs" → Clubs, "Cafes, Taverns &

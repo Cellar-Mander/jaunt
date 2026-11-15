@@ -41,8 +41,9 @@ public class ListingTagsTests
     [InlineData("Dark alt lounge, cocktails", Interests.Bars)]
     [InlineData("Maid cafe with fresh coffee", Interests.Cafes)]
     [InlineData("Open Stage all night", Interests.LiveMusic)]
-    [InlineData("Gamba, DRT and a raffle", Interests.Games)]
-    [InlineData("50/50 at midnight", Interests.Games)]
+    [InlineData("Gamba, DRT and a raffle", Interests.Gambling)]
+    [InlineData("Bingo and trivia, prizes to win", Interests.Games)]
+    [InlineData("50/50 at midnight", Interests.Gambling)]
     [InlineData("Heavy RP, walk-ins welcome", Interests.Roleplay)]
     [InlineData("Indoor bathhouse with hot springs", Interests.Spa)]
     [InlineData("Art gallery opening", Interests.Art)]
@@ -58,7 +59,7 @@ public class ListingTagsTests
 
     [Fact]
     public void AnAdUsuallyHasSeveralInterests() =>
-        Assert.Equal(Interests.Clubs | Interests.Bars | Interests.Games | Interests.Tarot, InterestsOf("Bar/DJS/Tarot/Oracle readings, gamba"));
+        Assert.Equal(Interests.Clubs | Interests.Bars | Interests.Gambling | Interests.Tarot, InterestsOf("Bar/DJS/Tarot/Oracle readings, gamba"));
 
     [Theory]
     [InlineData("Party starts at 9")] // "art" inside "starts" and "party"
@@ -199,7 +200,7 @@ public class ListingTagsTests
     [Fact]
     public void APartakeEventTakesItsTagsAndTitle() =>
         Assert.Equal(
-            Interests.Clubs | Interests.Games | Interests.Cafes | Interests.Bars | Interests.Tarot,
+            Interests.Clubs | Interests.Gambling | Interests.Cafes | Interests.Bars | Interests.Tarot,
             ListingTags.Of(PartakeEvent("Tarot Tuesday", null, "Live DJs", "casino & gambling", "Cafes, Taverns & Inns", "LGBTQ+ Friendly")).Interests);
 
     [Theory]
