@@ -19,6 +19,9 @@ public static class Xivpf
 {
     public const string Url = "https://xivpf.com/api/listings";
 
+    /// <summary>xivpf's site, linked from Settings' list of sources.</summary>
+    public static readonly Uri SiteUrl = new("https://xivpf.com/");
+
     private const string NoneCategory = "None";
 
     /// <summary>One ad as the game would send it.</summary>

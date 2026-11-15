@@ -20,6 +20,12 @@ public static class Partake
 {
     public const string Url = "https://api.partake.gg/";
 
+    /// <summary>Partake's site, linked from Settings' list of sources.</summary>
+    public static readonly Uri SiteUrl = new("https://partake.gg/");
+
+    /// <summary>Partake's API terms bar apps from implying endorsement, so this shows beside its events.</summary>
+    public const string Disclaimer = "Jaunt is not affiliated with or endorsed by Partake.";
+
     public const string Game = "final-fantasy-xiv";
 
     public const int PageSize = 200;

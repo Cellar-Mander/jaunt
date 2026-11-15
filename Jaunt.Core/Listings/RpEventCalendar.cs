@@ -21,7 +21,7 @@ public static class RpEventCalendar
 {
     public const string Url = "https://api.ffxiv-rp.org/api/Events/GetWeekTranslatableEvents";
 
-    /// <summary>The calendar's site, credited beside its listings.</summary>
+    /// <summary>The calendar's site, credited beside its listings and in Settings.</summary>
     public static readonly Uri SiteUrl = new("https://ffxiv-rp.org/");
 
     /// <summary>The calendar's listings are under this licence, which needs crediting wherever they show.</summary>
