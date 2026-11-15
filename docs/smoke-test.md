@@ -35,7 +35,12 @@ expiry) are covered by `Jaunt.Core.Tests`.
 4. **Clear confirmation**: move the Settings window off-centre, then press Clear cached listings.
    The confirmation opens centred on the Settings window. Cancel and the title bar's close button
    remove nothing; Clear reports how many it removed.
-5. `/xllog` shows no errors from Jaunt throughout.
+5. **Sources**: Data ends with "Listings come from": In-game Party Finder, xivpf, FFXIV Venues,
+   Partake (with "Jaunt is not affiliated with or endorsed by Partake." under it) and FFXIV RP Event
+   Calendar · CC BY-SA 4.0. Hovering each name but the in-game Party Finder shows its site with a hand
+   cursor and clicking opens it (`xivpf.com`, `ffxivvenues.com`, `partake.gg`, `ffxiv-rp.org`);
+   "CC BY-SA 4.0" opens the licence page.
+6. `/xllog` shows no errors from Jaunt throughout.
 
 ### With the sample cache
 
@@ -127,8 +132,8 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `P
    date formats chosen in Settings. One under way is under "Open now" and says "Open now · until …".
 3. **Location**: selected, an event whose location names a district, ward and plot has Travel and
    Copy; one whose location Jaunt can't read shows the text under Location instead.
-4. **Credit**: the list ends with "Events from Partake (partake.gg). Jaunt is not affiliated with or
-   endorsed by Partake.", and a selected event's footer says it is not affiliated with or endorsed by Partake.
+4. **Credit**: a selected event's footer says "Jaunt is not affiliated with or endorsed by Partake."
+   The list has no credit line under its last row; Settings → Data carries it (Settings 5).
 5. **Cooldown**: close and reopen `/jaunt`: no second Partake fetch is logged within 8 hours.
    *(self-test: no fetch a minute before the 8 h are up)*
 6. **Offline**: as in FFXIV Venues 7, with the `Partake` fetch time: `/xllog` shows a warning

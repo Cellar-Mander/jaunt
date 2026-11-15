@@ -64,7 +64,6 @@ internal sealed class ListingsWindow : Window
     // Each listed row by its listing, for the detail pane; a listing listed twice (open now and next) is one row
     private readonly Dictionary<(ListingSource, string), Row> rowsByKey = [];
     private DateTimeOffset nextRebuild;
-    private bool showsPartake;
     private bool loggedOut;
     private int emptyLine = -1;
     private bool aboutExpanded;
@@ -207,10 +206,6 @@ internal sealed class ListingsWindow : Window
 
             ImGui.Spacing();
         }
-
-        // Partake's terms ask apps not to imply endorsement
-        if (showsPartake)
-            ImGui.TextDisabled("Events from Partake (partake.gg). Jaunt is not affiliated with or endorsed by Partake.");
     }
 
     /// <summary>A placeholder icon, then the status line, the title cut to fit and the world.</summary>
@@ -428,7 +423,7 @@ internal sealed class ListingsWindow : Window
         }
 
         if (listing.Source == ListingSource.Partake)
-            ImGui.TextDisabled("Jaunt is not affiliated with or endorsed by Partake.");
+            ImGui.TextDisabled(Partake.Disclaimer);
     }
 
     private static void Section(string name)
@@ -437,7 +432,8 @@ internal sealed class ListingsWindow : Window
         ImGui.TextDisabled(name);
     }
 
-    private static void DrawLinkText(string text, Uri uri)
+    /// <summary>Dimmed text that shows its address on hover and opens it when clicked.</summary>
+    internal static void DrawLinkText(string text, Uri uri)
     {
         ImGui.TextDisabled(text);
         if (ImGui.IsItemHovered())
@@ -539,7 +535,6 @@ internal sealed class ListingsWindow : Window
     {
         rowsByKey.Clear();
         var entries = new List<BrowserEntry<Row>>();
-        showsPartake = false;
         var travel = region();
         loggedOut = travel is null;
         if (travel is null)
@@ -566,7 +561,6 @@ internal sealed class ListingsWindow : Window
             var key = $"{(int)listing.Source}:{listing.Id}";
             foreach (var when in listed)
                 entries.Add(new BrowserEntry<Row>(row, row.Title, key, when, row.Schedule.AlwaysOpen));
-            showsPartake |= listing.Source == ListingSource.Partake;
         }
 
         groups = DayGroups.Group(entries, now, TimeZoneInfo.Local);
