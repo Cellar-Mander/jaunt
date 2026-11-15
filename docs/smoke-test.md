@@ -98,7 +98,7 @@ times as in FFXIV Venues 1 first.
 5. **Detail**: select a Party Finder ad, a venue, a Partake event and a calendar event. Each shows a
    grey band, its title in a larger font, status, world, Travel and Open page where it has an address or link, Location,
    and a footer naming its source ("Sources: FFXIV Venues"), each source but Party Finder linking to its
-   site. A venue with a Discord invite shows "Discord" first in the footer, opening the invite, and
+   site, in blue and underlined. A venue with a Discord invite shows "Discord" (also blue and underlined) first in the footer, opening the invite, and
    not under Location; one whose only link is the invite has no Open page. A long ad shows "Read more", which expands it and becomes "Show less".
 6. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
    Disable and re-enable Jaunt: still selected. Press Settings → Clear cached listings, so it drops

@@ -503,13 +503,16 @@ internal sealed class ListingsWindow : Window
         ImGui.TextDisabled(name);
     }
 
-    /// <summary>Text, dimmed unless asked otherwise, that shows its address on hover and opens it when clicked.</summary>
-    internal static void DrawLinkText(string text, Uri uri, bool dimmed = true)
+    /// <summary>
+    /// Text that looks like a link (link colour, underlined), shows its address and a hand cursor on
+    /// hover, and opens it when clicked.
+    /// </summary>
+    internal static void DrawLinkText(string text, Uri uri)
     {
-        if (dimmed)
-            ImGui.TextDisabled(text);
-        else
-            ImGui.TextUnformatted(text);
+        ImGui.TextColored(ImGuiColors.TankBlue, text);
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        ImGui.GetWindowDrawList().AddLine(new Vector2(min.X, max.Y), max, ImGui.GetColorU32(ImGuiColors.TankBlue), Math.Max(1, ImGuiHelpers.GlobalScale));
         if (ImGui.IsItemHovered())
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);

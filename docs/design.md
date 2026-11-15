@@ -461,7 +461,9 @@ and copy link (`6e2b5199`) are separate tasks.
   `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
   ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source
   but Party Finder linking to its site, and the calendar's licence link after them; for a Partake
-  event, a line that Jaunt is not affiliated with or endorsed by Partake. Who listed an ad
+  event, a line that Jaunt is not affiliated with or endorsed by Partake. Links in the footer, as
+  in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
+  and open in the browser when clicked. Who listed an ad
   ("Listed by …") is `d12eb2c4`.
 - **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
   selection is saved in the settings (`SelectedSource`, `SelectedId`), so it shows again when the
