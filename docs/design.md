@@ -206,7 +206,8 @@ ignoring case, and has no region filter), in one fetch: approved venues (the API
 works out from each venue's schedule. A venue left out stays in the cache with its fields and marks,
 and in the browser while it has openings to list, until it expires (see "Listing cache"). `FfxivVenues`
 records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
-the API sent them: its name as the title, and its location, website, Discord and schedule. The title,
+the API sent them: its name as the title, and its location, website, Discord and schedule, each
+schedule entry with its time zone (the start's `timeZone`, an IANA ID). The title,
 address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
 to how they are read applies to cached venues without fetching again. A venue cached without them
 shows no address until the next fetch. Opening the browser asks for each data centre in the region
@@ -294,7 +295,8 @@ again. The list derives them once per change to those fields, not every frame.
   kept once. An occurrence without both, or that doesn't end after it starts, is skipped; the
   event keeps its other occurrences. Each fetch replaces an event's openings.
 - **One-off**: an event whose `isRecurring` is `false`.
-- **Validated**: the day part of `lastValidated`, or none when it is missing or unreadable.
+- **Validated**: the day part of `lastValidated`, or none when it is missing or unreadable. Kept,
+  but not shown.
 - A row without an ID, or whose fields have the wrong types, is skipped without failing the others.
   A response that isn't a JSON array fails the fetch, which is logged, and the cached events stay.
 - Only the fields above are read. `contacts` and `description` (which repeats the contacts) hold
@@ -383,6 +385,7 @@ and copy link (`6e2b5199`) are separate tasks.
   Venues venues with an address, Partake events, and FFXIV RP Event Calendar events with an address
   or a location, not hidden and in the travel region. An xivpf ad the game has also sent shows once,
   as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
+  Duplicates show as one entry (below).
 - **Openings** (`Schedules`), all instants in UTC:
   - FFXIV Venues: 24/7 (see "FFXIV Venues") is always open. Otherwise each schedule entry's
     `resolution`, the occurrence the API worked out when fetched, is carried forward by whole weeks of
@@ -393,7 +396,8 @@ and copy link (`6e2b5199`) are separate tasks.
   - Partake: its start and end. One-off.
   - FFXIV RP Event Calendar: its occurrences; one-off when the calendar says it doesn't recur.
   - Party Finder ads: the times read from the text (see "Opening times in Party Finder ads"), in the
-    zone it writes or the region default for the character's region (a European ad's language isn't
+    zone it writes, else the zone of a venue or event at its address (see "Duplicates"), else the
+    region default for the character's region (a European ad's language isn't
     known, so London). An ad is still listed for 1 hour after it was last seen (a PF ad's longest
     life), plus the source's cooldown for xivpf. "24/7" is always open while still listed. "Open
     now", or a closing time alone, is open until that time while still listed. A start is listed as
@@ -402,6 +406,37 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Listed openings**: a recurring listing shows its current opening and the next one, or only the
   next when it isn't open. A one-off shows each opening that hasn't ended and starts within 30 days.
   A 24/7 listing shows once, as open now. An opening ending exactly now is over.
+- **Duplicates** (`Duplicates`): listings at the same address, in one source or several, whose listed
+  openings overlap show as one entry, so a re-posted ad, a venue's several ads and an ad for an FFXIV
+  Venues venue each show once. Names never decide a match (decision `25e33e0a`).
+  - The address is the first one a listing gives: world (case ignored), district, ward, and plot or
+    apartment (with whether it is in the subdivision), or neither for one naming only the ward. A room
+    is left out. One with no world or no district never merges.
+  - Two openings overlap when each starts before the other ends; an opening with no end counts as the
+    moment it starts, and one with no start as starting now. A 24/7 listing overlaps every opening.
+    Listings merge when any pair of their listed openings overlap, and merging chains: if A overlaps B
+    and B overlaps C, all three are one entry. The same address at times that don't overlap stays
+    separate.
+  - A listing naming only the ward ("Fae / LB / W4") merges with others naming only that ward, and
+    also with the plot or apartment in the ward whose listings it overlaps, when there is exactly one.
+    With two or more, it joins none of them, as a busy ward can have several venues open at once.
+  - The entry lists every member's listed openings, overlapping ones combined into one from the
+    earliest start to the latest end; it is 24/7 when any member is, and one-off only when every member
+    is (so "Next:" shows when one is a recurring venue).
+  - Its title is FFXIV Venues' name, else a Partake event's, else an RP calendar event's, else an ad's.
+    Its addresses and world are those of a member naming a plot or apartment rather than only the
+    ward: a Party Finder ad's, as an ad can name the room, else FFXIV Venues', else the calendar's, else
+    Partake's. Its links are every member's, the title's source first, each once; so different pages
+    at one address become links of one entry. About is the text of the ad that stops being listed
+    soonest (last seen plus 1 hour, plus the cooldown for xivpf). The footer names every member's
+    source, plus the calendar's licence and the Partake line when a member is from them.
+  - Selecting any member selects the entry, and a saved selection of any member still finds it.
+  - An ad's times that state no zone take the zone of an FFXIV Venues venue at its address; failing
+    that (no venue, or one cached before zones were kept), the zone among those ads write in which
+    one of its start times falls exactly on a start a venue or Partake event lists there (Partake
+    sends no zone). Otherwise the region default stands. This is worked out before the overlap, so
+    an ad on Twintania for a US venue merges with it: the Orchid House ad's "7pm" with no zone is New
+    York's 7pm, as FFXIV Venues says, not London's (decision `aca1be81`).
 - **Groups**, by the local day an opening starts on: "Open now" for openings in progress, then
   "Today" with the weekday dimmed for later today, "Tomorrow" and the weekday ("Tomorrow Monday"), then
   one group per date, the date in the Settings date format without its weekday ("17 Nov", "Nov 17"
@@ -419,9 +454,10 @@ and copy link (`6e2b5199`) are separate tasks.
   20:00–23:00"), and for a recurring listing open now "Next: " and its next opening; the world;
   Travel and Open page; Location: each address with Copy, a location given only as text, and any
   further links; About: an ad's normalised text, cut with "…" to 6 lines with "Read more" (then "Show
-  less"); Age / rating: an RP calendar event's rating; then a footer with the source and "seen … ago", or
-  for an RP calendar event the calendar's credit and licence links and when it was last validated,
-  and for a Partake event the line that Jaunt is not affiliated with or endorsed by Partake.
+  less"); Age / rating: an RP calendar event's rating; then a footer naming its sources on one line,
+  comma separated ("Listed on FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), the
+  calendar's name linking to its site and followed by its licence link, and for a Partake event the
+  line that Jaunt is not affiliated with or endorsed by Partake.
 - **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
   selection is saved in the settings (`SelectedSource`, `SelectedId`), so it shows again when the
   window is reopened or the game restarted, and is forgotten once the listing is no longer listed. A
@@ -461,6 +497,9 @@ Caps on user-configurable lists and text, and how input from other players or th
   ads, 0.5 ms for 1,400 venues) and serialises them off it. Loading every file takes about 20 ms for
   2,700 listings; working out every listing's address and schedule once takes about 130–280 ms, on the
   list's first rebuild, as before.
+- Finding duplicates groups listings by address with one dictionary pass per rebuild, then compares
+  the listings at each address pairwise. An address has a handful of listings at most, so this stays
+  linear in the number of listings.
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.

@@ -103,6 +103,17 @@ times as in FFXIV Venues 1 first.
 7. **Empty states**: with nothing selected, the detail pane shows the help text. With nothing listed
    (log in a character in a region with no cached listings, with the network blocked), the list shows
    a joke line such as "No one here but us chickens." and the detail pane is blank.
+8. **Duplicates**: with the Party Finder's None category open for a while, no venue shows twice at
+   the same time: a re-posted ad (same text, new listing), a venue's several ads, and an ad for an
+   FFXIV Venues venue that is open then each show as one row. The merged row takes the FFXIV Venues
+   name, Location lists every link from its listings once, About shows one ad's text, and the footer
+   names each source once on one line ("Listed on FFXIV Venues, Party Finder, xivpf"). Two xivpf ads
+   giving only the ward ("Fae / LB / W4") merge with the game's ad naming the plot in that ward. A
+   venue's next opening still shows under its own day. FFXIV Venues venues cached before this version
+   have no openings to merge with: clear the `FfxivVenues/…` times as in FFXIV Venues 1 first. *(self-test: none; the matching rules
+   are covered by `DuplicatesTests`)*
+9. **Zone from a venue**: an ad that gives a time with no zone, for an FFXIV Venues venue, shows at the
+   venue's opening time in your time zone, not hours away from it.
 
 ## xivpf
 
@@ -110,12 +121,12 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `X
 
 1. **First fetch**: with no `Xivpf` time in `fetch-state.json` (disable Jaunt,
    remove it, re-enable), open `/jaunt` without opening the Party Finder. Within a few seconds
-   ads appear whose detail footer says "Listed on Party Finder (xivpf)", and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
+   ads appear whose detail footer says "Listed on xivpf", and `/xllog` shows `Fetched … Party Finder ads from xivpf`.
    *(self-test: the request is recorded before it is sent and only None ads after it, against a stand-in; the real site stays manual)*
 2. **Cooldown**: close and reopen `/jaunt` within 10 minutes: no second fetch is logged. After 10
    minutes, reopening fetches again. *(self-test: no fetch a minute before the 10 min are up)*
 3. **Seen in both**: open the Party Finder's None category and browse a page, then reopen `/jaunt`.
-   A venue ad listed both ways shows once, its footer saying "Party Finder", not "Party Finder (xivpf)".
+   A venue ad listed both ways shows once, its footer saying "Party Finder", not "xivpf".
    This also checks that xivpf's listing IDs match the game's. *(self-test: the in-game copy wins, against a stand-in)*
 4. **Offline**: as in FFXIV Venues 7, with the `Xivpf` fetch time: `/xllog` shows a warning
    "Couldn't fetch Party Finder ads from xivpf", and the cached ads stay listed.
@@ -150,7 +161,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `R
 2. **Cooldown**: with the Settings cooldown at 10 minutes, close and reopen `/jaunt` after 10
    minutes: no second calendar fetch is logged. *(self-test: no fetch a minute before the 8 h are up)*
 3. **Detail**: a selected event shows its date and times or "Open now · until …" in your time zone and
-   the Settings formats, and in its footer "Validated …" with a year or "Never validated". An open-world
+   the Settings formats, and no "Validated" line. An open-world
    event shows its location as text with no Travel button. An event with no upcoming date isn't listed. *(self-test: the address, location, dates and validation are recorded)*
 4. **Credit**: in the footer, hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
    clicking it opens the site. "CC BY-SA 4.0" does the same with the licence page.

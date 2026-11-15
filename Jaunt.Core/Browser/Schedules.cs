@@ -135,7 +135,12 @@ public static class Schedules
         OpeningTimes.Parse(PartyFinderText.Normalise(adText).Text, DateOnly.FromDateTime(seen.UtcDateTime));
 
     /// <summary>As <see cref="ForAd(string, DateTimeOffset, PartyFinderRegion, bool, DateTimeOffset)"/>, from times already parsed with <see cref="ParseAd"/>.</summary>
-    public static ListingSchedule ForAd(IReadOnlyList<OpeningTime> times, DateTimeOffset seen, PartyFinderRegion region, bool listed, DateTimeOffset now)
+    /// <param name="unstatedZone">
+    /// The zone for times that state none (or one not known), instead of the region default: the zone
+    /// of a venue or event at the ad's address (<see cref="Duplicates.UnstatedZone"/>).
+    /// </param>
+    public static ListingSchedule ForAd(
+        IReadOnlyList<OpeningTime> times, DateTimeOffset seen, PartyFinderRegion region, bool listed, DateTimeOffset now, TimeZoneInfo? unstatedZone = null)
     {
         var occurrences = new List<Occurrence>();
         var timed = false;
@@ -145,7 +150,8 @@ public static class Schedules
                 return listed ? ListingSchedule.Always : ListingSchedule.None;
 
             // The ad's language isn't known, so a European ad without a zone takes London's
-            var window = OpeningTimeResolver.Resolve(time, seen, OpeningTimeResolver.Zone(time.Zone, region, language: null));
+            var zone = OpeningTimeResolver.Written(time.Zone) ?? unstatedZone ?? OpeningTimeResolver.Zone(null, region, language: null);
+            var window = OpeningTimeResolver.Resolve(time, seen, zone);
             if (window.Start is { } start)
             {
                 timed = true;
@@ -179,7 +185,11 @@ public static class Schedules
     /// again until the next fetch.
     /// </summary>
     public static bool StillListed(ListingSource source, DateTimeOffset lastSeen, DateTimeOffset now, int cooldownMinutes) =>
-        now - lastSeen < AdLifetime + (RefreshPolicy.Cooldown(source, cooldownMinutes) ?? TimeSpan.Zero);
+        now < ListedUntil(source, lastSeen, cooldownMinutes);
+
+    /// <summary>When a Party Finder ad last seen at <paramref name="lastSeen"/> stops counting as listed (<see cref="StillListed"/>).</summary>
+    public static DateTimeOffset ListedUntil(ListingSource source, DateTimeOffset lastSeen, int cooldownMinutes) =>
+        lastSeen + AdLifetime + (RefreshPolicy.Cooldown(source, cooldownMinutes) ?? TimeSpan.Zero);
 
     /// <summary>The Party Finder region a data centre is in, or null for one this doesn't know.</summary>
     public static PartyFinderRegion? RegionOf(string dataCentre) => dataCentre.Trim().ToUpperInvariant() switch

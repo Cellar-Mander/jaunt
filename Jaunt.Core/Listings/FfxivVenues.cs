@@ -127,6 +127,21 @@ public static class FfxivVenues
         return new Venue(data.Id, data.Name, new Fields(data.Location, data.Website, data.Discord, data.Schedule));
     }
 
+    /// <summary>
+    /// The time zone the venue's schedule is written in, from its first entry that names one the
+    /// runtime knows; null if none does.
+    /// </summary>
+    public static TimeZoneInfo? Zone(Fields? fields)
+    {
+        foreach (var opening in fields?.Schedule ?? [])
+        {
+            if (opening?.Start?.TimeZone is { } id && OpeningTimeResolver.FindZone(id) is { } zone)
+                return zone;
+        }
+
+        return null;
+    }
+
     /// <summary>The title shown for a venue's name as sent: first line only, trimmed and cut to 60 characters.</summary>
     public static string Title(string name)
     {
@@ -238,7 +253,8 @@ public static class FfxivVenues
     /// <summary>One occurrence of a schedule entry as the API resolved it, in UTC.</summary>
     public sealed record Resolution(DateTimeOffset Start, DateTimeOffset End);
 
-    public sealed record Time(int Hour, int Minute, bool NextDay);
+    /// <param name="TimeZone">The venue's time zone as an IANA ID ("America/New_York"); null if missing, as in venues cached before it was kept.</param>
+    public sealed record Time(int Hour, int Minute, bool NextDay, string? TimeZone = null);
 
     /// <summary>Type 0 is every <c>IntervalArgument</c> weeks; type 1 is a week of each month.</summary>
     public sealed record Interval(int IntervalType, int IntervalArgument);

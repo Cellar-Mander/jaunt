@@ -290,6 +290,13 @@ public class SchedulesTests
         Assert.False(Schedules.StillListed(ListingSource.Xivpf, Now.AddMinutes(-90), Now, 30));
     }
 
+    [Fact]
+    public void AnAdIsListedUntilAnHourAfterItWasSeenPlusAFetchedSourcesCooldown()
+    {
+        Assert.Equal(Now.AddHours(1), Schedules.ListedUntil(ListingSource.InGamePartyFinder, Now, 30));
+        Assert.Equal(Now.AddMinutes(90), Schedules.ListedUntil(ListingSource.Xivpf, Now, 30));
+    }
+
     [Theory]
     [InlineData("Aether", PartyFinderRegion.NorthAmerica)]
     [InlineData("Crystal", PartyFinderRegion.NorthAmerica)]
