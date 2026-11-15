@@ -26,7 +26,8 @@ namespace Jaunt.Windows;
 /// details on the right. Lists in-game and xivpf Party Finder ads with an address, FFXIV Venues venues
 /// with an address, Partake events and FFXIV RP Event Calendar events with an address or location, on
 /// worlds the character can travel to, at the openings <see cref="Schedules.Listed"/> picks. Listings at
-/// one address with overlapping openings show as one entry (<see cref="Duplicates"/>).
+/// one address with overlapping openings show as one entry (<see cref="Duplicates"/>). Search and
+/// filter chips above the list narrow it (<see cref="ListingFilters"/>).
 /// </summary>
 internal sealed class ListingsWindow : Window
 {
@@ -66,6 +67,14 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<(ListingSource, string), (string Text, string About)> abouts = [];
     private readonly Dictionary<string, (string Name, FfxivVenues.Fields? Fields, FfxivVenues.Shown Shown)> shownVenues = [];
     private readonly Dictionary<string, (CalendarFields Fields, RpEventCalendar.Shown Shown)> shownEvents = [];
+    private readonly Dictionary<(ListingSource, string), (TaggedFields Fields, Tagging Tagging)> taggings = [];
+
+    // Every entry listed before the filters, hidden ones too, and the keys of their listings
+    private readonly List<Row> unfiltered = [];
+    private readonly HashSet<(ListingSource, string)> unfilteredKeys = [];
+    // The search box's text last parsed, and what it parsed to
+    private string? searchParsed;
+    private SearchQuery query = SearchQuery.Empty;
 
     private IReadOnlyList<DayGroup<Row>> groups = [];
     // Entries listed, each once however many of its openings are listed
@@ -111,6 +120,27 @@ internal sealed class ListingsWindow : Window
 
         /// <summary>The place whose marks the entry carries, or null; set when the list is rebuilt and when a button marks one.</summary>
         public PlaceMark? Place { get; set; }
+
+        /// <summary>Its members' interests and NSFW combined; set when the list is rebuilt.</summary>
+        public Tagging Tagging { get; init; }
+
+        /// <summary>What search looks in: its titles as shown, About and interest labels; set when the list is rebuilt.</summary>
+        public IReadOnlyList<string> SearchFields { get; init; } = [];
+    }
+
+    /// <summary>
+    /// The fields <see cref="ListingTags.Of"/> reads. Recording a fetch assigns new objects, so a
+    /// reference check finds every change; an ad's title comes from its text.
+    /// </summary>
+    private readonly record struct TaggedFields(string Title, string Description, FfxivVenues.Fields? Venue, string? Rating, IReadOnlyList<string> SourceTags)
+    {
+        public static TaggedFields Of(CachedListing listing) =>
+            new(listing.Source is ListingSource.InGamePartyFinder or ListingSource.Xivpf ? "" : listing.Title, listing.Description,
+                listing.Venue, listing.Rating, listing.SourceTags);
+
+        public bool Same(TaggedFields other) =>
+            ReferenceEquals(Title, other.Title) && ReferenceEquals(Description, other.Description) && ReferenceEquals(Venue, other.Venue)
+            && ReferenceEquals(Rating, other.Rating) && ReferenceEquals(SourceTags, other.SourceTags);
     }
 
     /// <summary>
@@ -184,10 +214,7 @@ internal sealed class ListingsWindow : Window
             return;
         }
 
-        // Filters and search (d68d407e) go on this line, left of the count
-        var count = listingCount == 1 ? "1 listing" : $"{listingCount.ToString(CultureInfo.CurrentCulture)} listings";
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0, ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(count).X));
-        ImGui.TextDisabled(count);
+        DrawFilters(now);
 
         var listWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * 0.4f, 240 * ImGuiHelpers.GlobalScale, 420 * ImGuiHelpers.GlobalScale);
         using (var list = ImRaii.Child("##list", new Vector2(listWidth, 0), true))
@@ -204,11 +231,114 @@ internal sealed class ListingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// The search box and filter chips, wrapping onto more lines when the window is narrow, with the
+    /// count of entries listed at the right. A change applies at once and is saved; search text is
+    /// saved once the box loses focus.
+    /// </summary>
+    private void DrawFilters(DateTimeOffset now)
+    {
+        var filters = configuration.Filters;
+        var changed = false;
+
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        var search = filters.Search;
+        if (ImGui.InputTextWithHint("##search", "Search", ref search, 200))
+        {
+            filters.Search = search;
+            ApplyFilters(now);
+        }
+
+        if (ImGui.IsItemDeactivatedAfterEdit())
+            configuration.Save();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Every word must match a name, text or tag.\n-word leaves out listings with it.\n\"two words\" matches the phrase.");
+
+        if (Chip("SFW only", filters.SfwOnly, "Leave out listings marked NSFW or adults only"))
+            (changed, filters.SfwOnly) = (true, !filters.SfwOnly);
+        if (Chip("Favourites", filters.Favourites, "List only favourites"))
+            (changed, filters.Favourites) = (true, !filters.Favourites);
+        if (Chip("Hide visited", filters.HideVisited, "Leave out places and events marked visited"))
+            (changed, filters.HideVisited) = (true, !filters.HideVisited);
+        if (Chip("Show hidden", filters.ShowHidden, "List hidden venues too"))
+            (changed, filters.ShowHidden) = (true, !filters.ShowHidden);
+
+        if (Chip("Tags", false, "List only listings with every tag picked"))
+            ImGui.OpenPopup("##tags");
+
+        foreach (var (interest, label) in ListingFilters.Labels)
+        {
+            if ((filters.Tags & interest) != 0 && Chip($"{label} ×", true, $"Stop requiring {label}"))
+                (changed, filters.Tags) = (true, filters.Tags & ~interest);
+        }
+
+        // At the right of the last line, or alone on the next when it doesn't fit
+        var count = listingCount == 1 ? "1 listing" : $"{listingCount.ToString(CultureInfo.CurrentCulture)} listings";
+        var countWidth = ImGui.CalcTextSize(count).X;
+        FlowNext(countWidth);
+        ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), ImGui.GetContentRegionMax().X - countWidth));
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextDisabled(count);
+
+        // Last, so its items don't count as the line's last item for the chips' wrapping
+        using (var popup = ImRaii.Popup("##tags"))
+        {
+            if (popup.Success)
+            {
+                foreach (var (interest, label) in ListingFilters.Labels)
+                {
+                    var on = (filters.Tags & interest) != 0;
+                    if (ImGui.Checkbox(label, ref on))
+                        (changed, filters.Tags) = (true, filters.Tags ^ interest);
+                }
+            }
+        }
+
+        if (changed)
+        {
+            configuration.Save();
+            ApplyFilters(now);
+        }
+    }
+
+    /// <summary>A rounded toggle on the filter line, filled while on; returns whether it was clicked.</summary>
+    private static bool Chip(string label, bool on, string tip)
+    {
+        var style = ImGui.GetStyle();
+        FlowNext(ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2));
+        bool clicked;
+        using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, ImGui.GetFrameHeight() / 2))
+        using (ImRaii.PushStyle(ImGuiStyleVar.FrameBorderSize, Math.Max(1, ImGuiHelpers.GlobalScale)))
+        using (ImRaii.PushColor(ImGuiCol.Button, on ? style.Colors[(int)ImGuiCol.Header] : Vector4.Zero))
+        using (ImRaii.PushColor(ImGuiCol.Text, style.Colors[on ? (int)ImGuiCol.Text : (int)ImGuiCol.TextDisabled]))
+            clicked = ImGui.Button(label);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(tip);
+        return clicked;
+    }
+
+    /// <summary>Keeps the next item on the line when <paramref name="width"/> more fits, else lets it start a new line.</summary>
+    private static void FlowNext(float width)
+    {
+        var lineEnd = ImGui.GetItemRectMax().X - ImGui.GetWindowPos().X;
+        if (lineEnd + ImGui.GetStyle().ItemSpacing.X + width <= ImGui.GetContentRegionMax().X)
+            ImGui.SameLine();
+    }
+
     private void DrawList(DateTimeOffset now)
     {
         if (groups.Count == 0)
         {
-            ImGui.TextWrapped(EmptyLines[emptyLine]);
+            if (unfiltered.Count == 0)
+            {
+                ImGui.TextWrapped(EmptyLines[emptyLine]);
+            }
+            else
+            {
+                ImGui.TextWrapped("No listings match these filters.");
+                ImGui.TextDisabled("Try removing some, or clearing the search.");
+            }
+
             return;
         }
 
@@ -348,7 +478,7 @@ internal sealed class ListingsWindow : Window
 
     private void DrawDetail(DateTimeOffset now)
     {
-        // With nothing listed, the list's own line says so and the help text would only add noise
+        // With nothing listed, or nothing the filters let through, the list's own line says so and the help text would only add noise
         if (groups.Count == 0)
             return;
 
@@ -409,7 +539,7 @@ internal sealed class ListingsWindow : Window
         if (MarkButton(row, EntryMark.Hidden, FontAwesomeIcon.EyeSlash, ImGuiColors.DalamudGrey, size, "Un-hide"))
         {
             changed = true;
-            Notify($"Hid {ShownText.Title(row.Title)}. Un-hide it in Settings under Hidden venues.", NotificationType.Info);
+            Notify($"Hid {ShownText.Title(row.Title)}. Un-hide it in Settings under Hidden venues.", NotificationType.Info, $"Hid {ShownText.Title(row.Title)}");
         }
 
         if (changed)
@@ -494,7 +624,7 @@ internal sealed class ListingsWindow : Window
             using (ImRaii.Disabled(whyNot is not null))
             {
                 if (ImGui.Button("Travel") && request is not null && lifestream.Travel(request) is { } error)
-                    Notify(error, NotificationType.Warning);
+                    Notify(error, NotificationType.Warning, "Couldn't travel");
             }
 
             if (whyNot is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
@@ -538,7 +668,7 @@ internal sealed class ListingsWindow : Window
             if (ImGui.SmallButton("Copy"))
             {
                 ImGui.SetClipboardText(text);
-                Notify($"Copied {text}", NotificationType.Success);
+                Notify($"Copied {text}", NotificationType.Success, "Copied the address");
             }
 
             ImGui.SameLine();
@@ -777,17 +907,18 @@ internal sealed class ListingsWindow : Window
     /// <summary>
     /// Works out the listed rows and groups them by day, parsing only ad text, locations and venue and
     /// event fields that changed. An xivpf ad the game has also sent shows once, as the in-game copy.
-    /// Forgets the selection when its listing is no longer listed.
+    /// Forgets the selection when its listing is no longer listed, whatever the filters.
     /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
-        rowsByKey.Clear();
-        listingCount = 0;
-        var entries = new List<BrowserEntry<Row>>();
+        unfiltered.Clear();
+        unfilteredKeys.Clear();
         var travel = region();
         loggedOut = travel is null;
         if (travel is null)
         {
+            rowsByKey.Clear();
+            listingCount = 0;
             groups = [];
             return;
         }
@@ -821,7 +952,48 @@ internal sealed class ListingsWindow : Window
         {
             var row = merged[i];
             row.Place = places[i];
-            if (EntryMarks.Has(row.Marks, row.Place, EntryMark.Hidden))
+            unfiltered.Add(row);
+            foreach (var member in row.Members)
+                unfilteredKeys.Add(member.Key);
+        }
+
+        if (unfiltered.Count == 0)
+        {
+            if (emptyLine < 0)
+                emptyLine = Random.Shared.Next(EmptyLines.Length);
+        }
+        else
+        {
+            emptyLine = -1;
+        }
+
+        // A listing the filters leave out stays selected, so it shows again once they let it through
+        if (SelectedKey is { } selected && !unfilteredKeys.Contains(selected))
+            ClearSelection();
+
+        ApplyFilters(now);
+        Forget();
+    }
+
+    /// <summary>Lists the entries the search and filters let through, grouped by day; cheap enough to run on every keystroke.</summary>
+    private void ApplyFilters(DateTimeOffset now)
+    {
+        var filters = configuration.Filters;
+        if (!ReferenceEquals(searchParsed, filters.Search))
+        {
+            query = SearchQuery.Parse(filters.Search);
+            searchParsed = filters.Search;
+        }
+
+        rowsByKey.Clear();
+        listingCount = 0;
+        var entries = new List<BrowserEntry<Row>>();
+        foreach (var row in unfiltered)
+        {
+            var entry = new FilterEntry(
+                row.Tagging, EntryMarks.Has(row.Marks, row.Place, EntryMark.Favourite), EntryMarks.Has(row.Marks, row.Place, EntryMark.Visited),
+                EntryMarks.Has(row.Marks, row.Place, EntryMark.Hidden), row.SearchFields);
+            if (!ListingFilters.Shows(filters, query, entry))
                 continue;
             listingCount++;
             foreach (var member in row.Members)
@@ -832,20 +1004,6 @@ internal sealed class ListingsWindow : Window
         }
 
         groups = DayGroups.Group(entries, now, TimeZoneInfo.Local);
-        if (groups.Count == 0)
-        {
-            if (emptyLine < 0)
-                emptyLine = Random.Shared.Next(EmptyLines.Length);
-        }
-        else
-        {
-            emptyLine = -1;
-        }
-
-        if (SelectedKey is { } selected && !rowsByKey.ContainsKey(selected))
-            ClearSelection();
-
-        Forget();
     }
 
     /// <summary>
@@ -904,7 +1062,7 @@ internal sealed class ListingsWindow : Window
         if (merged.Members.Count == 1)
         {
             var only = merged.Members[0];
-            return only with { Members = merged.Members, Listed = merged.Listed, Marks = MarksOf(only, merged.Members) };
+            return Filterable(only with { Members = merged.Members, Listed = merged.Listed, Marks = MarksOf(only, merged.Members) });
         }
 
         var byTitle = merged.Members.OrderBy(m => Duplicates.TitleRank(m.Listing.Source)).ToList();
@@ -934,7 +1092,39 @@ internal sealed class ListingsWindow : Window
             Members = byTitle,
             Listed = merged.Listed,
         };
-        return row with { Marks = MarksOf(row, byTitle) };
+        return Filterable(row with { Marks = MarksOf(row, byTitle) });
+    }
+
+    /// <summary>The entry with what the filters read: its members' tagging and the texts search looks in.</summary>
+    private Row Filterable(Row row)
+    {
+        var tagging = ListingTags.Combine(row.Members.Select(m => TaggingOf(m.Listing)));
+        var fields = new List<string>(row.Members.Count + 2);
+        foreach (var member in row.Members)
+        {
+            var title = ShownText.Title(member.Title);
+            if (!fields.Contains(title))
+                fields.Add(title);
+        }
+
+        if (row.About is { Length: > 0 } about)
+            fields.Add(about);
+        fields.AddRange(ListingFilters.LabelsOf(tagging.Interests));
+        return row with { Tagging = tagging, SearchFields = fields };
+    }
+
+    /// <summary>A listing's interests and NSFW, worked out once per change to the fields they come from.</summary>
+    private Tagging TaggingOf(CachedListing listing)
+    {
+        var key = (listing.Source, listing.Id);
+        var fields = TaggedFields.Of(listing);
+        if (!taggings.TryGetValue(key, out var entry) || !entry.Fields.Same(fields))
+        {
+            entry = (fields, ListingTags.Of(listing));
+            taggings[key] = entry;
+        }
+
+        return entry.Tagging;
     }
 
     /// <summary>
@@ -1029,6 +1219,7 @@ internal sealed class ListingsWindow : Window
         ForgetMissing(parsed);
         ForgetMissing(adTimes);
         ForgetMissing(abouts);
+        ForgetMissing(taggings);
         if (shownVenues.Count > cache.Count)
         {
             foreach (var key in shownVenues.Keys.Where(k => cache.Find(ListingSource.FfxivVenues, k) is null).ToList())
@@ -1096,8 +1287,12 @@ internal sealed class ListingsWindow : Window
 
     private static IReadOnlyList<WebLink> WebLinks(IEnumerable<Uri> links) => [.. links.Select(uri => new WebLink(uri.OriginalString, uri))];
 
-    private void Notify(string text, NotificationType type) =>
-        notifications.AddNotification(new Notification { Title = "Jaunt", Content = text, Type = type });
+    /// <param name="minimized">
+    /// The one line shown once the toast shrinks; without it Dalamud cuts <paramref name="text"/> to fit,
+    /// so keep it short with the gist first.
+    /// </param>
+    private void Notify(string text, NotificationType type, string minimized) =>
+        notifications.AddNotification(new Notification { Title = "Jaunt", Content = text, MinimizedText = minimized, Type = type });
 
     private static Uri? SiteUrl(ListingSource source) => source switch
     {
