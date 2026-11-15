@@ -57,6 +57,43 @@ public class DayGroupsTests
     }
 
     [Fact]
+    public void OpenNowListsTheSoonestToCloseFirst()
+    {
+        // Opened earliest but closes last; opened latest but closes first
+        var group = Assert.Single(DayGroups.Group(
+            [Entry("Closes in 4h", -3, 4), Entry("Closes in 1h", -1, 1), Entry("Closes in 2h", -2, 2)],
+            Now, MinusFive));
+        Assert.Equal(["Closes in 1h", "Closes in 2h", "Closes in 4h"], Titles(group));
+    }
+
+    [Fact]
+    public void OpenNowTakesAnOpeningWithNoEndToCloseThreeHoursAfterItStarts()
+    {
+        // No end, started 1h ago: sorts as closing in 2h, between 1h 59m and 2h 1m
+        var group = Assert.Single(DayGroups.Group(
+            [Entry("Closes in 2h 1m", -4, 2 + 1 / 60.0), Entry("No end", -1, null), Entry("Closes in 1h 59m", -4, 2 - 1 / 60.0)],
+            Now, MinusFive));
+        Assert.Equal(["Closes in 1h 59m", "No end", "Closes in 2h 1m"], Titles(group));
+    }
+
+    [Fact]
+    public void OpenNowSortsAKnownEndWithoutAStartByItsEnd()
+    {
+        var group = Assert.Single(DayGroups.Group(
+            [Entry("Closes in 3h", -1, 3), Entry("Until 1h", null, 1), Entry("Neither", null, null)],
+            Now, MinusFive));
+        Assert.Equal(["Until 1h", "Closes in 3h", "Neither"], Titles(group));
+    }
+
+    [Fact]
+    public void OpenNowClosingTogetherIsInStartOrder()
+    {
+        // Both sort as closing in 2h: one by its end, the other by the assumed length
+        var group = Assert.Single(DayGroups.Group([Entry("No end", -1, null), Entry("Ends", -2, 2)], Now, MinusFive));
+        Assert.Equal(["Ends", "No end"], Titles(group));
+    }
+
+    [Fact]
     public void EntriesStartingTogetherAreInTitleOrderThenKeyOrder()
     {
         var a = new BrowserEntry<string>("second", "Same", "b", new Occurrence(Now.AddHours(2), null), false);
