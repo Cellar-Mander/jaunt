@@ -406,8 +406,8 @@ again.
     or the `[AO]` tag when there is none) is NSFW, and Mature and Teen are SFW: Mature's 16+ is a
     content rating, not an age restriction.
   - Party Finder ads: an explicit word wins; otherwise an age restriction is NSFW.
-- **Listings shown as one**: every member's interests. NSFW as the FFXIV Venues member says when
-  there is one (NSFW if any such member says so), otherwise NSFW when any member is.
+- **Listings shown as one**: every member's interests, and NSFW when any member is: NSFW always
+  wins over SFW, even over an FFXIV Venues venue marked SFW.
 
 ### Listing browser
 

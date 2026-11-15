@@ -226,23 +226,20 @@ public static class ListingTags
     }
 
     /// <summary>
-    /// The tagging of listings shown as one: every member's interests, and NSFW as FFXIV Venues says
-    /// when a member is from it, else NSFW when any member is.
+    /// The tagging of listings shown as one: every member's interests, and NSFW when any member is,
+    /// as NSFW always wins over SFW.
     /// </summary>
-    public static Tagging Combine(IEnumerable<(ListingSource Source, Tagging Tagging)> members)
+    public static Tagging Combine(IEnumerable<Tagging> members)
     {
         var interests = Interests.None;
-        var anyNsfw = false;
-        bool? venueNsfw = null;
-        foreach (var (source, tagging) in members)
+        var nsfw = false;
+        foreach (var tagging in members)
         {
             interests |= tagging.Interests;
-            anyNsfw |= tagging.Nsfw;
-            if (source == ListingSource.FfxivVenues)
-                venueNsfw = (venueNsfw ?? false) || tagging.Nsfw;
+            nsfw |= tagging.Nsfw;
         }
 
-        return new Tagging(interests, venueNsfw ?? anyNsfw);
+        return new Tagging(interests, nsfw);
     }
 
     /// <summary>What a text says.</summary>
@@ -300,7 +297,8 @@ public static class ListingTags
         if (Words.TryGetValue(word, out var interests))
             return interests;
         // Stryker disable once Equality : for the word "s" the rest is empty, and no keyword is empty
-        if (word.Length > 1 && word[^1] == 's' && Words.TryGetValue(word[..^1], out var singular))
+        var hasRest = word.Length > 1;
+        if (hasRest && word[^1] == 's' && Words.TryGetValue(word[..^1], out var singular))
             return singular;
         return Interests.None;
     }

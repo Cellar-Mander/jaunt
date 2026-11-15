@@ -221,37 +221,18 @@ public class ListingTagsTests
         Assert.Equal(
             Interests.Bars | Interests.Games | Interests.Tarot,
             ListingTags.Combine([
-                (ListingSource.FfxivVenues, new Tagging(Interests.Bars, false)),
-                (ListingSource.Xivpf, new Tagging(Interests.Games | Interests.Bars, false)),
-                (ListingSource.Partake, new Tagging(Interests.Tarot, false)),
+                new Tagging(Interests.Bars, false),
+                new Tagging(Interests.Games | Interests.Bars, false),
+                new Tagging(Interests.Tarot, false),
             ]).Interests);
-
-    [Theory]
-    [InlineData(false, true, false)] // FFXIV Venues decides
-    [InlineData(true, false, true)]
-    public void FfxivVenuesDecidesSfwForListingsShownAsOne(bool venueNsfw, bool adNsfw, bool nsfw) =>
-        Assert.Equal(nsfw, ListingTags.Combine([
-            (ListingSource.Xivpf, new Tagging(Interests.None, adNsfw)),
-            (ListingSource.FfxivVenues, new Tagging(Interests.None, venueNsfw)),
-        ]).Nsfw);
-
-    [Fact]
-    public void AnyNsfwFfxivVenuesMemberMakesItNsfw() =>
-        Assert.True(ListingTags.Combine([
-            (ListingSource.FfxivVenues, new Tagging(Interests.None, true)),
-            (ListingSource.FfxivVenues, new Tagging(Interests.None, false)),
-        ]).Nsfw);
 
     [Theory]
     [InlineData(false, false, false)]
     [InlineData(true, false, true)]
-    [InlineData(false, true, true)]
+    [InlineData(false, true, true)] // NSFW wins, even over an FFXIV Venues venue marked SFW
     [InlineData(true, true, true)]
-    public void WithoutFfxivVenuesAnyNsfwMemberMakesItNsfw(bool adNsfw, bool calendarNsfw, bool nsfw) =>
-        Assert.Equal(nsfw, ListingTags.Combine([
-            (ListingSource.Xivpf, new Tagging(Interests.None, adNsfw)),
-            (ListingSource.RpEventCalendar, new Tagging(Interests.Roleplay, calendarNsfw)),
-        ]).Nsfw);
+    public void AnyNsfwMemberMakesListingsShownAsOneNsfw(bool firstNsfw, bool secondNsfw, bool nsfw) =>
+        Assert.Equal(nsfw, ListingTags.Combine([new Tagging(Interests.None, firstNsfw), new Tagging(Interests.Roleplay, secondNsfw)]).Nsfw);
 
     [Fact]
     public void ACachedAdIsTaggedFromItsText()
