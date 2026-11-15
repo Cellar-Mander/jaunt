@@ -208,7 +208,7 @@ public static class FfxivVenues
             // Venues sometimes leave out the scheme ("discord.gg/abc"), which WebLinks reads as https
             var uri = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var parsed) && WebLinks.IsWeb(parsed)
                 ? parsed
-                : WebLinks.Find(text).FirstOrDefault()?.Uri;
+                : WebLinks.Find(text) is [var first, ..] ? first.Uri : null;
             if (uri is not null && !links.Contains(uri))
                 links.Add(uri);
         }

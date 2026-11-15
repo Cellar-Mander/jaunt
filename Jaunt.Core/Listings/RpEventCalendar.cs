@@ -198,7 +198,7 @@ public static class RpEventCalendar
         if (location.Length == 0)
             return null;
 
-        var address = parser.Parse(location, server).FirstOrDefault();
+        var address = parser.Parse(location, server) is [var first, ..] ? first : null;
         return address is { WorldFrom: WorldSource.Listing, World: not null } ? address with { WorldFrom = WorldSource.Text } : address;
     }
 
