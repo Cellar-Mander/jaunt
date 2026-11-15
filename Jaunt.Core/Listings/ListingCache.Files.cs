@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Jaunt.Core.Browser;
 
 namespace Jaunt.Core.Listings;
@@ -102,7 +103,7 @@ public sealed partial class ListingCache
     private ListingFile Snapshot<T>(ListingSource source, Func<CachedListing, T> sent)
     {
         List<SavedListing<T>?> saved = listings.TryGetValue(source, out var bySource)
-            ? [.. bySource.Values.Where(l => l.Recorded).Select(l => new SavedListing<T> { LastSeen = l.LastSeen, Sent = sent(l) })]
+            ? [.. bySource.Values.Where(l => l.Recorded).Select(l => new SavedListing<T> { LastSeen = l.LastSeen, FirstSeen = l.FirstSeen, Sent = sent(l) })]
             : [];
         return new ListingFile(SourceFile(source), null, () => Serialise(new SavedSource<T> { Listings = saved }));
     }
@@ -153,23 +154,31 @@ public sealed partial class ListingCache
         switch (source)
         {
             case ListingSource.InGamePartyFinder:
-                foreach (var (ad, seen) in Read<Xivpf.Ad>(json))
+                foreach (var (ad, seen, first) in Read<Xivpf.Ad>(json))
+                {
                     SeenAd(source, ad.Id, ad.Description ?? "", ad.ListedOn, seen);
+                    FirstSeenAt(source, ad.Id, first);
+                }
+
                 break;
             case ListingSource.Xivpf:
-                foreach (var (ad, seen) in Read<Xivpf.Ad>(json))
+                foreach (var (ad, seen, first) in Read<Xivpf.Ad>(json))
+                {
                     Xivpf.Record(this, [ad with { Description = ad.Description ?? "" }], seen);
+                    FirstSeenAt(source, ad.Id, first);
+                }
+
                 break;
             case ListingSource.FfxivVenues:
-                foreach (var (venue, seen) in Read<FfxivVenues.Venue>(json))
+                foreach (var (venue, seen, _) in Read<FfxivVenues.Venue>(json))
                     FfxivVenues.Record(this, [venue with { About = Present(venue.About) }], seen);
                 break;
             case ListingSource.Partake:
-                foreach (var (item, seen) in Read<Partake.Event>(json))
+                foreach (var (item, seen, _) in Read<Partake.Event>(json))
                     Partake.Record(this, [item with { Title = item.Title ?? "", World = item.World ?? "", LinkTexts = Present(item.LinkTexts), Tags = Present(item.Tags), About = Present(item.About) }], seen);
                 break;
             case ListingSource.RpEventCalendar:
-                foreach (var (item, seen) in Read<RpEventCalendar.Event>(json))
+                foreach (var (item, seen, _) in Read<RpEventCalendar.Event>(json))
                 {
                     var openings = (item.Openings ?? []).Where(o => o is not null && o.End > o.Start);
                     RpEventCalendar.Record(this, [item with { LinkTexts = Present(item.LinkTexts), Openings = [.. openings], About = Present(item.About) }], seen);
@@ -177,6 +186,13 @@ public sealed partial class ListingCache
 
                 break;
         }
+    }
+
+    // A file saved before first sightings were kept has none, so the ad counts as first seen when last seen
+    private void FirstSeenAt(ListingSource source, string id, DateTimeOffset? first)
+    {
+        if (first is { } at && Find(source, id) is { FirstSeen: { } loaded } listing && at < loaded)
+            listing.FirstSeen = at;
     }
 
     // JSON can hold nulls where the types say there are none, so those are dropped or made empty
@@ -191,17 +207,17 @@ public sealed partial class ListingCache
         return kept.Text.Length > 0 || kept.Invites.Count > 0 ? kept : null;
     }
 
-    /// <summary>The listings in a source's file that have an ID, with when each was last seen.</summary>
+    /// <summary>The listings in a source's file that have an ID, with when each was last and first seen.</summary>
     /// <exception cref="JsonException">The text is not a source's file, or is from a later version.</exception>
-    private static List<(T Sent, DateTimeOffset LastSeen)> Read<T>(string json)
+    private static List<(T Sent, DateTimeOffset LastSeen, DateTimeOffset? FirstSeen)> Read<T>(string json)
         where T : class
     {
         var file = Deserialise<SavedSource<T>>(json);
-        var read = new List<(T, DateTimeOffset)>();
+        var read = new List<(T, DateTimeOffset, DateTimeOffset?)>();
         foreach (var saved in file?.Listings ?? [])
         {
             if (saved?.Sent is { } sent && !string.IsNullOrEmpty(IdOf(sent)))
-                read.Add((sent, saved.LastSeen));
+                read.Add((sent, saved.LastSeen, saved.FirstSeen));
         }
 
         return read;
@@ -307,6 +323,11 @@ public sealed partial class ListingCache
     private sealed class SavedListing<T>
     {
         public DateTimeOffset LastSeen { get; set; }
+
+        // Only ads have one, so other sources' files leave it out
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public DateTimeOffset? FirstSeen { get; set; }
+
         public T? Sent { get; set; }
     }
 

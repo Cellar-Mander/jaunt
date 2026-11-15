@@ -117,6 +117,13 @@ public sealed class CachedListing
     public DateTimeOffset LastSeen { get; set; }
 
     /// <summary>
+    /// For a Party Finder ad, when it was first seen with its current text, which a closing time on
+    /// its own counts from (<see cref="Browser.Schedules.ForAd(IReadOnlyList{Text.OpeningTime}, DateTimeOffset, Text.PartyFinderRegion, bool, DateTimeOffset, TimeZoneInfo?, DateTimeOffset?)"/>);
+    /// null for other sources.
+    /// </summary>
+    public DateTimeOffset? FirstSeen { get; set; }
+
+    /// <summary>
     /// A single event rather than a recurring venue or event. One-offs can't reliably be matched to a
     /// later listing, so they expire even when marked.
     /// </summary>

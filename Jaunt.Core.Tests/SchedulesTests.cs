@@ -217,6 +217,32 @@ public class SchedulesTests
     }
 
     [Fact]
+    public void AClosingTimeAloneCountsFromWhenTheAdWasFirstSeen()
+    {
+        // First seen at 23:30 EST and still listed at 00:23 EST: midnight has passed, it isn't tomorrow's
+        var firstSeen = new DateTimeOffset(2026, 11, 15, 4, 30, 0, TimeSpan.Zero);
+        var now = new DateTimeOffset(2026, 11, 15, 5, 23, 0, TimeSpan.Zero);
+        var times = Schedules.ParseAd("[RP] Himbo Hooters open until 12am EST", now);
+
+        var schedule = Schedules.ForAd(times, now, PartyFinderRegion.NorthAmerica, listed: true, now, firstSeen: firstSeen);
+
+        Assert.Equal([new Occurrence(null, new DateTimeOffset(2026, 11, 15, 5, 0, 0, TimeSpan.Zero))], schedule.Occurrences);
+        Assert.Empty(Schedules.Listed(schedule, now));
+    }
+
+    [Fact]
+    public void AStartedOpeningStillCountsFromWhenTheAdWasLastSeen()
+    {
+        // revert-check: not revert-sensitive (old code ignores the first sighting; this pins that starts still do)
+        // Only a closing time alone counts from the first sighting; "today" is the day it was last seen
+        var times = Schedules.ParseAd("Today 10pm-11pm ST", Now);
+
+        var schedule = Schedules.ForAd(times, Now, PartyFinderRegion.Europe, listed: true, Now, firstSeen: Now.AddDays(-1));
+
+        Assert.Equal([new Occurrence(Now.AddHours(2), Now.AddHours(3))], schedule.Occurrences);
+    }
+
+    [Fact]
     public void AnAdOpenNowNoLongerListedIsNotOpen() =>
         Assert.Empty(Schedules.ForAd("Open now until 23:00 ST", Now, PartyFinderRegion.Europe, listed: false, Now).Occurrences);
 

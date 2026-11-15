@@ -139,8 +139,14 @@ public static class Schedules
     /// The zone for times that state none (or one not known), instead of the region default: the zone
     /// of a venue or event at the ad's address (<see cref="Duplicates.UnstatedZone"/>).
     /// </param>
+    /// <param name="firstSeen">
+    /// When the ad was first seen with this text (<see cref="CachedListing.FirstSeen"/>), which a closing
+    /// time on its own counts from, so it stays put while the ad stays listed; null counts from
+    /// <paramref name="seen"/>.
+    /// </param>
     public static ListingSchedule ForAd(
-        IReadOnlyList<OpeningTime> times, DateTimeOffset seen, PartyFinderRegion region, bool listed, DateTimeOffset now, TimeZoneInfo? unstatedZone = null)
+        IReadOnlyList<OpeningTime> times, DateTimeOffset seen, PartyFinderRegion region, bool listed, DateTimeOffset now,
+        TimeZoneInfo? unstatedZone = null, DateTimeOffset? firstSeen = null)
     {
         var occurrences = new List<Occurrence>();
         var timed = false;
@@ -151,7 +157,8 @@ public static class Schedules
 
             // The ad's language isn't known, so a European ad without a zone takes London's
             var zone = OpeningTimeResolver.Written(time.Zone) ?? unstatedZone ?? OpeningTimeResolver.Zone(null, region, language: null);
-            var window = OpeningTimeResolver.Resolve(time, seen, zone);
+            // "Open until 12am" seen again after midnight is over, not open until the next midnight
+            var window = OpeningTimeResolver.Resolve(time, time.Start is null ? firstSeen ?? seen : seen, zone);
             if (window.Start is { } start)
             {
                 timed = true;
