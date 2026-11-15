@@ -31,6 +31,15 @@ public class DayGroupsTests
         Assert.Equal(new DateOnly(2026, 11, 16), groups[3].Date);
     }
 
+    // Openings are listed once a second and grouped again on each filter change, so one can end in between
+    [Fact]
+    public void OpeningsThatHaveEndedAreLeftOut()
+    {
+        var groups = DayGroups.Group([Entry("Was open until now", null, 0), Entry("Ended", -3, -0.5), Entry("Tonight", 3, 6)], Now, MinusFive);
+
+        Assert.Equal(["Tonight"], Titles(Assert.Single(groups)));
+    }
+
     [Fact]
     public void DaysAreTheUsersLocalDays()
     {

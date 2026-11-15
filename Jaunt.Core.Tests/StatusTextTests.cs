@@ -31,6 +31,25 @@ public class StatusTextTests
     public void OpenNowClosingADayAheadGivesTheDate() =>
         Assert.Equal("Open now · until Sun 15 Nov 15:00", Row(new Occurrence(Now.AddHours(-1), Now.AddDays(1))));
 
+    // The list is worked out once a second, so an "open until" opening can end before it is next worked out
+    [Fact]
+    public void AnOpeningUnderWayThatHasEndedSaysClosed()
+    {
+        var ended = new Occurrence(null, Now.AddSeconds(-1));
+
+        Assert.Equal("Closed", Row(ended));
+        Assert.Equal("Closed", Detail(ended));
+    }
+
+    [Fact]
+    public void AnEndedOpeningWithAStartSaysClosed()
+    {
+        var ended = new Occurrence(Now.AddHours(-3), Now);
+
+        Assert.Equal("Closed", Row(ended));
+        Assert.Equal("Closed", Detail(ended));
+    }
+
     [Fact]
     public void AlwaysOpenSays247() => Assert.Equal("Open now · 24h", Row(new Occurrence(null, null), always: true));
 
