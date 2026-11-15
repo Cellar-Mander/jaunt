@@ -107,6 +107,32 @@ public sealed class ConfigWindow : Window, IDisposable
             ImGui.SameLine();
             ImGui.TextDisabled(clearResult);
         }
+
+        ImGui.Spacing();
+        DrawSources();
+    }
+
+    /// <summary>Where listings come from, each linked to its site, with the credits sources ask for.</summary>
+    private static void DrawSources()
+    {
+        ImGui.TextUnformatted("Listings come from");
+        ImGui.BulletText(SourceName(ListingSource.InGamePartyFinder));
+        Bulleted(SourceName(ListingSource.Xivpf), Xivpf.SiteUrl);
+        Bulleted(SourceName(ListingSource.FfxivVenues), FfxivVenues.SiteUrl);
+        Bulleted(SourceName(ListingSource.Partake), Partake.SiteUrl);
+        ImGui.SameLine();
+        ImGui.TextWrapped($"({Partake.Disclaimer})");
+        Bulleted(SourceName(ListingSource.RpEventCalendar), RpEventCalendar.SiteUrl);
+        ImGui.SameLine();
+        ImGui.TextUnformatted("·");
+        ImGui.SameLine();
+        ListingsWindow.DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl, dimmed: false);
+    }
+
+    private static void Bulleted(string text, Uri uri)
+    {
+        ImGui.Bullet();
+        ListingsWindow.DrawLinkText(text, uri, dimmed: false);
     }
 
     /// <summary>

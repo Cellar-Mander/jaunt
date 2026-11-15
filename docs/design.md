@@ -132,6 +132,11 @@ expanded until collapsed; which are expanded is saved too. Each change saves at 
   regions, and listings off the region's worlds are left out when recorded; after a switch to another
   region their listings arrive once that cooldown passes. Listings cached for another region are
   never purged for it; they expire as usual, and the list doesn't show them (see "List").
+- **Sources**: Data ends with "Listings come from" and a bulleted list of the sources, in normal
+  text colour: the in-game Party Finder, then xivpf, FFXIV Venues, Partake and the FFXIV RP Event
+  Calendar, each opening its site (`SiteUrl`) when clicked. Partake's carries its disclaimer
+  (`Partake.Disclaimer`) in brackets on the same line, and the calendar's its CC BY-SA 4.0 licence link. These are the app-wide credits; per-listing credits are
+  in the detail footer (see "Detail pane").
   An in-game Party Finder ad on a world outside the region isn't recorded either; the game sends only
   the character's data centre, so this rarely drops one.
 - **Last fetched**: the listing cache records when each fetched source (each data centre, for a
@@ -296,8 +301,9 @@ again. The list derives them once per change to those fields, not every frame.
   A response that isn't a JSON array fails the fetch, which is logged, and the cached events stay.
 - Only the fields above are read. `contacts` and `description` (which repeats the contacts) hold
   Discord handles and are never stored or shown.
-- **Credit**: the calendar's listings are CC BY-SA 4.0, so each of its rows shows "FFXIV RP Event
-  Calendar", opening `https://ffxiv-rp.org/`, and "CC BY-SA 4.0", opening the licence.
+- **Credit**: the calendar's listings are CC BY-SA 4.0, so each of its events' detail footers shows
+  "FFXIV RP Event Calendar", opening `https://ffxiv-rp.org/`, and "CC BY-SA 4.0", opening the
+  licence. Settings → Data credits it the same way (see "Settings").
 
 ### Partake
 
@@ -336,9 +342,10 @@ data centre is in the travel region; the API has no region filter.
   that isn't JSON fails the fetch, which is logged, and the cached events stay.
 - Events that have ended by the time a fetch is recorded aren't recorded, and the list leaves out
   cached events once they end.
-- **Credit**: while the list shows any Partake event it ends with "Events from Partake (partake.gg).
-  Jaunt is not affiliated with or endorsed by Partake.", as Partake's terms ask apps not to imply
-  endorsement. Each event's source reads "Partake". Hidden venues shows a hidden event's title as
+- **Credit**: Partake's API terms (https://partake.gg/developers) bar apps from presenting
+  themselves as endorsed, and set no placement for a disclaimer. A selected event's detail footer
+  and Settings → Data (see "Settings") say "Jaunt is not affiliated with or endorsed by Partake.";
+  the list itself carries no credit line, which overflowed its narrow pane. Each event's source reads "Partake". Hidden venues shows a hidden event's title as
   the list does.
 
 ### Text the font can't draw

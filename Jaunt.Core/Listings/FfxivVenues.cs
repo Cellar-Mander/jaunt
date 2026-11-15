@@ -23,6 +23,9 @@ public static class FfxivVenues
     /// </summary>
     public const string Url = "https://api.ffxivvenues.com/v1.0/venue?approved=true&withinWeek=true";
 
+    /// <summary>FFXIV Venues' site, linked from Settings' list of sources.</summary>
+    public static readonly Uri SiteUrl = new("https://ffxivvenues.com/");
+
     /// <summary>
     /// <see cref="Url"/> for one data centre's venues. The API matches the name exactly, ignoring case,
     /// and has no region filter, so a region takes one request per data centre.
