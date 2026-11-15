@@ -33,6 +33,9 @@ public sealed class AddressParser(Gazetteer gazetteer)
 
     private static readonly HashSet<string> Ordinals = ["st", "nd", "rd", "th"];
 
+    private static readonly System.Buffers.SearchValues<char> OpeningBrackets = System.Buffers.SearchValues.Create("([【「『《〔{");
+    private static readonly System.Buffers.SearchValues<char> ClosingBrackets = System.Buffers.SearchValues.Create(")]】」』》〕}");
+
     /// <summary>Reads every address in one ad.</summary>
     /// <param name="adText">The ad's text as the game sends it, glyphs included.</param>
     /// <param name="listedOn">The world the ad is listed on: the fallback when the text names none.</param>
@@ -304,7 +307,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         {
             for (var j = open + 1; j < t.Count && j <= open + MaxBracketTokens; j++)
             {
-                if (t[j].Gap.AsSpan().IndexOfAny(")]】」』》〕}") >= 0)
+                if (t[j].Gap.AsSpan().IndexOfAny(ClosingBrackets) >= 0)
                     return j;
             }
 
@@ -313,8 +316,8 @@ public sealed class AddressParser(Gazetteer gazetteer)
 
         private static bool OpensBracket(string gap)
         {
-            var open = gap.AsSpan().LastIndexOfAny("([【「『《〔{");
-            return open >= 0 && gap.AsSpan(open).IndexOfAny(")]】」』》〕}") < 0;
+            var open = gap.AsSpan().LastIndexOfAny(OpeningBrackets);
+            return open >= 0 && gap.AsSpan(open).IndexOfAny(ClosingBrackets) < 0;
         }
 
         // ---- Finding the district and world ----
