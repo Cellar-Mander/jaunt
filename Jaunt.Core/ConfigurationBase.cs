@@ -1,3 +1,4 @@
+using Jaunt.Core.Browser;
 using Jaunt.Core.Display;
 using Jaunt.Core.Listings;
 
@@ -37,6 +38,9 @@ public abstract class ConfigurationBase
     /// <summary>The ID within <see cref="SelectedSource"/> of the listing last selected in the browser.</summary>
     public string? SelectedId { get; set; }
 
+    /// <summary>The listing browser's search and filter chips.</summary>
+    public BrowserFilters Filters { get; set; } = new();
+
     /// <summary>Which Settings groups are expanded; null until <see cref="Normalize"/>, which opens them all.</summary>
     public HashSet<SettingsSection>? ExpandedSections { get; set; }
 
@@ -48,6 +52,9 @@ public abstract class ConfigurationBase
             TimeFormat = TimeFormat.System;
         if (!Enum.IsDefined(DateFormat))
             DateFormat = DateFormat.System;
+        Filters ??= new BrowserFilters();
+        Filters.Search ??= "";
+        Filters.Tags &= ListingFilters.AllInterests;
         ExpandedSections ??= [.. Enum.GetValues<SettingsSection>()];
         ExpandedSections.RemoveWhere(section => !Enum.IsDefined(section));
         if (SelectedSource is { } source && !Enum.IsDefined(source) || SelectedSource is null != SelectedId is null)

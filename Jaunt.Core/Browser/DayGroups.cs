@@ -47,6 +47,10 @@ public static class DayGroups
                 continue;
             }
 
+            // Ended since it was listed, which is worked out less often than this
+            if (entry.When.End <= now)
+                continue;
+
             // Not open, so it has a start after now: an occurrence without a start is open until it ends
             var date = LocalDate(entry.When.Start!.Value, zone);
             if (!byDate.TryGetValue(date, out var list))

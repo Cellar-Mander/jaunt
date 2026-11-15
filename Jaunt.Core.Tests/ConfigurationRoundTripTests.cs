@@ -1,4 +1,5 @@
 using Jaunt.Core;
+using Jaunt.Core.Browser;
 using Jaunt.Core.Display;
 using Jaunt.Core.Listings;
 using Newtonsoft.Json;
@@ -147,6 +148,56 @@ public class ConfigurationRoundTripTests
         var config = new TestConfiguration { ExpandedSections = [SettingsSection.Data, (SettingsSection)9] };
 
         Assert.Equal([SettingsSection.Data], SaveAndLoad(config).ExpandedSections!);
+    }
+
+    [Fact]
+    public void FiltersLoadBack()
+    {
+        var config = new TestConfiguration
+        {
+            Filters = new BrowserFilters
+            {
+                SfwOnly = false, Favourites = true, HideVisited = true, ShowHidden = true,
+                Tags = Interests.Bars | Interests.LiveMusic, Search = "jazz -\"open mic\"",
+            },
+        };
+
+        var loaded = SaveAndLoad(config).Filters;
+
+        Assert.False(loaded.SfwOnly);
+        Assert.True(loaded.Favourites);
+        Assert.True(loaded.HideVisited);
+        Assert.True(loaded.ShowHidden);
+        Assert.Equal(Interests.Bars | Interests.LiveMusic, loaded.Tags);
+        Assert.Equal("jazz -\"open mic\"", loaded.Search);
+    }
+
+    [Fact]
+    public void ConfigSavedBeforeFiltersLoadsSfwOnlyAndNothingElse()
+    {
+        var json = JsonConvert.SerializeObject(new TestConfiguration(), DalamudSettings);
+        var start = json.IndexOf("\"Filters\":", StringComparison.Ordinal);
+        var end = json.IndexOf('}', start) + 2;
+        json = json.Remove(start, end - start);
+        Assert.DoesNotContain("Filters", json, StringComparison.Ordinal);
+
+        var filters = Load(json).Filters;
+
+        Assert.True(filters.SfwOnly);
+        Assert.False(filters.Favourites || filters.HideVisited || filters.ShowHidden);
+        Assert.Equal(Interests.None, filters.Tags);
+        Assert.Equal("", filters.Search);
+    }
+
+    [Fact]
+    public void HandEditedNullFiltersAndUnknownTagsAreCleaned()
+    {
+        var nulled = SaveAndLoad(new TestConfiguration { Filters = null! });
+        Assert.True(nulled.Filters.SfwOnly);
+
+        var odd = SaveAndLoad(new TestConfiguration { Filters = new BrowserFilters { Tags = Interests.Bars | (Interests)(1 << 20), Search = null! } });
+        Assert.Equal(Interests.Bars, odd.Filters.Tags);
+        Assert.Equal("", odd.Filters.Search);
     }
 
     [Fact]

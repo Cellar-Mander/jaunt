@@ -9,7 +9,8 @@ public static class StatusText
     /// <summary>
     /// For a list row, under a day divider that already gives the date: "Open now · 24h", "Open now",
     /// "Open now · until 23:00" (with the date when it closes after the next 24 hours), or the times,
-    /// "20:00–23:00", or "20:00" with no closing time.
+    /// "20:00–23:00", or "20:00" with no closing time. "Closed" once it has ended, as it can before the
+    /// list is next worked out.
     /// </summary>
     public static string Row(Occurrence when, bool alwaysOpen, DateTimeOffset now, TimeZoneInfo zone, TimeFormat timeFormat, DateFormat dateFormat, CultureInfo locale)
     {
@@ -17,6 +18,8 @@ public static class StatusText
             return "Open now · 24h";
         if (when.IsOpen(now))
             return OpenNow(when, now, zone, timeFormat, dateFormat, locale);
+        if (when.End <= now)
+            return "Closed";
 
         var start = Local(when.Start!.Value, zone);
         var from = DisplayFormats.FormatTime(start, timeFormat, locale);
@@ -29,7 +32,7 @@ public static class StatusText
     /// </summary>
     public static string Detail(Occurrence when, bool alwaysOpen, DateTimeOffset now, TimeZoneInfo zone, TimeFormat timeFormat, DateFormat dateFormat, CultureInfo locale)
     {
-        if (alwaysOpen || when.IsOpen(now))
+        if (alwaysOpen || when.IsOpen(now) || when.End <= now)
             return Row(when, alwaysOpen, now, zone, timeFormat, dateFormat, locale);
 
         var start = Local(when.Start!.Value, zone);

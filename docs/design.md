@@ -265,8 +265,11 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
 - **Listed on**: the world the ad was put up on (`created_world.name`), trimmed, as the in-game
   Party Finder gives it; none when it is missing or blank.
 - **Seen in both**: when the in-game Party Finder has sent a listing with the same ID, the list
-  shows only the in-game copy, whatever its marks; the xivpf copy stays in the cache. Recording an
-  xivpf ad moves the in-game copy's last seen time up to now (never back), since it was listed then.
+  shows only one copy, whatever its marks; the other stays in the cache. That is the in-game copy,
+  unless xivpf has seen the ad with other text since the game last sent it, as after the recruiter
+  edits it; a sighting at the same time goes to the game. Recording an xivpf ad with the in-game
+  copy's text moves that copy's last seen time up to now (never back), since it was listed then.
+  Texts can differ without an edit, as xivpf leaves out auto-translate phrases.
 - A listing without a whole-number ID of 0 or more, or whose fields have the wrong types, is skipped
   without failing the others. A response that isn't a JSON array fails the fetch, which is logged,
   and the cached ads stay.
@@ -461,7 +464,7 @@ again.
 
 `/jaunt` and the installer's Open button toggle the browser; `/jaunt config` and the cog in its title
 bar open Settings. The window has the list on the left and the selected listing's details on the
-right. Filters and search (`d68d407e`), the narrow single-column layout (`2dce5769`), icons and splash images (`185b66ad`, plain placeholders until then)
+right, under a line of search and filters. The narrow single-column layout (`2dce5769`), icons and splash images (`185b66ad`, plain placeholders until then)
 and copy link (`6e2b5199`) are separate tasks.
 
 - **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
@@ -472,7 +475,7 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Which listings**: in-game and xivpf Party Finder ads with at least one parsed address, FFXIV
   Venues venues with an address, Partake events, and FFXIV RP Event Calendar events with an address
   or a location, in the travel region. An entry with a hidden member (below) isn't shown. An xivpf ad the game has also sent shows once,
-  as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
+  usually as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
   Duplicates show as one entry (below).
 - **Openings** (`Schedules`), all instants in UTC:
   - FFXIV Venues: 24/7 (see "FFXIV Venues") is always open. Otherwise each schedule entry's
@@ -540,7 +543,9 @@ and copy link (`6e2b5199`) are separate tasks.
   width: the status, the title in a font a quarter larger than the default, and the world dimmed. The status is "Open now · until 23:00" in green
   ("until Mon 16 Nov 23:00" when it closes more than a day ahead), "Open now" when the end isn't
   known, "Open now · 24h", or for a later opening its times ("20:00–23:00", or "20:00" without an end).
-  Rows out of view are spaced, not drawn. The list is rebuilt every second.
+  Rows out of view are spaced, not drawn. The list is rebuilt every second. An opening that ends
+  before then shows "Closed" in the row and detail pane, and is left out when the list is next
+  grouped (on the rebuild or a filter change).
 - **Detail pane**, top to bottom, each part only when the listing has it: a placeholder band for the
   splash image; the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"); the world;
@@ -596,8 +601,8 @@ and copy link (`6e2b5199`) are separate tasks.
     set before the entry merged with another still comes off.
   - **Hide**: listings are merged before hidden ones are left out, and an entry whose place or any
     listing is hidden isn't listed, so hiding a venue also hides the ads listed as it. Hide takes the
-    entry out of the list at once and says where to un-hide it (Settings → Hidden venues). The
-    Favourites, Hide visited and Show hidden filters are `d68d407e`.
+    entry out of the list at once and says where to un-hide it (Settings → Hidden venues), unless
+    Show hidden is on.
   - **Earlier marks**: favourite and hidden marks on the listings of an entry with a plot or apartment,
     and visited on all but its event, move to its place when it is next listed.
   - Marks are saved to `marks.json` (see "Listing cache") as soon as one changes, and when matching
@@ -605,10 +610,29 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
   selection is saved in the settings (`SelectedSource`, `SelectedId`), so it shows again when the
   window is reopened or the game restarted, and is forgotten once the listing is no longer listed. A
-  saved selection with an unknown source, or only one of the two, is cleared on load.
+  saved selection with an unknown source, or only one of the two, is cleared on load. A listing the
+  filters leave out stays selected, and its details show again once they let it through.
+- **Filters and search** (`ListingFilters`): above the list, a search box, then chips that wrap onto
+  more lines when the window is narrow, with the count of entries listed at the right. Every change
+  applies at once and is saved in the settings (`Filters`), so it stays set when the window is
+  reopened; the search text is saved once the box loses focus. An entry is listed when all of these let it through:
+  - **SFW only** (on by default) leaves out entries counted as NSFW (see "Tags and SFW").
+  - **Favourites** lists only entries showing the favourite mark; **Hide visited** leaves out those
+    showing the visited mark.
+  - **Show hidden** lists hidden entries too; otherwise they are left out (see "Hide").
+  - **Tags** opens a menu of interests to tick; the entry must have every one ticked. Each ticked
+    interest also shows as a lit chip ("Bars ×") that unticks it when clicked.
+  - **Search**: space-separated terms must all match, ignoring case, anywhere in the entry's
+    titles as shown (every member's), its About text or its interests' labels. `-term` leaves out
+    entries containing it; `"two words"` matches the phrase, and `-"two words"` leaves it out. A
+    phrase must be within one of those texts. An unclosed quote runs to the end of the box; a lone
+    `-` or `""` is ignored. Hovering the box shows the syntax.
 - **Empty states**: with nothing selected the detail pane says "Select a listing on the left to see
   its details." With nothing to list, the list shows a line picked at random from a few ("No one here
   but us chickens."), chosen again each time the list becomes empty, and the detail pane is blank.
+  When there are entries but the filters let none through (hidden ones count as entries), the list
+  says "No listings match these filters." and suggests removing some or clearing the search, and the
+  detail pane is blank.
 - **Region in the list**: a listing is in the travel region by the same fields it is filtered on
   when recorded (`TravelRegion.Includes`): the world it is listed on, or for a Partake event that
   world or its data centre; an FFXIV Venues venue by its address's world as shown, misspellings
@@ -649,7 +673,12 @@ Caps on user-configurable lists and text, and how input from other players or th
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
 - Tagging a listing is one pass over its normalised text into words, a dictionary lookup per word
   (and per word of a phrase starting there), and one substring search per Japanese keyword (about
-  40), with no regex, so it stays linear in the text's length.
+  40), with no regex, so it stays linear in the text's length. The browser tags each listing once per
+  change to the fields tagging reads, not once per rebuild.
+- Filtering is one pass over the entries, with search as a case-insensitive substring check per term
+  and text (a few titles, About of at most 1,501 characters, a few labels). It runs on each rebuild
+  and each filter or search change, without working out schedules, merges or marks again. The search
+  text is parsed once per change.
 - An xivpf response (about 700 listings, 1.6 MB) is read in one pass over its listings, off the
   game thread, keeping about 150 ads; their text is at most a few hundred characters. Checking
   whether the game also sent an ad is one cache lookup.
