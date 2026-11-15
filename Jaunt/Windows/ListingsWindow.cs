@@ -56,6 +56,9 @@ internal sealed class ListingsWindow : Window
     private readonly Func<TravelRegion?> region;
     private readonly IFontHandle titleFont;
 
+    // Each icon's drawn shape (top left and bottom right) in the icon font at a size, or null if it lacks the icon
+    private static readonly Dictionary<(FontAwesomeIcon, float), (Vector2 Min, Vector2 Max)?> IconShapes = [];
+
     // Parsed once per ad text or event location and world, and derived once per venue's fields, so
     // drawing doesn't re-parse every frame
     private readonly Dictionary<(ListingSource, string), (string Text, string? ListedOn, ListingDetails Details)> parsed = [];
@@ -245,6 +248,8 @@ internal sealed class ListingsWindow : Window
         var isSelected = selected is { } key && rowsByKey.TryGetValue(key, out var selectedRow) && ReferenceEquals(selectedRow, row);
         if (ImGui.Selectable("##row", isSelected, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
             Select(row);
+        // The highlighted area, which reaches half the item spacing past the row on each side
+        var highlight = (Min: ImGui.GetItemRectMin(), Max: ImGui.GetItemRectMax());
         var after = ImGui.GetCursorScreenPos();
 
         // Icons and images are 185b66ad; a plain square holds their place
@@ -253,9 +258,9 @@ internal sealed class ListingsWindow : Window
         var textLeft = start.X + rowHeight + spacing;
         var width = ImGui.GetContentRegionMax().X + ImGui.GetWindowPos().X - textLeft;
 
-        // Favourite and visited show as icons at the right of the status line, which is cut to leave room
-        var marksWidth = DrawRowMarks(row, new Vector2(textLeft + width, start.Y));
-        var statusWidth = marksWidth > 0 ? width - marksWidth - spacing : width;
+        // Favourite and visited show as icons in the highlight's top right corner, and the status line is cut to leave room
+        var marksLeft = DrawRowMarks(row, highlight.Min, highlight.Max);
+        var statusWidth = Math.Min(width, marksLeft - spacing - textLeft);
         ImGui.SetCursorScreenPos(new Vector2(textLeft, start.Y));
         var status = StatusText.Row(entry.When, entry.AlwaysOpen, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale);
         if (entry.AlwaysOpen || entry.When.IsOpen(now))
@@ -271,30 +276,67 @@ internal sealed class ListingsWindow : Window
         ImGui.SetCursorScreenPos(after);
     }
 
-    /// <summary>The favourite star and visited tick, right-aligned to <paramref name="topRight"/>; returns their width, 0 for none.</summary>
-    private static float DrawRowMarks(Row row, Vector2 topRight)
+    /// <summary>
+    /// The favourite star and visited tick, inset from the top and right of the row's highlight by the
+    /// same gap; returns their left edge, or the highlight's right edge for none.
+    /// </summary>
+    private static float DrawRowMarks(Row row, Vector2 min, Vector2 max)
     {
         var favourite = EntryMarks.Has(row.Listings, EntryMark.Favourite);
         var visited = EntryMarks.Has(row.Listings, EntryMark.Visited);
         if (!favourite && !visited)
-            return 0;
+            return max.X;
 
-        using var font = ImRaii.PushFont(UiBuilder.IconFont);
-        var spacing = ImGui.GetStyle().ItemSpacing.X;
-        var star = FontAwesomeIcon.Star.ToIconString();
-        var tick = FontAwesomeIcon.Check.ToIconString();
-        var width = (favourite ? ImGui.CalcTextSize(star).X : 0) + (visited ? ImGui.CalcTextSize(tick).X : 0) + (favourite && visited ? spacing : 0);
-        ImGui.SetCursorScreenPos(new Vector2(topRight.X - width, topRight.Y));
-        if (favourite)
+        var size = ImGui.GetFontSize();
+        var gap = ImGui.GetStyle().ItemSpacing.Y;
+        var drawList = ImGui.GetWindowDrawList();
+        var right = max.X - gap;
+        if (visited)
         {
-            ImGui.TextColored(ImGuiColors.DalamudYellow, star);
-            if (visited)
-                ImGui.SameLine();
+            DrawIcon(drawList, FontAwesomeIcon.Check, new Vector2(right - (size / 2), min.Y + gap + (size / 2)), size, ImGui.GetColorU32(ImGuiColors.HealerGreen));
+            right -= size + gap;
         }
 
-        if (visited)
-            ImGui.TextColored(ImGuiColors.HealerGreen, tick);
-        return width;
+        if (favourite)
+        {
+            DrawIcon(drawList, FontAwesomeIcon.Star, new Vector2(right - (size / 2), min.Y + gap + (size / 2)), size, ImGui.GetColorU32(ImGuiColors.DalamudYellow));
+            right -= size + gap;
+        }
+
+        return right + gap;
+    }
+
+    /// <summary>
+    /// An icon centred on <paramref name="centre"/> by its drawn shape rather than its advance, which
+    /// for FontAwesome glyphs is wider than the shape and leaves it off centre.
+    /// </summary>
+    /// <param name="size">The size of the box it fits in; the icon's larger side is drawn this long.</param>
+    private static void DrawIcon(ImDrawListPtr drawList, FontAwesomeIcon icon, Vector2 centre, float size, uint colour)
+    {
+        var font = UiBuilder.IconFont;
+        if (!IconShapes.TryGetValue((icon, font.FontSize), out var bounds))
+        {
+            // Found once per icon and font size, as the icon font holds over a thousand glyphs
+            bounds = null;
+            var glyphs = font.Glyphs;
+            for (var i = 0; i < glyphs.Size; i++)
+            {
+                var glyph = glyphs[i];
+                if (glyph.Codepoint == (uint)icon)
+                {
+                    bounds = (new Vector2(glyph.X0, glyph.Y0), new Vector2(glyph.X1, glyph.Y1));
+                    break;
+                }
+            }
+
+            IconShapes[(icon, font.FontSize)] = bounds;
+        }
+
+        if (bounds is not var (min, max))
+            return;
+        var shape = max - min;
+        var scale = size / Math.Max(shape.X, shape.Y);
+        drawList.AddText(font, font.FontSize * scale, centre - ((min + max) * (scale / 2)), colour, icon.ToIconString());
     }
 
     private void DrawDetail(DateTimeOffset now)
@@ -378,9 +420,10 @@ internal sealed class ListingsWindow : Window
         var marked = EntryMarks.Has(row.Listings, mark);
         bool clicked;
         using (ImRaii.PushId((int)mark))
-        using (ImRaii.PushColor(ImGuiCol.Text, on, marked))
-        using (ImRaii.PushFont(UiBuilder.IconFont))
-            clicked = ImGui.Button(icon.ToIconString(), size);
+            clicked = ImGui.Button("##mark", size);
+        // Drawn over the button, centred by shape and a little over half its height
+        var centre = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        DrawIcon(ImGui.GetWindowDrawList(), icon, centre, size.Y * 0.55f, marked ? ImGui.GetColorU32(on) : ImGui.GetColorU32(ImGuiCol.Text));
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(marked ? clearTip : string.Format(CultureInfo.CurrentCulture, setTip, TargetNoun(row, mark)));
         if (clicked)
