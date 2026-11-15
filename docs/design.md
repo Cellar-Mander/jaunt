@@ -213,7 +213,8 @@ works out from each venue's schedule. A venue left out stays in the cache with i
 and in the browser while it has openings to list, until it expires (see "Listing cache"). `FfxivVenues`
 records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
 the API sent them: its name as the title, and its location, website, Discord, schedule, `sfw` and
-tags, each schedule entry with its time zone (the start's `timeZone`, an IANA ID). The title,
+tags, each schedule entry with its time zone (the start's `timeZone`, an IANA ID); and its
+`description`, cleaned when read (see "Descriptions"). The title,
 address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
 to how they are read applies to cached venues without fetching again. A venue cached without them
 shows no address until the next fetch. Opening the browser asks for each data centre in the region
@@ -228,9 +229,11 @@ each request is recorded before it is sent, so a failed one counts too. Download
   beginning of at least 5 letters ("Bismark" → Bismarck), and otherwise kept as written. A venue with
   no world, an unknown district or a ward outside 1–30 (such as one giving only a free-text location)
   has no address and isn't in the browser.
-- **Links**: the website then the Discord, http or https only. One without a scheme is read like a
-  link in ad text (`discord.gg/abc` opens as https); any other scheme is dropped, including in a
-  hand-edited cache. The same link twice is kept once.
+- **Links**: the website then the Discord, then the Discord invites the description links to, http
+  or https only. One without a scheme is read like a link in ad text (`discord.gg/abc` opens as
+  https); any other scheme is dropped, including in a hand-edited cache. The same link twice is kept once.
+- **Description**: the `description` paragraphs that aren't blank, joined with a blank line, then
+  cleaned. 1,340 of 1,365 venues had one in the spike capture.
 - **Open 24/7**: every day of the week (days 0–6) has an opening that repeats every week (interval
   type 0, every 1 week) and lasts at least 23 h 59 min, end minus start plus a day when the end is the
   next day. The site's form can't end at 24:00, so venues open around the clock enter 00:00–23:59.
@@ -280,7 +283,7 @@ a world in the travel region, or is missing, isn't recorded; the week endpoint h
 
 **Stored as sent**: the cache keeps `eventName` (as the listing's title), `server` (as the world
 it is listed on), `location`, `esrbRating` and `eventURL` exactly as the calendar sent them, an empty title when
-the name is missing. The title, address, location and rating below are derived from those when
+the name is missing. `shortDescription` is kept cleaned instead (see "Descriptions"). The title, address, location and rating below are derived from those when
 shown, never stored, so a change to how they are read reaches cached events without fetching
 again. The list derives them once per change to those fields, not every frame.
 
@@ -296,7 +299,10 @@ again. The list derives them once per change to those fields, not every frame.
   written, not as a listing world. Without a server, the address has no world.
 - **Location**: a location with no housing address ("North Shroud, Hyrstmill", "See URL") is shown
   as text, trimmed; an empty one is neither.
-- **Links**: `eventURL`, stored as sent; shown only if http or https, read like FFXIV Venues' links.
+- **Links**: `eventURL`, stored as sent; shown only if http or https, read like FFXIV Venues' links;
+  then the Discord invites the short description links to.
+- **Description**: `shortDescription`, the organiser's own text, which every event had in November
+  2026. It is cleaned with Discord handles removed, so a contact named in it is never stored.
 - **Openings**: each occurrence's `startTimeUTC` and `endTimeUTC`, earliest first, the same one
   kept once. An occurrence without both, or that doesn't end after it starts, is skipped; the
   event keeps its other occurrences. Each fetch replaces an event's openings.
@@ -305,8 +311,8 @@ again. The list derives them once per change to those fields, not every frame.
   but not shown.
 - A row without an ID, or whose fields have the wrong types, is skipped without failing the others.
   A response that isn't a JSON array fails the fetch, which is logged, and the cached events stay.
-- Only the fields above are read. `contacts` and `description` (which repeats the contacts) hold
-  Discord handles and are never stored or shown.
+- Only the fields above are read. `contacts` and `description` (the short description wrapped in
+  a template with the contacts) hold Discord handles and are never read, stored or shown.
 - **Credit**: the calendar's listings are CC BY-SA 4.0, so each of its events' detail footers shows
   "FFXIV RP Event Calendar", opening `https://ffxiv-rp.org/`, and "CC BY-SA 4.0", opening the
   licence. Settings → Data credits it the same way (see "Settings").
@@ -322,14 +328,14 @@ data centre is in the travel region; the API has no region filter.
 
 - **Raw values**: the cache keeps the title, world, data centre, location, links, age rating and
   tags exactly as Partake sent them (links in `linkTexts`; the rating and tags are for "Tags and
-  SFW"). The rules below for showing them run each time they
+  SFW"), and the description cleaned (see "Descriptions"). The rules below for showing them run each time they
   are shown, so a change to these rules or the address parser applies on the next plugin load,
   not after the next fetch.
 - **Query**: `events(game: "final-fantasy-xiv", startsBetween: {start}, sortBy: STARTS_AT_ASC)`
   with `start` 24 hours before now, so events already under way are included. Pages of 200 (`limit`,
   `offset`) until a page comes back with fewer, at most 5 pages per fetch. About 150 events are
   listed at once, so one page is usual. Only the fields shown or filtered on are asked for: `id`,
-  `title`, `startsAt`, `endsAt`, `location`, `ageRating`, `tags`, `server.name`, `dataCenter.name`
+  `title`, `description`, `startsAt`, `endsAt`, `location`, `ageRating`, `tags`, `server.name`, `dataCenter.name`
   and the host team's `websiteUrl` and `discordUrl`. `server` and `dataCenter` work but aren't in Partake's docs.
 - **Title**: shown trimmed and cut to 60 characters like an ad's.
 - **Times**: `startsAt` and `endsAt` (UTC), shown in local time in the chosen time and date formats,
@@ -341,8 +347,10 @@ data centre is in the travel region; the API has no region filter.
 - **Location**: free text ("LB W19 P58", "57 plot, ward15 , lavender beds"), trimmed, for the same
   address parser as ad text. When no address is read from it, the text is shown instead, without
   Travel.
-- **Links**: the host's website then Discord, shown like FFXIV Venues links: http or https only. On
-  load, the cache drops missing link texts.
+- **Links**: the host's website then Discord, then the Discord invites the description links to,
+  shown like FFXIV Venues links: http or https only. On load, the cache drops missing link texts.
+- **Description**: Markdown, often with images; 88 of 100 events had text left once cleaned. An
+  image in it is for 185b66ad's splash images; About leaves it out.
 - An event is skipped, without failing the others, when it lacks an ID or either time, its title
   or world is missing or blank, its end is not after its start, or its fields have the wrong types.
   A response with GraphQL `errors` (Partake answers those with HTTP 200), without `data.events`, or
@@ -354,6 +362,38 @@ data centre is in the travel region; the API has no region filter.
   and Settings → Data (see "Settings") say "Jaunt is not affiliated with or endorsed by Partake.";
   the list itself carries no credit line, which overflowed its narrow pane. Each event's source reads "Partake". Hidden venues shows a hidden event's title as
   the list does.
+
+### Descriptions
+
+FFXIV Venues, Partake and the RP calendar give a description of their own (see each source), which
+About shows when no ad gives text. `ListingAbout.Clean` cleans it once, when the source is read, and
+the cache keeps only the cleaned text, so a change to these rules applies after the next fetch. One
+pass over each line:
+
+- **Lines**: line endings become `\n`; each line is trimmed, with runs of spaces, tabs and no-break
+  spaces as one space. Runs of blank lines become one blank line, and blank lines at the start and
+  end go.
+- **Blocks**: a heading's `#` to `######` and a quote's `>` go; a list item's `-`, `*` or `+` becomes
+  "•". A line of only three or more `-`, `*` or `_` (a rule) becomes a blank line.
+- **Inline**: images (`![alt](url)`) go; a link (`[text](url)`) becomes its text, also inside an image
+  in the link's text. `**`, `__` and `~~` go; a lone `*` goes unless it stands between spaces
+  ("5 * 3"), and a lone `_` unless it is inside a word ("snake_case"). A backslash before ASCII
+  punctuation goes, keeping the punctuation. An HTML tag (`<` then a letter or `/`, up to `>`)
+  becomes a space; an autolink (`<https://…>`) keeps its address. "<3" and "a < b" stay.
+- **Handles** (RP calendar only): "@" then a letter (an "_" after "@" has gone as emphasis) and up to 31 more letters, digits, "_" or
+  "." goes, unless after a letter, digit or "." (so e-mail addresses stay); so does a name ending in
+  "#" and four digits ("Enhasa#1319"). "@ 8pm" and "#12345" stay.
+- **Invites**: Discord invites among the Markdown links' targets, then in the text, each once. They
+  join the listing's links, so the footer's Discord link and Open page work as for other links.
+- **Empty**: text with no letter or digit outside its links (only images, links and symbols) is
+  none, so About stays empty; the invites are still kept.
+- **Limit**: past 1,500 characters the text is cut at the last space or line break after 1,000,
+  else at 1,500 (never inside a surrogate pair), and ends with "…". A cut description shown in full
+  is followed by "Read the rest on the website", opening the listing's first link that isn't a
+  Discord invite, when it has one. In November 2026 this cut 5 of 1,365 venues and 4 of 100 Partake events.
+- Characters the font lacks, such as emoji, are left to "Text the font can't draw" when shown.
+- **Filters**: a description shows with its listing; the SFW filter (see "Tags and SFW") decides
+  whether the listing shows at all, so there is no separate check on the text.
 
 ### Text the font can't draw
 
@@ -473,8 +513,9 @@ and copy link (`6e2b5199`) are separate tasks.
     Its addresses and world are those of a member naming a plot or apartment rather than only the
     ward: a Party Finder ad's, as an ad can name the room, else FFXIV Venues', else the calendar's, else
     Partake's. Its links are every member's, the title's source first, each once; so different pages
-    at one address become links of one entry. About is the text of the ad that stops being listed
-    soonest (last seen plus 1 hour, plus the cooldown for xivpf). The footer names every member's
+    at one address become links of one entry. About is the text of the ad or event that stops being
+    listed soonest (for an ad, last seen plus 1 hour, plus the cooldown for xivpf), as it is about the
+    opening listed; failing that, the FFXIV Venues description. The footer names every member's
     source, plus the calendar's licence and the Partake line when a member is from them.
   - Selecting any member selects the entry, and a saved selection of any member still finds it.
   - An ad's times that state no zone take the zone of an FFXIV Venues venue at its address; failing
@@ -501,8 +542,9 @@ and copy link (`6e2b5199`) are separate tasks.
   splash image; the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"); the world;
   Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
-  a location given only as text, and any further links; About: an ad's normalised text, cut with "…" to 6 lines with "Read more" (then "Show
-  less"); Age / rating: an RP calendar event's rating; then a footer line: "Discord" linking to the
+  a location given only as text, and any further links; About: an ad's normalised text, or else the
+  description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
+  less"), with "Read the rest on the website" after a description cut at the limit; Age / rating: an RP calendar event's rating; then a footer line: "Discord" linking to the
   first Discord invite among the links (`discord.gg/…`, or `discord.com/invite/…` and
   `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
   ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source
@@ -613,6 +655,8 @@ Caps on user-configurable lists and text, and how input from other players or th
   of the list (once a second), about 150 events.
 - An FFXIV Venues fetch is at most one request per data centre in the region (4 for North America and
   Japan, 2 for Europe, 1 for Oceania), each read in one pass over its venues, off the game thread; a venue's links
-  are at most two, and titles are cut to 60 characters when shown. The list (about 750 of 1,400 venues,
-  1.6 MB) keeps `cache/FfxivVenues.json` under about 800 KB. The list derives a venue's title, address, links and
+  are two plus any invites in its description, and titles are cut to 60 characters when shown. The list (about 750 of 1,400 venues,
+  1.6 MB) keeps `cache/FfxivVenues.json` under about 1.1 MB, of which descriptions are about 260 KB.
+- Cleaning a description is one pass over its lines plus a link search, once per fetch, off the game
+  thread; the cleaned text is at most 1,501 characters. The list derives a venue's title, address, links and
   24/7 once per change to its cached fields, not per frame.

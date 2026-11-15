@@ -18,8 +18,9 @@ public class PartakeTests
         string dataCenter = """{"name":"Light"}""",
         string team = """{"websiteUrl":"https://virtue-xiv.club/","discordUrl":"discord.gg/xivvirtue"}""",
         string ageRating = "\"ADULT\"",
-        string tags = """["Live DJs","Casino & Gambling"]""") => $$"""
-        {"id":{{id}},"title":{{title}},"startsAt":{{startsAt}},"endsAt":{{endsAt}},"location":{{location}},
+        string tags = """["Live DJs","Casino & Gambling"]""",
+        string description = "null") => $$"""
+        {"id":{{id}},"title":{{title}},"description":{{description}},"startsAt":{{startsAt}},"endsAt":{{endsAt}},"location":{{location}},
          "server":{{server}},"dataCenter":{{dataCenter}},"team":{{team}},"ageRating":{{ageRating}},"tags":{{tags}} }
         """;
 
@@ -77,6 +78,56 @@ public class PartakeTests
         var query = JsonDocument.Parse(Partake.RequestBody(Now, 0)).RootElement.GetProperty("query").GetString()!;
 
         Assert.Contains(" ageRating tags", query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AsksForTheDescription()
+    {
+        var query = JsonDocument.Parse(Partake.RequestBody(Now, 0)).RootElement.GetProperty("query").GetString()!;
+
+        Assert.Contains(" description ", query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadsTheDescriptionAsPlainText()
+    {
+        var item = Single(EventJson(description: JsonSerializer.Serialize(
+            "\n![](https://cdn.partake.gg/assets/a.webp)\n\n## **Welcome!**\n\nLive DJs all night.\n\nhttps://discord.gg/xivvirtue\n")));
+
+        Assert.Equal("Welcome!\n\nLive DJs all night.\n\nhttps://discord.gg/xivvirtue", item.About!.Text);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\"\"")]
+    [InlineData("\"![](https://cdn.partake.gg/assets/a.webp)\"")]
+    public void AnEventWithoutADescriptionHasNone(string description) =>
+        Assert.Null(Single(EventJson(description: description)).About);
+
+    [Fact]
+    public void ADescriptionsInvitesJoinTheLinksOnce()
+    {
+        var cache = new ListingCache();
+        var description = JsonSerializer.Serialize("Join discord.gg/xivvirtue or [our backup](https://discord.gg/backup)");
+        Partake.Record(cache, [Single(EventJson(description: description))], Now);
+
+        var shown = Partake.Show(Assert.Single(cache.Listings), TestGazetteer.Instance);
+
+        Assert.Equal(
+            [new Uri("https://virtue-xiv.club/"), new Uri("https://discord.gg/xivvirtue"), new Uri("https://discord.gg/backup")],
+            shown.Links);
+    }
+
+    [Fact]
+    public void KeepsTheDescriptionThroughTheCache()
+    {
+        var cache = new ListingCache();
+        Partake.Record(cache, [Single(EventJson(description: "\"**Live DJs** at discord.gg/backup\""))], Now);
+
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.Partake, "56564")!;
+
+        Assert.Equal(("Live DJs at discord.gg/backup", false), (back.About!.Text, back.About.Cut));
+        Assert.Equal(["https://discord.gg/backup"], back.About.Invites);
     }
 
     [Fact]

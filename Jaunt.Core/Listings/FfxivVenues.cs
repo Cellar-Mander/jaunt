@@ -56,7 +56,8 @@ public static class FfxivVenues
 
     /// <summary>One venue as the API sends it, with only the fields Jaunt reads.</summary>
     /// <param name="Name">Its name as sent; null if missing.</param>
-    public sealed record Venue(string Id, string? Name, Fields Fields);
+    /// <param name="About">Its description, cleaned when read; null if it has none, as in venues cached before it was kept.</param>
+    public sealed record Venue(string Id, string? Name, Fields Fields, ListingAbout? About = null);
 
     /// <summary>A venue's fields as the API sends them, other than its ID and name.</summary>
     /// <param name="Location">Null if missing.</param>
@@ -69,7 +70,7 @@ public static class FfxivVenues
 
     /// <summary>What the list shows for a venue, derived from its cached fields.</summary>
     /// <param name="Address">Null when the venue gives no housing address (a free-text location, or none).</param>
-    /// <param name="Links">Its website and Discord, http or https only.</param>
+    /// <param name="Links">Its website and Discord, then the Discord invites its description links to, http or https only.</param>
     public sealed record Shown(string Title, HousingAddress? Address, IReadOnlyList<Uri> Links, bool AlwaysOpen);
 
     /// <summary>Reads the API's response.</summary>
@@ -93,12 +94,16 @@ public static class FfxivVenues
 
     /// <summary>
     /// Records that FFXIV Venues listed these venues now, keeping the name as the listing's title and
-    /// the other fields, all as sent.
+    /// the other fields, all as sent, and the cleaned description.
     /// </summary>
     public static void Record(ListingCache cache, IEnumerable<Venue> venues, DateTimeOffset now)
     {
         foreach (var venue in venues)
-            cache.Seen(ListingSource.FfxivVenues, venue.Id, venue.Name ?? "", now).Venue = venue.Fields;
+        {
+            var listing = cache.Seen(ListingSource.FfxivVenues, venue.Id, venue.Name ?? "", now);
+            listing.Venue = venue.Fields;
+            listing.About = venue.About;
+        }
     }
 
     /// <summary>What the list shows for a cached venue, derived from its fields as sent.</summary>
@@ -109,7 +114,7 @@ public static class FfxivVenues
         return new Shown(
             Title(listing.Title),
             Address(fields?.Location, gazetteer),
-            Links(fields?.Website, fields?.Discord),
+            Links([fields?.Website, fields?.Discord, .. listing.About?.Invites ?? []]),
             AlwaysOpen(fields?.Schedule));
     }
 
@@ -128,7 +133,9 @@ public static class FfxivVenues
         if (data is null || string.IsNullOrWhiteSpace(data.Id) || data.Approved == false)
             return null;
 
-        return new Venue(data.Id, data.Name, new Fields(data.Location, data.Website, data.Discord, data.Schedule, data.Sfw, data.Tags));
+        return new Venue(
+            data.Id, data.Name, new Fields(data.Location, data.Website, data.Discord, data.Schedule, data.Sfw, data.Tags),
+            ListingAbout.Clean(string.Join("\n\n", (data.Description ?? []).Where(p => !string.IsNullOrWhiteSpace(p)))));
     }
 
     /// <summary>
@@ -243,6 +250,9 @@ public static class FfxivVenues
         public List<Opening?>? Schedule { get; set; }
         public bool? Sfw { get; set; }
         public List<string?>? Tags { get; set; }
+
+        /// <summary>Paragraphs of plain text, often with Markdown.</summary>
+        public List<string?>? Description { get; set; }
     }
 
     /// <summary>A venue's location as the API sends it. A venue that gives only a free-text location sends no world or district.</summary>

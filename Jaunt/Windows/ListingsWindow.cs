@@ -83,7 +83,8 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// One entry as the browser shows it: its title, addresses and links, world, schedule, what is
-    /// shown of a Partake or RP calendar event, and an ad's text for About. A merged entry's
+    /// shown of a Partake or RP calendar event, and an ad's text or a description for About, with
+    /// <see cref="AboutCut"/> when the description was cut short. A merged entry's
     /// <see cref="Listing"/> is the member whose title it shows, and <see cref="Members"/> lists them all.
     /// </summary>
     private sealed record Row(
@@ -94,7 +95,8 @@ internal sealed class ListingsWindow : Window
         ListingSchedule Schedule,
         string? About,
         Partake.Shown? Event = null,
-        RpEventCalendar.Shown? CalendarEvent = null)
+        RpEventCalendar.Shown? CalendarEvent = null,
+        bool AboutCut = false)
     {
         public (ListingSource, string) Key => (Listing.Source, Listing.Id);
 
@@ -115,9 +117,11 @@ internal sealed class ListingsWindow : Window
     /// A calendar event's fields that <see cref="RpEventCalendar.Show"/> reads. Recording a fetch assigns
     /// new objects, so a reference check finds every change.
     /// </summary>
-    private readonly record struct CalendarFields(string Title, string? Location, string? ListedOn, string? Rating, IReadOnlyList<string> LinkTexts)
+    private readonly record struct CalendarFields(
+        string Title, string? Location, string? ListedOn, string? Rating, IReadOnlyList<string> LinkTexts, ListingAbout? About)
     {
-        public static CalendarFields Of(CachedListing listing) => new(listing.Title, listing.Location, listing.ListedOn, listing.Rating, listing.LinkTexts);
+        public static CalendarFields Of(CachedListing listing) =>
+            new(listing.Title, listing.Location, listing.ListedOn, listing.Rating, listing.LinkTexts, listing.About);
 
         public bool Same(CalendarFields other) =>
             ReferenceEquals(Title, other.Title) && ReferenceEquals(Location, other.Location) && ReferenceEquals(ListedOn, other.ListedOn)
@@ -564,7 +568,10 @@ internal sealed class ListingsWindow : Window
         }
     }
 
-    /// <summary>An ad's text, cut to <see cref="AboutLines"/> lines with "Read more" when longer.</summary>
+    /// <summary>
+    /// An ad's text or a description, cut to <see cref="AboutLines"/> lines with "Read more" when longer.
+    /// Once a description cut short is shown in full, a link to the page follows, when there is one.
+    /// </summary>
     private void DrawAbout(Row row, float width)
     {
         if (row.About is not { Length: > 0 } about)
@@ -573,7 +580,10 @@ internal sealed class ListingsWindow : Window
         Section("About");
         var cut = aboutExpanded ? about : CutToLines(about, width);
         ImGui.TextWrapped(cut);
-        if (!ReferenceEquals(cut, about) || aboutExpanded)
+        var whole = ReferenceEquals(cut, about);
+        if (whole && row.AboutCut && PageIndex(row.Details.Links) is var page and >= 0)
+            DrawLinkText("Read the rest on the website", row.Details.Links[page].Uri);
+        if (!whole || aboutExpanded)
         {
             if (ImGui.SmallButton(aboutExpanded ? "Show less" : "Read more"))
                 aboutExpanded = !aboutExpanded;
@@ -886,8 +896,8 @@ internal sealed class ListingsWindow : Window
     /// <summary>
     /// The entry for listings shown as one: the title of the member <see cref="Duplicates.TitleRank"/>
     /// puts first, the addresses and world of the one <see cref="Duplicates.AddressRank"/> does among
-    /// those naming a plot or apartment, every member's links once each, and the About of the ad that
-    /// stops being listed soonest.
+    /// those naming a plot or apartment, every member's links once each, and the About of the ad or
+    /// event that stops being listed soonest, else the venue's description.
     /// </summary>
     private Row Entry(MergedListing<Row> merged)
     {
@@ -909,13 +919,17 @@ internal sealed class ListingsWindow : Window
                 links.Add(link);
         }
 
+        // An ad or event is about the opening listed, so its text wins over a venue's standing description
         var about = byTitle.Where(m => m.About is { Length: > 0 })
-            .MinBy(m => Schedules.ListedUntil(m.Listing.Source, m.Listing.LastSeen, configuration.RefreshCooldownMinutes))?.About;
+            .OrderBy(m => m.Listing.Source == ListingSource.FfxivVenues)
+            .ThenBy(m => Schedules.ListedUntil(m.Listing.Source, m.Listing.LastSeen, configuration.RefreshCooldownMinutes))
+            .FirstOrDefault();
         var first = byTitle[0];
         var row = new Row(
-            first.Listing, first.Title, byAddress.Details with { Links = links }, byAddress.World, merged.Schedule, about,
+            first.Listing, first.Title, byAddress.Details with { Links = links }, byAddress.World, merged.Schedule, about?.About,
             byTitle.Select(m => m.Event).FirstOrDefault(e => e is not null),
-            byTitle.Select(m => m.CalendarEvent).FirstOrDefault(e => e is not null))
+            byTitle.Select(m => m.CalendarEvent).FirstOrDefault(e => e is not null),
+            about?.AboutCut ?? false)
         {
             Members = byTitle,
             Listed = merged.Listed,
@@ -959,7 +973,7 @@ internal sealed class ListingsWindow : Window
                     if (shown.Address is not { } address || !travel.Includes(shown))
                         return null;
                     return new Row(listing, shown.Title, new ListingDetails([address], WebLinks(shown.Links)), address.World,
-                        Schedules.ForVenue(listing.Venue, now), About: null);
+                        Schedules.ForVenue(listing.Venue, now), Described(listing), AboutCut: listing.About?.Cut ?? false);
                 }
 
             case ListingSource.Partake:
@@ -969,7 +983,8 @@ internal sealed class ListingsWindow : Window
                     var location = Parsed(listing, item.Location, item.World);
                     var world = item.DataCentre is { } dataCentre ? $"{item.World} ({dataCentre})" : item.World;
                     return new Row(listing, item.Title, location with { Links = WebLinks(item.Links) }, world,
-                        Schedules.ForEvent(listing.StartsAt, listing.EndsAt), About: null, Event: item);
+                        Schedules.ForEvent(listing.StartsAt, listing.EndsAt), Described(listing), Event: item,
+                        AboutCut: listing.About?.Cut ?? false);
                 }
 
             case ListingSource.RpEventCalendar:
@@ -987,7 +1002,8 @@ internal sealed class ListingsWindow : Window
                         return null;
                     var details = new ListingDetails(calendarEvent.Address is { } at ? [at] : [], WebLinks(calendarEvent.Links));
                     return new Row(listing, calendarEvent.Title, details, calendarEvent.Address?.World ?? listing.ListedOn,
-                        Schedules.ForOpenings(listing.Openings, listing.OneOff), About: null, CalendarEvent: calendarEvent);
+                        Schedules.ForOpenings(listing.Openings, listing.OneOff), Described(listing), CalendarEvent: calendarEvent,
+                        AboutCut: listing.About?.Cut ?? false);
                 }
 
             case ListingSource.InGamePartyFinder or ListingSource.Xivpf:
@@ -1074,6 +1090,9 @@ internal sealed class ListingsWindow : Window
 
         return ShownText.Fold(entry.About);
     }
+
+    /// <summary>A venue's or event's description for About, as the font can draw it; null when it has none.</summary>
+    private static string? Described(CachedListing listing) => listing.About is { } about ? ShownText.Fold(about.Text) : null;
 
     private static IReadOnlyList<WebLink> WebLinks(IEnumerable<Uri> links) => [.. links.Select(uri => new WebLink(uri.OriginalString, uri))];
 

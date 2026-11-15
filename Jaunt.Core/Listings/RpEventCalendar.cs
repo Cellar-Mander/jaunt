@@ -14,7 +14,8 @@ namespace Jaunt.Core.Listings;
 /// The response holds one row per occurrence, about 500 rows and 700 KB, which this groups into one
 /// event per calendar ID in a single pass. A row that doesn't have the expected shape is skipped
 /// rather than failing the rest. Each row's description and contacts hold Discord handles, so they
-/// are never read. The cache keeps the name, server, location and rating as the calendar sent them,
+/// are never read; the short description, the organiser's own text, is read with any handles in it
+/// removed. The cache keeps the name, server, location and rating as the calendar sent them,
 /// so a change to how they are read applies to cached events without fetching again.
 /// </remarks>
 public static class RpEventCalendar
@@ -42,6 +43,7 @@ public static class RpEventCalendar
     /// <param name="Openings">Its occurrences in the response, earliest first.</param>
     /// <param name="OneOff">The calendar says it doesn't recur.</param>
     /// <param name="LastValidated">The day a moderator last checked it, or null if never.</param>
+    /// <param name="About">Its short description, cleaned and without Discord handles when read; null if it has none.</param>
     public sealed record Event(
         string Id,
         string? Name,
@@ -51,13 +53,14 @@ public static class RpEventCalendar
         IReadOnlyList<string> LinkTexts,
         IReadOnlyList<ListingOpening> Openings,
         bool OneOff,
-        DateOnly? LastValidated);
+        DateOnly? LastValidated,
+        ListingAbout? About = null);
 
     /// <summary>What the list shows for an event, derived from its cached raw fields.</summary>
     /// <param name="Address">The housing address read from the location, or null when it gives none.</param>
     /// <param name="Location">The location, trimmed, when it has no housing address (an open-world spot); otherwise null.</param>
     /// <param name="Rating">Its content rating ("Teen", "Mature", "Adults Only"), or null if it gives none.</param>
-    /// <param name="Links">Its page, http or https only.</param>
+    /// <param name="Links">Its page, then the Discord invites its description links to, http or https only.</param>
     public sealed record Shown(string Title, HousingAddress? Address, string? Location, string? Rating, IReadOnlyList<Uri> Links);
 
     /// <summary>Reads the API's response.</summary>
@@ -103,7 +106,8 @@ public static class RpEventCalendar
             row.EventUrl is { } url ? [url] : [],
             [.. openings.OrderBy(o => o.Start)],
             row.IsRecurring == false,
-            LastValidated(row.LastValidated));
+            LastValidated(row.LastValidated),
+            ListingAbout.Clean(row.ShortDescription, scrubHandles: true));
 
     /// <summary>
     /// Records that the calendar listed these events now, keeping the name as the listing's title,
@@ -127,6 +131,7 @@ public static class RpEventCalendar
             listing.LinkTexts = calendarEvent.LinkTexts;
             listing.Openings = calendarEvent.Openings;
             listing.LastValidated = calendarEvent.LastValidated;
+            listing.About = calendarEvent.About;
         }
     }
 
@@ -143,7 +148,7 @@ public static class RpEventCalendar
             address,
             address is null && location.Length > 0 ? location : null,
             string.IsNullOrWhiteSpace(listing.Rating) ? taggedRating : listing.Rating.Trim(),
-            FfxivVenues.Links([.. listing.LinkTexts]));
+            FfxivVenues.Links([.. listing.LinkTexts, .. listing.About?.Invites ?? []]));
     }
 
     /// <summary>The title shown for an event's name as sent: without its rating tag, first line only, cut to 60 characters.</summary>
@@ -204,7 +209,7 @@ public static class RpEventCalendar
             : null;
 
     // The API's shape, only the fields Jaunt reads. Others, such as the description and contacts,
-    // which hold Discord handles, are ignored.
+    // which hold Discord handles, are ignored; the short description is the organiser's text without them.
     private sealed class RowData
     {
         [JsonPropertyName("uId")]
@@ -221,6 +226,9 @@ public static class RpEventCalendar
 
         [JsonPropertyName("eventURL")]
         public string? EventUrl { get; set; }
+
+        [JsonPropertyName("shortDescription")]
+        public string? ShortDescription { get; set; }
 
         [JsonPropertyName("startTimeUTC")]
         public DateTimeOffset? Start { get; set; }
