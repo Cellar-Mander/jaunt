@@ -485,20 +485,27 @@ and copy link (`6e2b5199`) are separate tasks.
   ignored), then source and ID, so the order is stable. In "Open now", openings with a known start
   come first, then those without one, then 24/7 listings. Times show in the local time zone in the
   Settings time format.
+- **Count**: above the panes, at the right, "14 listings" ("1 listing") counts the entries listed,
+  each once however many of its openings are listed.
 - **Rows**: a placeholder square for the icon, then three lines, each cut with "…" to the pane's
-  width: the status, the title, and the world dimmed. The status is "Open now · until 23:00" in green
+  width: the status, the title in a font a quarter larger than the default, and the world dimmed. The status is "Open now · until 23:00" in green
   ("until Mon 16 Nov 23:00" when it closes more than a day ahead), "Open now" when the end isn't
   known, "Open now · 24h", or for a later opening its times ("20:00–23:00", or "20:00" without an end).
   Rows out of view are spaced, not drawn. The list is rebuilt every second.
 - **Detail pane**, top to bottom, each part only when the listing has it: a placeholder band for the
-  splash image; the title; the status as in the rows, but a later opening with its date ("Sat 21 Nov
+  splash image; the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"), and for a recurring listing open now "Next: " and its next opening; the world;
-  Travel and Open page; Location: each address with Copy, a location given only as text, and any
-  further links; About: an ad's normalised text, cut with "…" to 6 lines with "Read more" (then "Show
-  less"); Age / rating: an RP calendar event's rating; then a footer naming its sources on one line,
-  comma separated ("Listed on FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), the
-  calendar's name linking to its site and followed by its licence link, and for a Partake event the
-  line that Jaunt is not affiliated with or endorsed by Partake.
+  Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
+  a location given only as text, and any further links; About: an ad's normalised text, cut with "…" to 6 lines with "Read more" (then "Show
+  less"); Age / rating: an RP calendar event's rating; then a footer line: "Discord" linking to the
+  first Discord invite among the links (`discord.gg/…`, or `discord.com/invite/…` and
+  `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
+  ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source
+  but Party Finder linking to its site, and the calendar's licence link after them; for a Partake
+  event, a line that Jaunt is not affiliated with or endorsed by Partake. Links in the footer, as
+  in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
+  and open in the browser when clicked. Who listed an ad
+  ("Listed by …") is `d12eb2c4`.
 - **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
   selection is saved in the settings (`SelectedSource`, `SelectedId`), so it shows again when the
   window is reopened or the game restarted, and is forgotten once the listing is no longer listed. A

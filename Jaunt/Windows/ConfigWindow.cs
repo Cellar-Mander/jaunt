@@ -126,13 +126,13 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.SameLine();
         ImGui.TextUnformatted("·");
         ImGui.SameLine();
-        ListingsWindow.DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl, dimmed: false);
+        ListingsWindow.DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl);
     }
 
     private static void Bulleted(string text, Uri uri)
     {
         ImGui.Bullet();
-        ListingsWindow.DrawLinkText(text, uri, dimmed: false);
+        ListingsWindow.DrawLinkText(text, uri);
     }
 
     /// <summary>
