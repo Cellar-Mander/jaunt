@@ -70,7 +70,7 @@ public sealed class Plugin : IDalamudPlugin
         // Titles are a quarter larger than the default font, at whatever size the user set it
         titleFont = PluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(-1.25f)));
         ListingsWindow = new ListingsWindow(
-            ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, region.Get, () => ConfigWindow.IsOpen = true,
+            ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
             titleFont);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());

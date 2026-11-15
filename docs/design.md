@@ -157,9 +157,14 @@ sources is two listings), with when it was last seen, whether it is a one-off ev
 last said) and the favourited, visited and hidden marks. It is saved in the plugin's config folder
 as separate files, each with a `version` (1); sources are named, not numbered:
 
-- `marks.json`: each marked listing's source, ID, title and one-off flag, and its three marks.
-  Written when a mark changes, when a marked listing's title, ad text or one-off flag changes, and
-  when a marked listing expires. The file it replaces is kept as `marks.json.bak`.
+- `marks.json`: each marked listing's source, ID, title and one-off flag, and its three marks; and
+  each marked place (see "Marks" under "Listing browser"): its address (the district by name), title
+  and address as last shown, three marks, and the FFXIV Venues IDs, websites and Discord invites seen
+  there, each sorted so saves are stable. A place with no mark left isn't written. Written when a
+  mark changes, when a marked listing's title, ad text or one-off flag changes, when a marked listing
+  expires, and when a place moves or learns something. On load a place without a world, a known
+  district, a ward from 1 to 30, or exactly one of a plot (1 to 60) or an apartment is dropped, and
+  so is one with no mark. The file it replaces is kept as `marks.json.bak`.
 - `fetch-state.json`: each source's last fetch time (`lastFetched`), keyed by the source's name,
   or `<source>/<data centre>` (`FfxivVenues/Aether`) for a source fetched by data centre. Written on each fetch.
 - `cache/<source>.json` (e.g. `cache/FfxivVenues.json`): each listing as the source sent it, in
@@ -195,8 +200,9 @@ On load:
   20:00). Marked recurring listings are kept however old. Marked one-offs expire the same way as
   unmarked listings, since they can't reliably be matched to a later listing; the window doesn't
   mention this. Clear still keeps marked one-offs.
-- **Hidden venues** lists hidden listings by title, case-insensitively, each with an Un-hide button.
-  Titles are drawn as in "Text the font can't draw".
+- **Hidden venues** lists hidden places by title, case-insensitively, each once with its address
+  dimmed, then hidden listings by title; each has an Un-hide button. Titles are drawn as in "Text the
+  font can't draw".
 
 ### FFXIV Venues
 
@@ -413,8 +419,7 @@ again.
 
 `/jaunt` and the installer's Open button toggle the browser; `/jaunt config` and the cog in its title
 bar open Settings. The window has the list on the left and the selected listing's details on the
-right. Filters and search (`d68d407e`), the narrow single-column layout (`2dce5769`), favourite,
-visited and hide (`deb3b4be`), icons and splash images (`185b66ad`, plain placeholders until then)
+right. Filters and search (`d68d407e`), the narrow single-column layout (`2dce5769`), icons and splash images (`185b66ad`, plain placeholders until then)
 and copy link (`6e2b5199`) are separate tasks.
 
 - **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
@@ -424,7 +429,7 @@ and copy link (`6e2b5199`) are separate tasks.
   the first change since the last save, and on unload, not once per listing.
 - **Which listings**: in-game and xivpf Party Finder ads with at least one parsed address, FFXIV
   Venues venues with an address, Partake events, and FFXIV RP Event Calendar events with an address
-  or a location, not hidden and in the travel region. An xivpf ad the game has also sent shows once,
+  or a location, in the travel region. An entry with a hidden member (below) isn't shown. An xivpf ad the game has also sent shows once,
   as the in-game copy (see "xivpf"). A listing with no opening to list (below) isn't shown.
   Duplicates show as one entry (below).
 - **Openings** (`Schedules`), all instants in UTC:
@@ -506,6 +511,52 @@ and copy link (`6e2b5199`) are separate tasks.
   in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
   and open in the browser when clicked. Who listed an ad
   ("Listed by …") is `d12eb2c4`.
+- **Marks** (`EntryMarks`, `PlaceMarks`): three square icon buttons at the right of the detail pane's
+  title, which wraps short of them: a star (Favourite), a tick (Visited) and a crossed-out eye (Hide).
+  Icons are drawn a little over half the button's height, centred by their drawn shape.
+  - **What a mark goes on**: a Party Finder ad's listing ID changes with every post (61% of venue
+    addresses showed 2+ IDs over 31 hours of xivpf polls), so marks go on the venue's housing address
+    (a *place*: world, district, ward, and plot or apartment, as `AddressKey`), and every listing there
+    from any source carries them, now or later. Visited on a Partake or RP calendar event goes on that
+    event instead, so one event doesn't mark the host venue's regular nights. An entry naming no plot
+    or apartment marks its event, else each of its ads. Names never decide (decision `25e33e0a`), so
+    two venues sharing a house share marks.
+  - **Tooltips** say what will carry the mark: "Favourite Siren, Empyreum, W16, P20: every listing
+    there, from any source, now or later", "Mark this event visited", "Hide these ads"; a lit button
+    says "Remove from favourites", "Mark not visited" or "Un-hide".
+  - **Matching**, from the surest evidence down (measured in `spikes/mark-identity`):
+    1. The same FFXIV Venues ID as one seen at a place: the entry carries it. A place at one of the
+       entry's addresses stays put; otherwise it moves to the entry's first address, as the venue's
+       owner has said where it is now, unless an entry still at its address shows another of its IDs.
+       Two venues sharing a house are both seen there, so the one that moves leaves the marks with
+       the one that stays.
+    2. The same address: any of the entry's plot or apartment addresses, the one it shows first first.
+    3. A website the place has seen, shown by an entry with no place at another address: the place moves
+       there, unless an entry still at the place's address shows that website or shows none (an ad
+       without links may be the venue's own). Websites are compared by host without "www." and path,
+       ignoring case. Links to people and single events (Twitch, Kick, YouTube, X, Instagram, TikTok,
+       Bluesky, SoundCloud, Mixcloud, Partake) are never a place's website: about half the
+       non-Discord links in venue ads are DJs' Twitch channels.
+    - Discord invites never move a place on their own: 5% of FFXIV Venues' invites are shared across
+      venues (brand and community servers). Names, managers and opening times aren't used; opening
+      patterns are spike `e5a21c9f`.
+  - **Learning**: a matched place keeps every FFXIV Venues ID, website and Discord invite its entries
+    show. Its title and address as shown (for the hidden list) are taken when it is marked or moves, and
+    otherwise only filled in, so two entries at one place don't take turns. A move onto a place with
+    marks makes them one place with every mark and everything either saw.
+  - **Showing**: an entry shows a mark when its place or any of its listings carries it. Its button is
+    lit (the star yellow, the tick green), and its row shows the star and tick in the top right of the
+    row's highlight, inset from the top and right by the same gap; the status line is cut short of them.
+  - **Clearing**: clicking a lit button clears that mark from the place and every listing, so a mark
+    set before the entry merged with another still comes off.
+  - **Hide**: listings are merged before hidden ones are left out, and an entry whose place or any
+    listing is hidden isn't listed, so hiding a venue also hides the ads listed as it. Hide takes the
+    entry out of the list at once and says where to un-hide it (Settings → Hidden venues). The
+    Favourites, Hide visited and Show hidden filters are `d68d407e`.
+  - **Earlier marks**: favourite and hidden marks on the listings of an entry with a plot or apartment,
+    and visited on all but its event, move to its place when it is next listed.
+  - Marks are saved to `marks.json` (see "Listing cache") as soon as one changes, and when matching
+    moves a place or learns something.
 - **Selection**: clicking a row selects its listing (both rows of a listing listed twice). The
   selection is saved in the settings (`SelectedSource`, `SelectedId`), so it shows again when the
   window is reopened or the game restarted, and is forgotten once the listing is no longer listed. A
