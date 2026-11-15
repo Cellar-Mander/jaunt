@@ -67,6 +67,17 @@ public class DayGroupsTests
     }
 
     [Fact]
+    public void OpenNowSortsByTheFullDateAndTimeAcrossMidnight()
+    {
+        // Now is 15:00 at UTC-5: 23:30 tonight, then 00:30 tomorrow, then 01:00 the day after,
+        // which a sort by time of day alone would put in the reverse order
+        var group = Assert.Single(DayGroups.Group(
+            [Entry("01:00 in two days", -1, 34), Entry("00:30 tomorrow", -1, 9.5), Entry("23:30 tonight", -1, 8.5)],
+            Now, MinusFive));
+        Assert.Equal(["23:30 tonight", "00:30 tomorrow", "01:00 in two days"], Titles(group));
+    }
+
+    [Fact]
     public void OpenNowTakesAnOpeningWithNoEndToCloseThreeHoursAfterItStarts()
     {
         // No end, started 1h ago: sorts as closing in 2h, between 1h 59m and 2h 1m
