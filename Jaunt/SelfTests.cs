@@ -122,7 +122,51 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         new Step("xivpf: first fetch records None ads beside the game's", XivpfFirstFetch),
         new Step("Partake: first fetch records upcoming events, then waits 8 h", PartakeFirstFetch),
         new Step("RP Event Calendar: first fetch records events, then waits 8 h", RpCalendarFirstFetch),
+        new Step("The open listing browser and Settings draw without allocating", DrawsWithoutAllocating),
     ];
+
+    // Frames to watch each window draw for
+    private const int WatchedFrames = 120;
+
+    // Needs both windows already open, as docs/smoke-test.md says, since opening the browser fetches.
+    // Frames that rebuilt the list or filled a cache are left out (AllocationWatch); the rest must
+    // allocate nothing, and most frames must be such steady ones, or a cache refilled every frame would
+    // hide an allocation
+    private IEnumerable<object?> DrawsWithoutAllocating()
+    {
+        Check(listingsWindow.IsOpen && configWindow.IsOpen,
+            "open the listing browser (/jaunt) with a listing selected and Settings (/jaunt config) with every group expanded, then run this step");
+
+        (string Name, AllocationWatch Watch)[] windows = [("listing browser", listingsWindow.DrawAllocations), ("Settings", configWindow.DrawAllocations)];
+        var start = windows.Select(w => w.Watch.Frames).ToArray();
+        var seen = (int[])start.Clone();
+        var steady = new int[windows.Length];
+        var worst = new long[windows.Length];
+        for (var frame = 0; frame < WatchedFrames; frame++)
+        {
+            yield return null;
+            for (var i = 0; i < windows.Length; i++)
+            {
+                var watch = windows[i].Watch;
+                if (watch.Frames == seen[i])
+                    continue;
+                seen[i] = watch.Frames;
+                if (watch.Last is { } bytes)
+                {
+                    steady[i]++;
+                    worst[i] = Math.Max(worst[i], bytes);
+                }
+            }
+        }
+
+        for (var i = 0; i < windows.Length; i++)
+        {
+            var drawn = windows[i].Watch.Frames - start[i];
+            Check(drawn > 0, $"the {windows[i].Name} didn't draw; uncollapse it");
+            Check(steady[i] * 2 >= drawn, $"the {windows[i].Name} filled a cache on {drawn - steady[i]} of {drawn} frames");
+            Check(worst[i] == 0, $"the {windows[i].Name} allocated up to {worst[i]} bytes in a frame");
+        }
+    }
 
     private static void Check(bool condition, string detail)
     {

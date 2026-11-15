@@ -90,6 +90,21 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<(string Text, int Width, int FontSize), string> fitted = [];
     private readonly Dictionary<(string Text, int Width), string> aboutCuts = [];
 
+    // Worked out once each time the list is worked out (at most once a second) rather than every
+    // frame, as formatting allocates: each day's heading, each row's status line on its first draw,
+    // the count, and what the detail pane shows of the selected entry
+    private readonly List<(string Main, string Dimmed)> headings = [];
+    private readonly Dictionary<BrowserEntry<Row>, (string Text, bool Open)> statuses = new(ReferenceEqualityComparer.Instance);
+    private string countText = "0 listings";
+    private DetailView? detail;
+
+    // The removable chip for each tag picked, as ListingFilters.Labels lists them
+    private static readonly string[] TagChipLabels = [.. ListingFilters.Labels.Select(l => $"{l.Label} ×")];
+    private static readonly string[] TagChipTips = [.. ListingFilters.Labels.Select(l => $"Stop requiring {l.Label}")];
+
+    /// <summary>What <see cref="Draw"/> allocates, for the self-test; see "Per-frame code" in CONTRIBUTING.md.</summary>
+    internal AllocationWatch DrawAllocations { get; } = new();
+
     /// <summary>
     /// One entry as the browser shows it: its title, addresses and links, world, schedule, what is
     /// shown of a Partake or RP calendar event, and an ad's text or a description for About, with
@@ -158,6 +173,14 @@ internal sealed class ListingsWindow : Window
             && ReferenceEquals(Rating, other.Rating) && ReferenceEquals(LinkTexts, other.LinkTexts);
     }
 
+    /// <summary>
+    /// What the detail pane shows of <see cref="Row"/> that takes formatting or a search to work out:
+    /// the status line of its first opening, its addresses as text, the Lifestream request for the
+    /// first, which link Open page and the footer's Discord take (or -1), and its sources.
+    /// </summary>
+    private sealed record DetailView(
+        Row Row, string? Status, bool Open, string[] Addresses, TravelRequest? Travel, int Page, int Discord, ListingSource[] Sources);
+
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
     /// <param name="saveCache">Saves the listing cache, after a mark changes.</param>
@@ -200,6 +223,19 @@ internal sealed class ListingsWindow : Window
     }
 
     public override void Draw()
+    {
+        DrawAllocations.Start();
+        try
+        {
+            DrawContents();
+        }
+        finally
+        {
+            DrawAllocations.Stop();
+        }
+    }
+
+    private void DrawContents()
     {
         var now = DateTimeOffset.UtcNow;
         if (now >= nextRebuild)
@@ -266,14 +302,16 @@ internal sealed class ListingsWindow : Window
         if (Chip("Tags", false, "List only listings with every tag picked"))
             ImGui.OpenPopup("##tags");
 
-        foreach (var (interest, label) in ListingFilters.Labels)
+        // Indexed, as enumerating through the list's interface allocates
+        for (var i = 0; i < ListingFilters.Labels.Count; i++)
         {
-            if ((filters.Tags & interest) != 0 && Chip($"{label} ×", true, $"Stop requiring {label}"))
+            var interest = ListingFilters.Labels[i].Interest;
+            if ((filters.Tags & interest) != 0 && Chip(TagChipLabels[i], true, TagChipTips[i]))
                 (changed, filters.Tags) = (true, filters.Tags & ~interest);
         }
 
         // At the right of the last line, or alone on the next when it doesn't fit
-        var count = listingCount == 1 ? "1 listing" : $"{listingCount.ToString(CultureInfo.CurrentCulture)} listings";
+        var count = countText;
         var countWidth = ImGui.CalcTextSize(count).X;
         FlowNext(countWidth);
         ImGui.SetCursorPosX(Math.Max(ImGui.GetCursorPosX(), ImGui.GetContentRegionMax().X - countWidth));
@@ -285,8 +323,9 @@ internal sealed class ListingsWindow : Window
         {
             if (popup.Success)
             {
-                foreach (var (interest, label) in ListingFilters.Labels)
+                for (var i = 0; i < ListingFilters.Labels.Count; i++)
                 {
+                    var (interest, label) = ListingFilters.Labels[i];
                     var on = (filters.Tags & interest) != 0;
                     if (ImGui.Checkbox(label, ref on))
                         (changed, filters.Tags) = (true, filters.Tags ^ interest);
@@ -349,9 +388,10 @@ internal sealed class ListingsWindow : Window
             titleHeight = ImGui.GetTextLineHeight();
         var rowHeight = (ImGui.GetTextLineHeight() * 2) + titleHeight + (style.ItemSpacing.Y * 2);
         var selected = SelectedKey;
-        foreach (var group in groups)
+        for (var g = 0; g < groups.Count; g++)
         {
-            var (main, dimmed) = DayGroups.Heading(group, configuration.DateFormat, locale);
+            var group = groups[g];
+            var (main, dimmed) = headings[g];
             ImGui.TextUnformatted(main);
             if (dimmed.Length > 0)
             {
@@ -377,11 +417,12 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>A placeholder icon, then the status line, the title cut to fit and the world.</summary>
+    /// <remarks>The status line is worked out on the row's first draw after the list is, so it may lag the clock by up to <see cref="RebuildInterval"/>.</remarks>
     private void DrawRow(BrowserEntry<Row> entry, (ListingSource, string)? selected, float rowHeight, DateTimeOffset now, CultureInfo locale)
     {
         var row = entry.Item;
         var start = ImGui.GetCursorScreenPos();
-        using var id = ImRaii.PushId($"{(int)row.Listing.Source}:{row.Listing.Id}:{entry.When.Start?.UtcTicks}");
+        using var id = ImRaii.PushId($"{(int)row.Listing.Source}:{row.Listing.Id}:{entry.When.Start?.UtcTicks ?? 0}");
         var isSelected = selected is { } key && rowsByKey.TryGetValue(key, out var selectedRow) && ReferenceEquals(selectedRow, row);
         if (ImGui.Selectable("##row", isSelected, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
             Select(row);
@@ -399,11 +440,18 @@ internal sealed class ListingsWindow : Window
         var marksLeft = DrawRowMarks(row, highlight.Min, highlight.Max);
         var statusWidth = Math.Min(width, marksLeft - spacing - textLeft);
         ImGui.SetCursorScreenPos(new Vector2(textLeft, start.Y));
-        var status = StatusText.Row(entry.When, entry.AlwaysOpen, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale);
-        if (entry.AlwaysOpen || entry.When.IsOpen(now))
-            ImGui.TextColored(ImGuiColors.HealerGreen, Fit(status, statusWidth));
+        if (!statuses.TryGetValue(entry, out var status))
+        {
+            AllocationWatch.Filled();
+            status = (StatusText.Row(entry.When, entry.AlwaysOpen, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale),
+                entry.AlwaysOpen || entry.When.IsOpen(now));
+            statuses[entry] = status;
+        }
+
+        if (status.Open)
+            ImGui.TextColored(ImGuiColors.HealerGreen, Fit(status.Text, statusWidth));
         else
-            ImGui.TextUnformatted(Fit(status, statusWidth));
+            ImGui.TextUnformatted(Fit(status.Text, statusWidth));
         ImGui.SetCursorScreenPos(new Vector2(textLeft, ImGui.GetCursorScreenPos().Y));
         using (titleFont.Push())
             ImGui.TextUnformatted(Fit(ShownText.Title(row.Title), width));
@@ -454,6 +502,7 @@ internal sealed class ListingsWindow : Window
         if (!IconShapes.TryGetValue((icon, font.FontSize), out var bounds))
         {
             // Found once per icon and font size, as the icon font holds over a thousand glyphs
+            AllocationWatch.Filled();
             bounds = null;
             var glyphs = font.Glyphs;
             for (var i = 0; i < glyphs.Size; i++)
@@ -488,7 +537,9 @@ internal sealed class ListingsWindow : Window
             return;
         }
 
-        var locale = CultureInfo.CurrentCulture;
+        if (!ReferenceEquals(detail?.Row, row))
+            detail = DetailOf(row, now, CultureInfo.CurrentCulture);
+        var view = detail!;
         var width = ImGui.GetContentRegionAvail().X;
 
         // Splash images are 185b66ad; a plain band holds their place
@@ -509,17 +560,45 @@ internal sealed class ListingsWindow : Window
         }
 
         ImGui.SetCursorPosY(Math.Max(ImGui.GetCursorPosY(), titleTop.Y + ImGui.GetFrameHeightWithSpacing()));
-        DrawDetailStatus(row, now, locale);
+        if (view.Status is { } status)
+        {
+            if (view.Open)
+                ImGui.TextColored(ImGuiColors.HealerGreen, status);
+            else
+                ImGui.TextUnformatted(status);
+        }
+
         if (row.World is { } world)
             ImGui.TextDisabled(world);
 
         ImGui.Spacing();
-        DrawActions(row);
+        DrawActions(view);
 
-        DrawLocation(row);
-        DrawAbout(row, width);
+        DrawLocation(view);
+        DrawAbout(view, width);
         DrawRating(row);
-        DrawFooter(row);
+        DrawFooter(view);
+    }
+
+    /// <summary>Works out <see cref="DetailView"/> for the entry; the status line is of the opening listed first.</summary>
+    private DetailView DetailOf(Row row, DateTimeOffset now, CultureInfo locale)
+    {
+        AllocationWatch.Filled();
+        string? status = null;
+        var open = false;
+        if (row.Listed.Count > 0)
+        {
+            var first = row.Listed[0];
+            var always = row.Schedule.AlwaysOpen;
+            status = StatusText.Detail(first, always, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale);
+            open = always || first.IsOpen(now);
+        }
+
+        var addresses = row.Details.Addresses;
+        var links = row.Details.Links;
+        return new DetailView(
+            row, status, open, [.. addresses.Select(AddressText.Format)], addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
+            PageIndex(links), DiscordIndex(links), [.. row.Members.Select(m => m.Listing.Source).Distinct()]);
     }
 
     /// <summary>
@@ -564,7 +643,12 @@ internal sealed class ListingsWindow : Window
         var centre = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
         DrawIcon(ImGui.GetWindowDrawList(), icon, centre, size.Y * 0.55f, marked ? ImGui.GetColorU32(on) : ImGui.GetColorU32(ImGuiCol.Text));
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(marked ? clearTip : SetTip(row, mark));
+        {
+            if (marked)
+                ImGui.SetTooltip(clearTip);
+            else
+                SetTip(row, mark);
+        }
         if (!clicked)
             return false;
 
@@ -575,10 +659,11 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// What a button will mark, so it is clear which later listings will carry it: everything at an
-    /// address names the address.
+    /// What a button will mark, as its tooltip, so it is clear which later listings will carry it:
+    /// everything at an address names the address. Formatted straight into the tooltip, as building a
+    /// string would allocate on every frame the button is hovered.
     /// </summary>
-    private static string SetTip(Row row, EntryMark mark)
+    private static void SetTip(Row row, EntryMark mark)
     {
         var (verb, after) = mark switch
         {
@@ -586,37 +671,31 @@ internal sealed class ListingsWindow : Window
             EntryMark.Visited => ("Mark", " visited"),
             _ => ("Hide", ""),
         };
-        return EntryMarks.Target(row.Marks, mark) switch
+        switch (EntryMarks.Target(row.Marks, mark))
         {
-            MarkTarget.Place => $"{verb} {row.Marks.ShownAddress}{after}: every listing there, from any source, now or later",
-            MarkTarget.Event => $"{verb} this event{after}",
-            _ => row.Marks.Members.Count == 1 ? $"{verb} this ad{after}" : $"{verb} these ads{after}",
-        };
-    }
-
-    /// <summary>The opening listed first.</summary>
-    private void DrawDetailStatus(Row row, DateTimeOffset now, CultureInfo locale)
-    {
-        var listed = row.Listed;
-        if (listed.Count == 0)
-            return;
-
-        var first = listed[0];
-        var always = row.Schedule.AlwaysOpen;
-        var text = StatusText.Detail(first, always, now, TimeZoneInfo.Local, configuration.TimeFormat, configuration.DateFormat, locale);
-        if (always || first.IsOpen(now))
-            ImGui.TextColored(ImGuiColors.HealerGreen, text);
-        else
-            ImGui.TextUnformatted(text);
+            case MarkTarget.Place:
+                ImGui.SetTooltip($"{verb} {row.Marks.ShownAddress}{after}: every listing there, from any source, now or later");
+                break;
+            case MarkTarget.Event:
+                ImGui.SetTooltip($"{verb} this event{after}");
+                break;
+            default:
+                if (row.Marks.Members.Count == 1)
+                    ImGui.SetTooltip($"{verb} this ad{after}");
+                else
+                    ImGui.SetTooltip($"{verb} these ads{after}");
+                break;
+        }
     }
 
     /// <summary>Travel to the first address, and open the first link that isn't a Discord invite.</summary>
-    private void DrawActions(Row row)
+    private void DrawActions(DetailView view)
     {
+        var row = view.Row;
         var address = row.Details.Addresses.Count > 0 ? row.Details.Addresses[0] : null;
         if (address is not null)
         {
-            var request = TravelRequest.From(address);
+            var request = view.Travel;
             var whyNot = !lifestream.Available ? "Install and enable Lifestream to travel from Jaunt."
                 : request is null ? "This address is missing a world, district, plot or apartment, so Lifestream can't travel there."
                 : null;
@@ -631,7 +710,7 @@ internal sealed class ListingsWindow : Window
                 ImGui.SetTooltip(whyNot);
         }
 
-        if (PageIndex(row.Details.Links) is var page and >= 0)
+        if (view.Page is var page and >= 0)
         {
             if (address is not null)
                 ImGui.SameLine();
@@ -647,14 +726,15 @@ internal sealed class ListingsWindow : Window
     /// Each address with Copy, a location the parser couldn't read as text, and any further links
     /// (all but Open page's and the footer's Discord).
     /// </summary>
-    private void DrawLocation(Row row)
+    private void DrawLocation(DetailView view)
     {
+        var row = view.Row;
         var freeText = row.Details.Addresses.Count == 0
             ? row.CalendarEvent?.Location ?? (row.Event is { Location.Length: > 0 } item ? item.Location : null)
             : null;
         var links = row.Details.Links;
-        var page = PageIndex(links);
-        var discord = DiscordIndex(links);
+        var page = view.Page;
+        var discord = view.Discord;
         var further = links.Count - (page >= 0 ? 1 : 0) - (discord >= 0 ? 1 : 0);
         if (row.Details.Addresses.Count == 0 && freeText is null && further == 0)
             return;
@@ -664,7 +744,7 @@ internal sealed class ListingsWindow : Window
         {
             using var id = ImRaii.PushId($"a{i}");
             var address = row.Details.Addresses[i];
-            var text = AddressText.Format(address);
+            var text = view.Addresses[i];
             if (ImGui.SmallButton("Copy"))
             {
                 ImGui.SetClipboardText(text);
@@ -702,8 +782,9 @@ internal sealed class ListingsWindow : Window
     /// An ad's text or a description, cut to <see cref="AboutLines"/> lines with "Read more" when longer.
     /// Once a description cut short is shown in full, a link to the page follows, when there is one.
     /// </summary>
-    private void DrawAbout(Row row, float width)
+    private void DrawAbout(DetailView view, float width)
     {
+        var row = view.Row;
         if (row.About is not { Length: > 0 } about)
             return;
 
@@ -711,7 +792,7 @@ internal sealed class ListingsWindow : Window
         var cut = aboutExpanded ? about : CutToLines(about, width);
         ImGui.TextWrapped(cut);
         var whole = ReferenceEquals(cut, about);
-        if (whole && row.AboutCut && PageIndex(row.Details.Links) is var page and >= 0)
+        if (whole && row.AboutCut && view.Page is var page and >= 0)
             DrawLinkText("Read the rest on the website", row.Details.Links[page].Uri);
         if (!whole || aboutExpanded)
         {
@@ -734,11 +815,12 @@ internal sealed class ListingsWindow : Window
     /// The Discord invite, then where the listing came from, with the credits its source needs.
     /// "Listed by" (the ad's poster) goes first once d12eb2c4 keeps it.
     /// </summary>
-    private static void DrawFooter(Row row)
+    private static void DrawFooter(DetailView view)
     {
+        var row = view.Row;
         ImGui.Spacing();
         ImGui.Separator();
-        if (DiscordIndex(row.Details.Links) is var discord and >= 0)
+        if (view.Discord is var discord and >= 0)
         {
             DrawLinkText("Discord", row.Details.Links[discord].Uri);
             ImGui.SameLine();
@@ -747,9 +829,9 @@ internal sealed class ListingsWindow : Window
         }
 
         // Every source on one line, each linking to its site (the in-game Party Finder has none), with the calendar's licence after
-        var sources = row.Members.Select(m => m.Listing.Source).Distinct().ToList();
+        var sources = view.Sources;
         ImGui.TextDisabled("Sources:");
-        for (var i = 0; i < sources.Count; i++)
+        for (var i = 0; i < sources.Length; i++)
         {
             ImGui.SameLine(0, 0);
             ImGui.TextDisabled(i == 0 ? " " : ", ");
@@ -760,7 +842,7 @@ internal sealed class ListingsWindow : Window
                 ImGui.TextDisabled(SourceName(sources[i]));
         }
 
-        if (sources.Contains(ListingSource.RpEventCalendar))
+        if (Array.IndexOf(sources, ListingSource.RpEventCalendar) >= 0)
         {
             ImGui.SameLine();
             ImGui.TextDisabled("·");
@@ -854,6 +936,7 @@ internal sealed class ListingsWindow : Window
             return shown;
 
         // The longest prefix that fits with the ellipsis, by binary search over its length
+        AllocationWatch.Filled();
         int low = 0, high = text.Length;
         while (low < high)
         {
@@ -880,6 +963,7 @@ internal sealed class ListingsWindow : Window
         if (aboutCuts.TryGetValue(key, out var cut))
             return cut;
 
+        AllocationWatch.Filled();
         int low = 0, high = text.Length;
         while (low < high)
         {
@@ -975,7 +1059,11 @@ internal sealed class ListingsWindow : Window
         Forget();
     }
 
-    /// <summary>Lists the entries the search and filters let through, grouped by day; cheap enough to run on every keystroke.</summary>
+    /// <summary>
+    /// Lists the entries the search and filters let through, grouped by day, with their headings and
+    /// count, and forgets the status lines and detail worked out for the last list; cheap enough to run
+    /// on every keystroke.
+    /// </summary>
     private void ApplyFilters(DateTimeOffset now)
     {
         var filters = configuration.Filters;
@@ -1004,6 +1092,14 @@ internal sealed class ListingsWindow : Window
         }
 
         groups = DayGroups.Group(entries, now, TimeZoneInfo.Local);
+        AllocationWatch.Filled();
+        var locale = CultureInfo.CurrentCulture;
+        headings.Clear();
+        foreach (var group in groups)
+            headings.Add(DayGroups.Heading(group, configuration.DateFormat, locale));
+        statuses.Clear();
+        detail = null;
+        countText = listingCount == 1 ? "1 listing" : $"{listingCount.ToString(locale)} listings";
     }
 
     /// <summary>

@@ -10,6 +10,8 @@ To run the checks that need no look at the screen and no click, open Dalamud's s
 
 The steps work on scratch copies: the cache steps use a `self-test` folder in the plugin's config folder, deleted afterwards, and never your real cache files; the FFXIV Venues, xivpf, Partake and RP Event Calendar steps use a stand-in for the site and a clock they move, so they make no request. The settings step saves a test object through Dalamud, then saves your settings again. Three warnings in `/xllog` are expected, announced by `Self-test: … expected` lines just before them.
 
+The drawing step ("draw without allocating") watches the real windows, so before running it open the listing browser with a listing selected and Settings with every group expanded; with either closed it fails and says so.
+
 Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* are covered only for the part named, so finish them by hand. Unmarked checks stay manual: how things look, clicks, reloading the plugin and the real network.
 
 ## Loading
@@ -18,6 +20,7 @@ Checks marked *(self-test)* need nothing more; those marked *(self-test: …)* a
 2. `/jaunt` opens the listing browser; running it again closes it. `/jaunt config` opens the settings window and leaves it open when run again. *(self-test)*
 3. `/xlplugins` → Installed Plugins shows a settings button for the plugin, which opens the same window.
 4. Change a setting, disable and re-enable the plugin: the setting is kept. *(self-test: Dalamud's save and load; the reload stays manual)*
+5. With the listing browser and Settings open, a listing selected and every Settings group expanded, neither window allocates on a frame that works nothing out. *(self-test)*
 
 ## Settings
 

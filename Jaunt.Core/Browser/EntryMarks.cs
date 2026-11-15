@@ -33,7 +33,20 @@ public enum MarkTarget
 public sealed record MarkEntry(IReadOnlyList<CachedListing> Members, IReadOnlyList<AddressKey> Places, string Title, string ShownAddress, IReadOnlyList<Uri> Links)
 {
     /// <summary>Its Partake or RP calendar event, if it has one.</summary>
-    public CachedListing? Event => Members.FirstOrDefault(m => m.Source is ListingSource.Partake or ListingSource.RpEventCalendar);
+    /// <remarks>Read every frame (<see cref="EntryMarks.Target"/>), so a loop rather than LINQ, which allocates.</remarks>
+    public CachedListing? Event
+    {
+        get
+        {
+            for (var i = 0; i < Members.Count; i++)
+            {
+                if (Members[i].Source is ListingSource.Partake or ListingSource.RpEventCalendar)
+                    return Members[i];
+            }
+
+            return null;
+        }
+    }
 }
 
 /// <summary>
@@ -59,8 +72,19 @@ public static class EntryMarks
 
     /// <summary>Whether the entry shows the mark: its place carries it, or any of its listings does.</summary>
     /// <param name="place">The place <see cref="PlaceMarks.Match"/> found for the entry, or null.</param>
-    public static bool Has(MarkEntry entry, PlaceMark? place, EntryMark mark) =>
-        (place is not null && Get(place, mark)) || entry.Members.Any(m => Get(m, mark));
+    /// <remarks>Runs every frame for each row drawn, so it must not allocate; see "Per-frame code" in CONTRIBUTING.md.</remarks>
+    public static bool Has(MarkEntry entry, PlaceMark? place, EntryMark mark)
+    {
+        if (place is not null && Get(place, mark))
+            return true;
+        for (var i = 0; i < entry.Members.Count; i++)
+        {
+            if (Get(entry.Members[i], mark))
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Sets the mark on its <see cref="Target"/> when the entry doesn't show it, keeping what is seen
