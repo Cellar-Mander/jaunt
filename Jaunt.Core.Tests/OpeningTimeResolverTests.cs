@@ -184,9 +184,13 @@ public class OpeningTimeResolverTests
 
     [Theory]
     [InlineData("2026-11-06T02:00Z", "2026-11-06T04:00Z")] // 21:00 in New York, until 23:00 tonight
-    [InlineData("2026-11-06T04:30Z", "2026-11-07T04:00Z")] // 23:30: past it, so tomorrow's
-    [InlineData("2026-11-06T04:00Z", "2026-11-07T04:00Z")] // 23:00 exactly: closed, so tomorrow's
-    public void AClosingTimeAloneIsTheNextOne(string seen, string end)
+    [InlineData("2026-11-06T04:30Z", "2026-11-06T04:00Z")] // 23:30: it just passed, so it is over
+    [InlineData("2026-11-06T04:00Z", "2026-11-06T04:00Z")] // 23:00 exactly: over
+    [InlineData("2026-11-06T06:00Z", "2026-11-06T04:00Z")] // 01:00 the next day: yesterday's, which just passed
+    [InlineData("2026-11-06T10:00Z", "2026-11-06T04:00Z")] // 05:00, 6 hours after: still the one that passed
+    [InlineData("2026-11-06T10:01Z", "2026-11-07T04:00Z")] // 05:01: more than 6 hours after, so tomorrow's
+    [InlineData("2026-11-05T22:01Z", "2026-11-06T04:00Z")] // 17:01, 18 hours before: tonight's
+    public void AClosingTimeAloneIsTheNextOneUnlessItPassedWithinSixHours(string seen, string end)
     {
         var w = Resolve(Time(end: "23:00", now: true, zone: "EST"), seen);
 
