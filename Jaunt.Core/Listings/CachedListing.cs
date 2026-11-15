@@ -106,6 +106,13 @@ public sealed class CachedListing
     /// </summary>
     public IReadOnlyList<string> SourceTags { get; set; } = [];
 
+    /// <summary>
+    /// The venue's or event's own description, cleaned when read (<see cref="ListingAbout.Clean"/>), for
+    /// sources that give one (FFXIV Venues, Partake, the FFXIV RP Event Calendar); null for ads, whose
+    /// text is <see cref="Description"/>, and for listings without one.
+    /// </summary>
+    public ListingAbout? About { get; set; }
+
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }
 

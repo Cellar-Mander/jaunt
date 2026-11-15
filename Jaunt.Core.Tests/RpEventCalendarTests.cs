@@ -22,11 +22,12 @@ public class RpEventCalendarTests
         string end = "\"2026-11-15T04:00:00Z\"",
         string recurring = "true",
         string validated = "\"2026-08-30T00:00:00\"",
-        string rating = "\"Mature\"") => $$"""
+        string rating = "\"Mature\"",
+        string shortDescription = "\"Thavnairian restaurant and bar.\"") => $$"""
         {"datacenter":"Light","server":{{server}},"serverId":402,"uId":{{uId}},"eventName":{{name}},
          "location":{{location}},"eventURL":{{url}},"esrbRating":{{rating}},
          "description":"https://xiv.fyi/ZE2J \nGoblet Ward 2, Plot 8\nContacts: {{Contacts}}\nLast Validated: 2026.08.30",
-         "shortDescription":"Thavnairian restaurant and bar.","eventCategory":"Bar/Tavern","contacts":"{{Contacts}}",
+         "shortDescription":{{shortDescription}},"eventCategory":"Bar/Tavern","contacts":"{{Contacts}}",
          "startTimeUTC":{{start}},"endTimeUTC":{{end}},"isRecurring":{{recurring}},"language":"English","lastValidated":{{validated}}}
         """;
 
@@ -192,7 +193,7 @@ public class RpEventCalendarTests
     }
 
     [Fact]
-    public void ContactsAndTheDescriptionAreNotKept()
+    public void ContactsAndTheDescriptionAreNotKeptButTheShortDescriptionIs()
     {
         var cache = new ListingCache();
         var calendarEvent = Single(RowJson());
@@ -201,7 +202,60 @@ public class RpEventCalendarTests
         Assert.DoesNotContain("Enhasa", calendarEvent.ToString(), StringComparison.Ordinal);
         var saved = string.Concat(SavedFiles.All(cache).Values);
         Assert.DoesNotContain("Enhasa", saved, StringComparison.Ordinal);
-        Assert.DoesNotContain("Thavnairian", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("Contacts", saved, StringComparison.Ordinal);
+        Assert.Contains("Thavnairian restaurant and bar.", saved, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HandlesInTheShortDescriptionAreNeverKept()
+    {
+        var cache = new ListingCache();
+        var calendarEvent = Single(RowJson(shortDescription: "\"Ask @coco.shev or Enhasa#1319 at the door.\""));
+        RpEventCalendar.Record(cache, [calendarEvent], Now);
+
+        Assert.Equal("Ask or at the door.", calendarEvent.About!.Text);
+        var saved = string.Concat(SavedFiles.All(cache).Values);
+        Assert.DoesNotContain("coco.shev", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("Enhasa", saved, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\" \"")]
+    public void AnEventWithoutAShortDescriptionHasNone(string shortDescription) =>
+        Assert.Null(Single(RowJson(shortDescription: shortDescription)).About);
+
+    [Fact]
+    public void AShortDescriptionsInviteFollowsTheEventsPage()
+    {
+        var cache = new ListingCache();
+        RpEventCalendar.Record(cache, [Single(RowJson(shortDescription: "\"Come hang out! Discord: https://discord.gg/oasis\""))], Now);
+
+        var shown = RpEventCalendar.Show(Assert.Single(cache.Listings), TestGazetteer.Parser);
+
+        Assert.Equal([new Uri("https://xiv.fyi/ZE2J"), new Uri("https://discord.gg/oasis")], shown.Links);
+    }
+
+    [Fact]
+    public void AnEventWithoutAShortDescriptionShowsOnlyItsPage()
+    {
+        var cache = new ListingCache();
+        RpEventCalendar.Record(cache, [Single(RowJson(shortDescription: "null"))], Now);
+
+        var shown = RpEventCalendar.Show(Assert.Single(cache.Listings), TestGazetteer.Parser);
+
+        Assert.Equal([new Uri("https://xiv.fyi/ZE2J")], shown.Links);
+    }
+
+    [Fact]
+    public void KeepsTheShortDescriptionThroughTheCache()
+    {
+        var cache = new ListingCache();
+        RpEventCalendar.Record(cache, [Single(RowJson())], Now);
+
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.RpEventCalendar, "abc_R20260830T160000@google.com")!;
+
+        Assert.Equal("Thavnairian restaurant and bar.", back.About!.Text);
     }
 
     [Theory]

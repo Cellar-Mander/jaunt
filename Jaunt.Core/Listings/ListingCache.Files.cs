@@ -81,12 +81,12 @@ public sealed partial class ListingCache
 
     private ListingFile SourceSnapshot(ListingSource source) => source switch
     {
-        ListingSource.FfxivVenues => Snapshot(source, l => new FfxivVenues.Venue(l.Id, l.Title, l.Venue!)),
+        ListingSource.FfxivVenues => Snapshot(source, l => new FfxivVenues.Venue(l.Id, l.Title, l.Venue!, l.About)),
         ListingSource.Partake => Snapshot(source, l => new Partake.Event(
             l.Id, l.Title, l.StartsAt ?? default, l.EndsAt ?? default, l.ListedOn ?? "", l.DataCentre, l.Location, l.LinkTexts,
-            l.Rating, l.SourceTags)),
+            l.Rating, l.SourceTags, l.About)),
         ListingSource.RpEventCalendar => Snapshot(source, l => new RpEventCalendar.Event(
-            l.Id, l.Title, l.ListedOn, l.Location, l.Rating, l.LinkTexts, l.Openings, l.OneOff, l.LastValidated)),
+            l.Id, l.Title, l.ListedOn, l.Location, l.Rating, l.LinkTexts, l.Openings, l.OneOff, l.LastValidated, l.About)),
         _ => Snapshot(source, l => new Xivpf.Ad(l.Id, l.Description, l.ListedOn)),
     };
 
@@ -154,17 +154,17 @@ public sealed partial class ListingCache
                 break;
             case ListingSource.FfxivVenues:
                 foreach (var (venue, seen) in Read<FfxivVenues.Venue>(json))
-                    FfxivVenues.Record(this, [venue], seen);
+                    FfxivVenues.Record(this, [venue with { About = Present(venue.About) }], seen);
                 break;
             case ListingSource.Partake:
                 foreach (var (item, seen) in Read<Partake.Event>(json))
-                    Partake.Record(this, [item with { Title = item.Title ?? "", World = item.World ?? "", LinkTexts = Present(item.LinkTexts), Tags = Present(item.Tags) }], seen);
+                    Partake.Record(this, [item with { Title = item.Title ?? "", World = item.World ?? "", LinkTexts = Present(item.LinkTexts), Tags = Present(item.Tags), About = Present(item.About) }], seen);
                 break;
             case ListingSource.RpEventCalendar:
                 foreach (var (item, seen) in Read<RpEventCalendar.Event>(json))
                 {
                     var openings = (item.Openings ?? []).Where(o => o is not null && o.End > o.Start);
-                    RpEventCalendar.Record(this, [item with { LinkTexts = Present(item.LinkTexts), Openings = [.. openings] }], seen);
+                    RpEventCalendar.Record(this, [item with { LinkTexts = Present(item.LinkTexts), Openings = [.. openings], About = Present(item.About) }], seen);
                 }
 
                 break;
@@ -173,6 +173,15 @@ public sealed partial class ListingCache
 
     // JSON can hold nulls where the types say there are none, so those are dropped or made empty
     private static IReadOnlyList<string> Present(IReadOnlyList<string?>? texts) => [.. (texts ?? []).OfType<string>()];
+
+    // A description saved without text or invites is none
+    private static ListingAbout? Present(ListingAbout? about)
+    {
+        if (about is null)
+            return null;
+        var kept = about with { Text = about.Text ?? "", Invites = Present(about.Invites) };
+        return kept.Text.Length > 0 || kept.Invites.Count > 0 ? kept : null;
+    }
 
     /// <summary>The listings in a source's file that have an ID, with when each was last seen.</summary>
     /// <exception cref="JsonException">The text is not a source's file, or is from a later version.</exception>

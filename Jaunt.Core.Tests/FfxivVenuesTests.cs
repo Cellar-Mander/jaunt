@@ -22,8 +22,9 @@ public class FfxivVenuesTests
         string schedule = "[]",
         string approved = "true",
         string sfw = "true",
-        string tags = """["Bar"]""") => $$"""
-        {"id":"{{id}}","name":{{JsonSerializer.Serialize(name)}},"location":{{location}},"website":{{website}},"discord":{{discord}},
+        string tags = """["Bar"]""",
+        string description = "[]") => $$"""
+        {"id":"{{id}}","name":{{JsonSerializer.Serialize(name)}},"description":{{description}},"location":{{location}},"website":{{website}},"discord":{{discord}},
          "hiring":false,"sfw":{{sfw}},"schedule":{{schedule}},"scheduleOverrides":[],"managers":["1"],"tags":{{tags}},"approved":{{approved}}}
         """;
 
@@ -511,6 +512,70 @@ public class FfxivVenuesTests
 
         var shown = Show(listing);
         Assert.Equal(("Bar", null, 0, false), (shown.Title, shown.Address, shown.Links.Count, shown.AlwaysOpen));
+    }
+
+    [Fact]
+    public void JoinsTheDescriptionsParagraphsWithABlankLine()
+    {
+        var listing = Cached(VenueJson(description: """["**Welcome** to the lounge.", "  ", null, "Drinks and music."]"""));
+
+        Assert.Equal("Welcome to the lounge.\n\nDrinks and music.", listing.About!.Text);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("""["", " "]""")]
+    public void AVenueWithoutADescriptionHasNone(string description) =>
+        Assert.Null(Cached(VenueJson(description: description)).About);
+
+    [Fact]
+    public void ADescriptionsInvitesFollowTheWebsiteAndDiscordOnce()
+    {
+        var listing = Cached(VenueJson(description: """["Join https://discord.gg/lounge or discord.gg/after"]"""));
+
+        Assert.Equal(
+            [new Uri("https://lounge.carrd.co/"), new Uri("https://discord.gg/lounge"), new Uri("https://discord.gg/after")],
+            Show(listing).Links);
+    }
+
+    [Fact]
+    public void KeepsTheDescriptionThroughTheCache()
+    {
+        var cache = new ListingCache();
+        var words = string.Join(" ", Enumerable.Repeat("word", 400));
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(description: JsonSerializer.Serialize(new[] { words }))}]"), Now);
+
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!;
+
+        Assert.Equal((Assert.Single(cache.Listings).About!.Text, true), (back.About!.Text, back.About.Cut));
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("""{"text": null, "cut": false}""")]
+    [InlineData("""{"text": "", "cut": false, "invites": []}""")]
+    public void ADescriptionSavedWithNothingInItIsNone(string about)
+    {
+        var listing = FromVenuesFile($$"""{"listings": [{"lastSeen": "2026-11-14T20:00:00+00:00", "sent": {"id": "5", "name": "Bar", "about": {{about}} } }]}""");
+
+        Assert.Null(listing.About);
+    }
+
+    [Fact]
+    public void ADescriptionSavedWithoutInvitesHasNone()
+    {
+        var listing = FromVenuesFile("""{"listings": [{"lastSeen": "2026-11-14T20:00:00+00:00", "sent": {"id": "5", "name": "Bar", "about": {"text": "Hi", "invites": [null]} }}]}""");
+
+        Assert.Equal(("Hi", false, 0), (listing.About!.Text, listing.About.Cut, listing.About.Invites.Count));
+    }
+
+    [Fact]
+    public void AnInviteSavedWithoutTextIsKept()
+    {
+        var listing = FromVenuesFile("""{"listings": [{"lastSeen": "2026-11-14T20:00:00+00:00", "sent": {"id": "5", "name": "Bar", "about": {"invites": ["https://discord.gg/a"]} }}]}""");
+
+        Assert.Equal(("", 1), (listing.About!.Text, listing.About.Invites.Count));
     }
 
     private static CachedListing FromVenuesFile(string venuesFile) =>

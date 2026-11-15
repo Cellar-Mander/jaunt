@@ -40,7 +40,7 @@ public static class Partake
     private const string Query = """
         query Events($game: String, $start: DateTime, $limit: Int, $offset: Int) {
           events(game: $game, startsBetween: { start: $start }, sortBy: STARTS_AT_ASC, limit: $limit, offset: $offset) {
-            id title startsAt endsAt location ageRating tags
+            id title description startsAt endsAt location ageRating tags
             server { name } dataCenter { name }
             team { websiteUrl discordUrl }
           }
@@ -55,15 +55,17 @@ public static class Partake
     /// <param name="LinkTexts">The host's website and Discord as sent, leaving out missing ones.</param>
     /// <param name="AgeRating">As sent ("EVERYONE", "MATURE", "ADULT"), or null.</param>
     /// <param name="Tags">The event's tags as sent ("Live DJs"), leaving out missing ones.</param>
+    /// <param name="About">Its description, cleaned when read; null if it has none.</param>
     public sealed record Event(
         string Id, string Title, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string World, string? DataCentre,
-        string? Location, IReadOnlyList<string> LinkTexts, string? AgeRating = null, IReadOnlyList<string>? Tags = null);
+        string? Location, IReadOnlyList<string> LinkTexts, string? AgeRating = null, IReadOnlyList<string>? Tags = null,
+        ListingAbout? About = null);
 
     /// <summary>What the list shows for a cached event, worked out from the values Partake sent.</summary>
     /// <param name="World">Corrected to the game's spelling where the gazetteer knows it.</param>
     /// <param name="DataCentre">Trimmed; null when blank.</param>
     /// <param name="Location">Trimmed; empty when none.</param>
-    /// <param name="Links">The website and Discord, http or https only.</param>
+    /// <param name="Links">The website and Discord, then the Discord invites its description links to, http or https only.</param>
     public sealed record Shown(string Title, string World, string? DataCentre, string Location, IReadOnlyList<Uri> Links);
 
     /// <summary>One response: the events kept, and how many the page held before any were skipped.</summary>
@@ -138,6 +140,7 @@ public static class Partake
             listing.LinkTexts = item.LinkTexts;
             listing.Rating = item.AgeRating;
             listing.SourceTags = item.Tags ?? [];
+            listing.About = item.About;
         }
     }
 
@@ -151,7 +154,7 @@ public static class Partake
             FfxivVenues.World((listing.ListedOn ?? "").Trim(), gazetteer),
             string.IsNullOrEmpty(dataCentre) ? null : dataCentre,
             (listing.Location ?? "").Trim(),
-            FfxivVenues.Links([.. listing.LinkTexts]));
+            FfxivVenues.Links([.. listing.LinkTexts, .. listing.About?.Invites ?? []]));
     }
 
     /// <summary>An event's title as shown: trimmed and cut to 60 characters like an ad's.</summary>
@@ -181,7 +184,7 @@ public static class Partake
         string[] links = [.. new[] { data.Team?.WebsiteUrl, data.Team?.DiscordUrl }.OfType<string>()];
         return new Event(
             id.ToString(CultureInfo.InvariantCulture), title, start, end, server, data.DataCenter?.Name, data.Location, links,
-            data.AgeRating, [.. (data.Tags ?? []).OfType<string>()]);
+            data.AgeRating, [.. (data.Tags ?? []).OfType<string>()], ListingAbout.Clean(data.Description));
     }
 
     // The API's shapes, only the fields Jaunt asks for
@@ -192,6 +195,10 @@ public static class Partake
 
         [JsonPropertyName("title")]
         public string? Title { get; set; }
+
+        /// <summary>Markdown, often with images.</summary>
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
 
         [JsonPropertyName("startsAt")]
         public DateTimeOffset? StartsAt { get; set; }
