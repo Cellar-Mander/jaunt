@@ -39,11 +39,16 @@ internal static class ShownText
             return shown;
 
         AllocationWatch.Filled();
-        // ImGui's characters are 16-bit here, so it never has a glyph beyond U+FFFF
-        shown = FontFallback.Fold(text, c => c <= char.MaxValue && font.FindGlyphNoFallback((ushort)c) != null);
+        shown = FoldFor(font, text);
         if (memo.Count >= MaxRemembered)
             memo.Clear();
         memo[text] = shown;
         return shown;
     }
+
+    // Apart from Fold, as a lambda capturing font allocates its closure on entry to the method that
+    // declares font, on every call rather than only on a miss
+    private static unsafe string FoldFor(ImFontPtr font, string text) =>
+        // ImGui's characters are 16-bit here, so it never has a glyph beyond U+FFFF
+        FontFallback.Fold(text, c => c <= char.MaxValue && font.FindGlyphNoFallback((ushort)c) != null);
 }
