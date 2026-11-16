@@ -75,6 +75,38 @@ public class PerFrameAllocationTests
         AssertNoAllocation(() => CountOpen(openings));
     }
 
+    // Each link's tooltip while hovered, and its address when clicked. .NET builds AbsoluteUri on first
+    // read, so the first frame that hovers a link allocates; it must say so, or the in-game self-test
+    // counts it as a steady frame that allocated (ebd 1df9030e)
+    [Fact]
+    public void LinkAddressAllocatesOnlyOnAFillItReports()
+    {
+        _ = WebLinks.Address(new Uri("https://example.com/warm-up"), out _); // the JIT allocates on the first call
+        Uri[] links = [new("https://ffxivvenues.com/"), new("https://creativecommons.org/licenses/by-sa/4.0/"), new("https://Venue.carrd.co/a b#menu")];
+        foreach (var link in links)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var address = WebLinks.Address(link, out var filled);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.True(allocated == 0 || filled, $"the first read of {link} allocated {allocated} bytes without saying it filled");
+            Assert.Equal(link.AbsoluteUri, address);
+        }
+
+        AssertNoAllocation(() => ReadAddresses(links));
+    }
+
+    private static int ReadAddresses(Uri[] links)
+    {
+        var read = 0;
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            read += WebLinks.Address(links[frame % links.Length], out var filled).Length;
+            Assert.False(filled);
+        }
+
+        return read;
+    }
+
     private static MarkEntry Entry(AddressKey[] at, params CachedListing[] members) => new(members, at, "Tavern", "Siren, Empyreum, W16, P20", []);
 
     private static int DrawMarks(MarkEntry[] entries, PlaceMark?[] places)

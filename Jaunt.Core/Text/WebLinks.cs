@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Jaunt.Core.Text;
 
 /// <summary>A website link found in ad text.</summary>
@@ -24,6 +26,9 @@ public static class WebLinks
         "com", "net", "org", "co", "io", "me", "ee", "gg", "tv", "gd", "ly", "gl", "cc", "club", "site", "link",
         "xyz", "app", "dev", "page", "info", "bio", "live", "art", "us", "uk", "ca", "au", "nz", "eu", "de", "fr", "jp",
     };
+
+    // Keyed by the Uri instance, so a lookup never reads its parts; an entry goes with its Uri
+    private static readonly ConditionalWeakTable<Uri, string> Addresses = [];
 
     /// <summary>Finds every link in one ad, in the order written.</summary>
     /// <param name="adText">The ad's text as the game sends it, glyphs included.</param>
@@ -61,6 +66,24 @@ public static class WebLinks
             return uri.AbsolutePath.Length > 1;
         return (host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) || host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase))
             && uri.AbsolutePath.StartsWith("/invite/", StringComparison.OrdinalIgnoreCase) && uri.AbsolutePath.Length > "/invite/".Length;
+    }
+
+    /// <summary>
+    /// A link's address as its tooltip shows it and as it opens, for per-frame code. .NET builds
+    /// <see cref="Uri.AbsoluteUri"/> on first read, which allocates, so <paramref name="filled"/> says
+    /// whether this call worked it out (as <c>AllocationWatch.Filled()</c> counts); later calls for
+    /// the same <see cref="Uri"/> allocate nothing. Use from the draw thread only.
+    /// </summary>
+    public static string Address(Uri uri, out bool filled)
+    {
+        filled = !Addresses.TryGetValue(uri, out var address);
+        if (filled)
+        {
+            address = uri.AbsoluteUri;
+            Addresses.Add(uri, address);
+        }
+
+        return address!;
     }
 
     private static bool IsUrlChar(char c) => char.IsAsciiLetterOrDigit(c) || c == '_' || UrlPunctuation.Contains(c);
