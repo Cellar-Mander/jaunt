@@ -562,7 +562,11 @@ and copy link (`6e2b5199`) are separate tasks.
   Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
   a location given only as text, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
-  less"), with "Read the rest on the website" after a description cut at the limit; Age / rating: an RP calendar event's rating; then a footer line: "Discord" linking to the
+  less"), with "Read the rest on the website" after a description cut at the limit; Age / rating: each age or rating its listings give, once each (Partake's `ageRating` as "Mature", the RP
+  calendar's rating or `[M]`-style tag, else an age in the text such as "18+" or "21+", the highest
+  if several; FFXIV Venues gives none), then SFW or NSFW as the safety filter counts the entry
+  ("18+ · SFW", or just "SFW"); Tags: its interests as outlined chips, not clickable, left out when
+  it has none; then a footer line: "Discord" linking to the
   first Discord invite among the links (`discord.gg/…`, or `discord.com/invite/…` and
   `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
   ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source

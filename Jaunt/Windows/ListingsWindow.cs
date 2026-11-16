@@ -203,10 +203,12 @@ internal sealed class ListingsWindow : Window
     /// <summary>
     /// What the detail pane shows of <see cref="Row"/> that takes formatting or a search to work out:
     /// the status line of its first opening, its addresses as text, the Lifestream request for the
-    /// first, which link Open page and the footer's Discord take (or -1), and its sources.
+    /// first, which link Open page and the footer's Discord take (or -1), its sources, its age or
+    /// rating with SFW or NSFW ("18+ · SFW"), and its interests' labels.
     /// </summary>
     private sealed record DetailView(
-        Row Row, string? Status, bool Open, string[] Addresses, TravelRequest? Travel, int Page, int Discord, ListingSource[] Sources);
+        Row Row, string? Status, bool Open, string[] Addresses, TravelRequest? Travel, int Page, int Discord, ListingSource[] Sources,
+        string Rating, string[] Tags);
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
@@ -726,7 +728,7 @@ internal sealed class ListingsWindow : Window
 
         DrawLocation(view);
         DrawAbout(view, width);
-        DrawRating(row);
+        DrawRatingAndTags(view);
         DrawFooter(view);
     }
 
@@ -748,7 +750,8 @@ internal sealed class ListingsWindow : Window
         var links = row.Details.Links;
         return new DetailView(
             row, status, open, [.. addresses.Select(AddressText.Format)], addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
-            PageIndex(links), DiscordIndex(links), [.. row.Members.Select(m => m.Listing.Source).Distinct()]);
+            PageIndex(links), DiscordIndex(links), [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
+            [.. ListingFilters.LabelsOf(row.Tagging.Interests)]);
     }
 
     /// <summary>
@@ -951,14 +954,41 @@ internal sealed class ListingsWindow : Window
         }
     }
 
-    /// <summary>The content rating a calendar event gives, as information.</summary>
-    private static void DrawRating(Row row)
+    /// <summary>
+    /// Each age or rating the entry's members give, once each, then SFW or NSFW as the safety filter
+    /// counts the entry ("18+ · SFW", "Mature · NSFW").
+    /// </summary>
+    private static string RatingOf(Row row)
     {
-        if (row.CalendarEvent?.Rating is not { } rating)
+        var ages = row.Members.Select(m => ListingTags.AgeOf(m.Listing)).OfType<string>().Distinct();
+        return string.Join(" · ", ages.Append(row.Tagging.Nsfw ? "NSFW" : "SFW"));
+    }
+
+    /// <summary>The age or rating with SFW or NSFW, then the entry's interests as chips, when it has any.</summary>
+    private static void DrawRatingAndTags(DetailView view)
+    {
+        Section("Age / rating");
+        ImGui.TextUnformatted(view.Rating);
+        if (view.Tags.Length == 0)
             return;
 
-        Section("Age / rating");
-        ImGui.TextUnformatted(rating);
+        Section("Tags");
+        for (var i = 0; i < view.Tags.Length; i++)
+            TagChip(view.Tags[i], i == 0);
+    }
+
+    /// <summary>A rounded, outlined label like an unlit filter chip, but not clickable; wraps to a new line when it doesn't fit.</summary>
+    private static void TagChip(string label, bool first)
+    {
+        var padding = ImGui.GetStyle().FramePadding;
+        var size = ImGui.CalcTextSize(label) + (padding * 2);
+        if (!first)
+            FlowNext(size.X);
+        var min = ImGui.GetCursorScreenPos();
+        ImGui.Dummy(size);
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRect(min, min + size, ImGui.GetColorU32(ImGuiCol.Border), size.Y / 2, ImDrawFlags.None, Math.Max(1, ImGuiHelpers.GlobalScale));
+        drawList.AddText(min + padding, ImGui.GetColorU32(ImGuiCol.Text), label);
     }
 
     /// <summary>

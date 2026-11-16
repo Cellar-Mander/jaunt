@@ -103,6 +103,8 @@ times as in FFXIV Venues 1 first.
    and a footer naming its source ("Sources: FFXIV Venues"), each source but Party Finder linking to its
    site, in blue and underlined. A venue with a Discord invite shows "Discord" (also blue and underlined) first in the footer, opening the invite, and
    not under Location; one whose only link is the invite has no Open page. A long ad shows "Read more", which expands it and becomes "Show less".
+   Each shows Age / rating: an ad saying "SFW 18+" shows "18+ · SFW"; a Partake or calendar event shows its rating first ("Mature · SFW"); a venue
+   shows only "SFW" or "NSFW". Tags shows its interests as outlined chips that wrap at the pane's edge; a listing with none has no Tags.
 6. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
    Disable and re-enable Jaunt: still selected. Press Settings → Clear cached listings, so it drops
    out of the data: the detail pane shows "Select a listing on the left to see its details."

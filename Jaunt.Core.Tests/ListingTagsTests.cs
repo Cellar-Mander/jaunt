@@ -116,6 +116,53 @@ public class ListingTagsTests
     public void AgeWordsMarkAnAgeRestriction(string text, bool restricted) => Assert.Equal(restricted, ListingTags.Read(text).AgeRestricted);
 
     [Theory]
+    [InlineData("18+ lounge", 18)]
+    [InlineData("21+ lounge", 21)]
+    [InlineData("+21 only", 21)]
+    [InlineData("R18 event", 18)]
+    [InlineData("Adults only tonight", 18)]
+    [InlineData("18禁イベント", 18)]
+    [InlineData("21+ bar, 18+ dance floor", 21)] // the highest wins, whichever comes first
+    [InlineData("18+ dance floor, 21+ bar", 21)]
+    [InlineData("+21 bar, 18+ dance floor", 21)]
+    [InlineData("21+ bar, adults only", 21)]
+    [InlineData("21+ bar, 18禁", 21)]
+    [InlineData("Ward 18 plot 21", 0)]
+    public void AgeWordsGiveTheAge(string text, int age) => Assert.Equal(age, ListingTags.Read(text).MinAge);
+
+    [Theory]
+    [InlineData("SFW 18+ lounge", "18+")]
+    [InlineData("(21+) lounge", "21+")]
+    [InlineData("Chill lounge", null)]
+    public void AnAdsAgeIsTheRestrictionItGives(string text, string? age) => Assert.Equal(age, ListingTags.AgeOf(Ad(text)));
+
+    [Theory]
+    [InlineData("Club night", "MATURE", "Mature")]
+    [InlineData("Club night", " ADULT ", "Adult")]
+    [InlineData("Club night", "EVERYONE", "Everyone")]
+    [InlineData("Club night 18+", null, "18+")] // no rating: the title's age
+    [InlineData("Club night 18+", "", "18+")]
+    [InlineData("Club night", null, null)]
+    public void APartakeEventsAgeIsItsRating(string title, string? rating, string? age) => Assert.Equal(age, ListingTags.AgeOf(PartakeEvent(title, rating)));
+
+    [Theory]
+    [InlineData("Tavern night", "Mature", "Mature")]
+    [InlineData("[AO] Tavern night", null, "Adults Only")] // the name's tag when no rating is sent
+    [InlineData("[AO] Tavern night", "Teen", "Teen")] // the rating sent wins over the tag
+    [InlineData("Tavern night 18+", "Mature", "Mature")] // the rating wins over the name's age
+    [InlineData("Tavern night 18+", " ", "18+")]
+    [InlineData("Tavern night", null, null)]
+    public void ACalendarEventsAgeIsItsRating(string name, string? rating, string? age) => Assert.Equal(age, ListingTags.AgeOf(CalendarEvent(name, rating)));
+
+    [Fact]
+    public void AVenueGivesNoAge()
+    {
+        var venue = Venue(false);
+        venue.Title = "The 18+ Lounge";
+        Assert.Null(ListingTags.AgeOf(venue));
+    }
+
+    [Theory]
     [InlineData("18+ lounge", true)]
     [InlineData("18+ SFW lounge", false)] // an explicit word wins
     [InlineData("NSFW lounge", true)]
