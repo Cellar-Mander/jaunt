@@ -91,7 +91,7 @@ times as in FFXIV Venues 1 first.
    later today), "Tomorrow" and the weekday, then dates in the Settings format with the weekday
    dimmed. 24/7 venues are at the end of "Open now". A venue open now also shows under its next
    opening's day; one not open shows once.
-3. **Rows**: each has a rounded square icon level with the first line (grey until its image loads, and for one with none), a status line (green "Open now · until …" or the times), the
+3. **Rows**: each has a rounded square icon level with the first line (a pictogram of its first tag until its image loads, and for one with none), a status line (green "Open now · until …" or the times), the
    title in a larger font and the world. Above the list, at the right, "N listings" counts the
    entries (a venue under both "Open now" and its next day counts once). Narrow the window: long titles end in "…" rather than running under the
    detail pane.
@@ -99,10 +99,12 @@ times as in FFXIV Venues 1 first.
    dividers and the detail follow at once. A venue's opening matches its FFXIV Venues page in your
    time zone.
 5. **Detail**: select a Party Finder ad, a venue, a Partake event and a calendar event. Each shows a
-   band with its splash image (grey for one with none), its title in a larger font, status, world, Travel and Open page where it has an address or link, Location,
+   band with its splash image (its district's art, dimmed, for one with none), its title in a larger font, status, world, Travel and Open page where it has an address or link, Location,
    and a footer naming its source ("Sources: FFXIV Venues"), each source but Party Finder linking to its
    site, in blue and underlined. A venue with a Discord invite shows "Discord" (also blue and underlined) first in the footer, opening the invite, and
    not under Location; one whose only link is the invite has no Open page. A long ad shows "Read more", which expands it and becomes "Show less".
+   Each shows Age / rating: an ad saying "SFW 18+" shows "18+ · SFW"; a Partake or calendar event shows its rating first ("Mature · SFW"); a venue
+   shows only "SFW" or "NSFW". Tags shows its interests as outlined chips that wrap at the pane's edge; a listing with none has no Tags.
 6. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
    Disable and re-enable Jaunt: still selected. Press Settings → Clear cached listings, so it drops
    out of the data: the detail pane shows "Select a listing on the left to see its details."
@@ -129,6 +131,14 @@ times as in FFXIV Venues 1 first.
     Jaunt: the images still show at once, from `images/`. Under
     Wine (XIVLauncher.Core), FFXIV Venues banners show, as they are WebP. *(self-test: none; fetching,
     fallbacks and keeping are covered by `ImageStoreTests`)*
+11. **Placeholders**: find a row with no icon (most Party Finder ads): it shows a grey pictogram of its
+    first tag in venue-type-first order, a mug for a cafe, a martini glass for a bar, headphones for a
+    club, and a house for one with no tags. Select it: an ad with a Mist address shows Limsa Lominsa's
+    loading screen, dimmed, cropped to the band with no dark fade at its bottom; one in the Lavender
+    Beds, Goblet, Shirogane or Empyreum shows Gridania's, Ul'dah's, Kugane's or Ishgard's. An RP calendar
+    event in the open world ("Central Shroud, The Bannock") shows its zone's loading screen. One whose
+    location is only "See URL", and an ad with no address, shows the world map. *(self-test: none; the choice is covered by
+    `PlaceholdersTests`)*
 
 ## xivpf
 

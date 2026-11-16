@@ -563,7 +563,11 @@ and copy link (`6e2b5199`) are separate tasks.
   Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
   a location given only as text, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
-  less"), with "Read the rest on the website" after a description cut at the limit; Age / rating: an RP calendar event's rating; then a footer line: "Discord" linking to the
+  less"), with "Read the rest on the website" after a description cut at the limit; Age / rating: each age or rating its listings give, once each (Partake's `ageRating` as "Mature", the RP
+  calendar's rating or `[M]`-style tag, else an age in the text such as "18+" or "21+", the highest
+  if several; FFXIV Venues gives none), then SFW or NSFW as the safety filter counts the entry
+  ("18+ · SFW", or just "SFW"); Tags: its interests as outlined chips, not clickable, left out when
+  it has none; then a footer line: "Discord" linking to the
   first Discord invite among the links (`discord.gg/…`, or `discord.com/invite/…` and
   `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
   ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source
@@ -718,10 +722,26 @@ them; the browser draws them.
   tried again when shown a day after. On load, entries not worked out for 30 days are dropped, and
   so is any file no entry names. An unreadable index starts empty, and a file name in it that isn't
   one the store makes is ignored.
-- **Drawing**: a plain rounded box in the frame colour shows until the image is kept, and stays when
-  there is none. The image covers the box, cropped to its shape about the middle: the row's square,
+- **Drawing**: a rounded box in the frame colour, with a placeholder on it until the image is kept
+  and loaded, and when there is none. The image covers the box, cropped to its shape about the middle: the row's square,
   or the detail pane's band (as wide as the pane, 0.3 of its width tall, at most 140 px at the
   default scale). Textures are loaded by Dalamud from the kept PNGs.
+- **Placeholders** (`Placeholders`, `PlaceholderArt`; decisions with the user, `9ef7d11c`):
+  - Icon: a FontAwesome pictogram in the disabled text colour, 0.55 of the square, for the entry's
+    first interest in venue-type-first order: Clubs (headphones), Bars (martini glass), Cafes (steaming
+    mug), Spa, Gambling (dice), Live music (note), Games (trophy), Art (palette), Photography (camera),
+    Tarot (moon), Roleplay (theatre masks), Chill (couch). An entry with no interests shows a house.
+  - Splash (`Backdrops`): a loading screen read from the game's data (the `TerritoryType`'s
+    `LoadingImage`, the 1920×1080 version), so nothing ships with the plugin. It is the screen of the
+    district of the entry's first address that names one, the art of the city it lies by; else of the
+    town or field zone (`TerritoryIntendedUse` 0 or 1) whose English name a member's written location
+    starts with, as the RP calendar and Partake give open-world places ("Central Shroud, The Bannock"),
+    the longest if several do. Words match in any case, and a written word ending in a full stop matches
+    any word it begins ("Cen. Thanalan"). Worked out once per entry with its image slots. Its dark top
+    edge and the fade along its bottom are cropped off (the middle 0.05–0.85 of its height), and it is
+    dimmed to 70% so it reads as a backdrop rather than the venue's own banner. An entry with neither
+    (a Party Finder ad with no address, an event at "See URL") shows the game's default loading screen,
+    the world map (`LoadingImage` row 1), which the game shows for zones without one of their own.
 - The plugin ships only SkiaSharp's 64-bit Windows native library: the game is always 64-bit Windows,
   also under Wine and XIV on Mac.
 

@@ -45,6 +45,20 @@ public class PerFrameAllocationTests
         AssertNoAllocation(() => DrawMarks(entries, places));
     }
 
+    // Each row drawn without an icon picks its pictogram
+    [Fact]
+    public void IconInterestDoesNotAllocatePerFrame()
+    {
+        Interests[] taggings = [Interests.None, Interests.Chill, Interests.Bars | Interests.Cafes | Interests.Roleplay];
+        AssertNoAllocation(() =>
+        {
+            var found = 0;
+            foreach (var tagging in taggings)
+                found += (int)Placeholders.IconInterest(tagging);
+            return found;
+        });
+    }
+
     // Each row drawn colours its status line by whether it is open now
     [Fact]
     public void OccurrenceIsOpenDoesNotAllocatePerFrame()

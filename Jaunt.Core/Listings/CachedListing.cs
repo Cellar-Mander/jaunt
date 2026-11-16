@@ -95,7 +95,7 @@ public sealed class CachedListing
 
     /// <summary>
     /// The content rating the source gives, as sent (the RP calendar's "Teen" or "Mature", Partake's
-    /// "MATURE"); null if none. Kept for filtering (<see cref="ListingTags"/>); not shown. For the RP
+    /// "MATURE"); null if none. Kept for filtering and shown in the detail pane (<see cref="ListingTags"/>). For the RP
     /// calendar, <see cref="RpEventCalendar.Show"/> falls back to the name's rating tag.
     /// </summary>
     public string? Rating { get; set; }

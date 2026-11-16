@@ -12,7 +12,7 @@ namespace Jaunt.Text;
 internal static class GazetteerLoader
 {
     // The five housing territories
-    private static readonly (uint Territory, District District)[] Districts =
+    internal static readonly (uint Territory, District District)[] Districts =
     [
         (339, District.Mist), (340, District.LavenderBeds), (341, District.Goblet), (641, District.Shirogane), (979, District.Empyreum),
     ];
