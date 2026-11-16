@@ -5,7 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Components;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -38,10 +38,14 @@ public sealed class ConfigWindow : Window, IDisposable
 
     private static readonly string CooldownHelp = BuildCooldownHelp();
 
+    // Made once, as ToIconString makes a new string on every call
+    private static readonly string InfoIcon = FontAwesomeIcon.InfoCircle.ToIconString();
+
     private const string ClearPopupId = "Clear cached listings?###JauntClearCache";
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
+    private readonly HeldFont iconFont = new(Plugin.PluginInterface.UiBuilder.IconFontHandle);
     private string? clearResult;
 
     // Worked out at most once a second, or when a format or the minute changes, rather than every
@@ -65,9 +69,13 @@ public sealed class ConfigWindow : Window, IDisposable
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(360, 260), MaximumSize = new Vector2(1200, 1200) };
     }
 
-    public void Dispose() { }
+    public void Dispose() => iconFont.Dispose();
 
-    public override void OnClose() => clearResult = null;
+    public override void OnClose()
+    {
+        clearResult = null;
+        iconFont.Release();
+    }
 
     public override void OnOpen() => nextHiddenRefresh = DateTimeOffset.MinValue;
 
@@ -86,6 +94,7 @@ public sealed class ConfigWindow : Window, IDisposable
 
     private void DrawSections()
     {
+        iconFont.BeginFrame();
         if (DrawSectionHeader(SettingsSection.Data, "Data###Data"))
             DrawData();
         if (DrawSectionHeader(SettingsSection.Display, "Display###Display"))
@@ -116,8 +125,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private void DrawData()
     {
         ImGui.TextUnformatted("Refresh cooldown (minutes)");
-        ImGui.SameLine();
-        ImGuiComponents.HelpMarker(CooldownHelp);
+        HelpMarker(CooldownHelp);
         DrawCooldownInput();
 
         ImGui.Spacing();
@@ -125,8 +133,7 @@ public sealed class ConfigWindow : Window, IDisposable
             ImGui.OpenPopup(ClearPopupId);
         DrawClearConfirmation();
 
-        ImGui.SameLine();
-        ImGuiComponents.HelpMarker(
+        HelpMarker(
             "Removes every cached listing that isn't favourited, visited or hidden.\n" +
             "Other listings are also dropped one month after any source last listed them.");
 
@@ -138,6 +145,26 @@ public sealed class ConfigWindow : Window, IDisposable
 
         ImGui.Spacing();
         DrawSources();
+    }
+
+    /// <summary>
+    /// An info icon on the same line that shows <paramref name="text"/> when hovered, as Dalamud's
+    /// <c>ImGuiComponents.HelpMarker</c> draws it, which allocates on every call (it pushes the colour and
+    /// font through <c>ImRaii</c> and makes the icon's string anew).
+    /// </summary>
+    private void HelpMarker(string text)
+    {
+        ImGui.SameLine();
+        using (iconFont.Push())
+            ImGui.TextDisabled(InfoIcon);
+        if (!ImGui.IsItemHovered())
+            return;
+
+        ImGui.BeginTooltip();
+        ImGui.PushTextWrapPos(ImGui.GetFontSize() * 35f);
+        ImGui.TextUnformatted(text);
+        ImGui.PopTextWrapPos();
+        ImGui.EndTooltip();
     }
 
     /// <summary>Where listings come from, each linked to its site, with the credits sources ask for.</summary>
