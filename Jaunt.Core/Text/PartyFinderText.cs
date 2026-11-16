@@ -29,9 +29,16 @@ public static class PartyFinderText
     private const int BoxedNumber31 = 0xE0AE;
 
     /// <summary>Normalises one ad's text.</summary>
-    public static NormalisedText Normalise(string raw)
+    public static NormalisedText Normalise(string raw) => Normalise(raw, false);
+
+    /// <summary>Normalises one ad's text, optionally keeping where its decoration was.</summary>
+    /// <param name="markDecoration">
+    /// Write decoration as " | ", and bullets (<c>•</c>, <c>●</c>) as " • ", instead of a space, for
+    /// readers that need to know where a run of words ends ("DJ QUEEN BAE ♥ HAPPY BIRTHDAY").
+    /// </param>
+    public static NormalisedText Normalise(string raw, bool markDecoration)
     {
-        var decoded = Decode(raw);
+        var decoded = Decode(raw, markDecoration);
         var composed = Compose(decoded);
         return Collapse(composed);
     }
@@ -64,7 +71,7 @@ public static class PartyFinderText
         public bool LastBoxed => Boxed[^1];
     }
 
-    private static Marked Decode(string raw)
+    private static Marked Decode(string raw, bool markDecoration)
     {
         var output = new Marked();
         var runes = raw.EnumerateRunes().ToArray();
@@ -93,7 +100,7 @@ public static class PartyFinderText
                 else if (IsLetterOrLetterGlyph(next))
                     output.Append(Rune.IsLower(next) ? char.ToLowerInvariant(letter) : letter, Boxed(next.Value) is not null);
                 else
-                    output.Space(' ');
+                    Decoration(output, o, markDecoration);
             }
             else if (Word(o) is { } word)
             {
@@ -108,7 +115,7 @@ public static class PartyFinderText
             }
             else if (IsDecoration(r))
             {
-                output.Space(' ');
+                Decoration(output, o, markDecoration);
             }
             else
             {
@@ -117,6 +124,15 @@ public static class PartyFinderText
         }
 
         return output;
+    }
+
+    /// <summary>A space, or with <paramref name="mark"/> " • " for a bullet and " | " for other decoration.</summary>
+    private static void Decoration(Marked output, int o, bool mark)
+    {
+        if (!mark)
+            output.Space(' ');
+        else
+            output.Append(o is 0x2022 or 0x25CF ? " • " : " | ", false);
     }
 
     /// <summary>A boxed letter, digit or sign: the text it reads as.</summary>
