@@ -147,6 +147,9 @@ public class AddressParserTests
     [InlineData("ALPHA The Goblet W13 P11", "Alpha Goblet 13.11")]
     [InlineData("Jenova Lav.Beds W8 P58", "Jenova LavenderBeds 8.58")]
     [InlineData("Primal/Excal/LavB/W25/P6", "Excalibur LavenderBeds 25.6")]
+    [InlineData("Crystal Goblet Zalera W7 P5", "Zalera Goblet 7.5")] // the district before the world
+    [InlineData("Mist Lich W7 P5", "Lich Mist 7.5")]
+    [InlineData("Mist Twin Lich W7 P5", "Lich Mist 7.5")] // the nearest world
     public void DistrictIsNearestThenWorld(string text, string expected) => Assert.Equal(expected, P(text, "Balmung"));
 
     [Theory]
@@ -154,6 +157,8 @@ public class AddressParserTests
     [InlineData("Mist a b c d e f g W1 P2", "Lich? null 1.2")] // seven is too far
     [InlineData("Twin x y z Mist W1 P2", "Twintania Mist 1.2")] // three words before the district
     [InlineData("Twin w x y z Mist W1 P2", "Lich? Mist 1.2")]
+    [InlineData("Mist x y z Twin W1 P2", "Twintania Mist 1.2")] // three words before the world
+    [InlineData("Mist w x y z Twin W1 P2", "Twintania null 1.2")]
     [InlineData("Grand Library open W8 P45 Mist Sagi", "Sagittarius Mist 8.45")] // after, when none before
     [InlineData("Mist W8 P45 open stage Twin", "Twintania Mist 8.45")] // but only just after
     [InlineData("Mist W8 P45 open stage now Twin", "Lich? Mist 8.45")]

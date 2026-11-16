@@ -83,7 +83,8 @@ digits, touching and including a digit, is a room (`【B1】`). Other brackets a
 closed within 10 words ends the address.
 
 **District and world.** Walking back from the ward, skipping up to 6 other words: the nearest district,
-then, skipping up to 3 more, the nearest world. A word that names both ("Gob", "Gobby") is the district if none has been
+then, skipping up to 3 more, the nearest world. If a world comes first, the district is the nearest one
+before it, skipping up to 3 more ("Goblet Zalera W7 P5"). A word that names both ("Gob", "Gobby") is the district if none has been
 found yet, and the world otherwise. A data centre where the world would be ("Materia-LB-W22-P36") means
 the text names no world there. Walking back never goes into the previous address. If either is still
 missing, look forward, skipping up to 2 other words ("W8 P45 Mist Sagi"). If no world is found, use the world of the
