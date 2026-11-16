@@ -3,6 +3,7 @@
     "project": "Jaunt.Core.csproj",
     "reporters": [ "progress", "html", "markdown", "json" ],
     "additional-timeout": 1000,
+    "concurrency": 4,
     "ignore-methods": [ "*.ConfigureAwait" ],
     "thresholds": {
       "high": 80,
