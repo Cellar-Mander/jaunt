@@ -21,7 +21,21 @@ public sealed class ImageStoreTests : IDisposable
             Directory.Delete(folder, recursive: true);
     }
 
-    private ImageStore NewStore(TimeSpan? saveDelay = null) => new(folder, network, "Jaunt/test", (_, _) => { }, time, saveDelay);
+    /// <summary>
+    /// A store over the test folder. Unless <paramref name="decode"/> is set it converts downloads
+    /// with <see cref="Convert"/>, as most tests are about fetching and keeping, not decoding.
+    /// </summary>
+    private ImageStore NewStore(TimeSpan? saveDelay = null, bool decode = false) =>
+        new(folder, network, "Jaunt/test", (_, _) => { }, time, saveDelay, decode ? null : Convert);
+
+    /// <summary>The PNG the fake network serves as an image, made once.</summary>
+    private static readonly byte[] Png = ImageProcessingTests.Encoded(2, 2, SKEncodedImageFormat.Png);
+
+    /// <summary>Stands in for decoding: a download that starts like <see cref="Png"/> is an image, and anything else isn't.</summary>
+    private static byte[]? Convert(byte[] data, ImageKind kind) => data.AsSpan().StartsWith(Png.AsSpan(0, 8)) ? Png : null;
+
+    /// <summary>A good image followed by padding, so it is over the 8 MB cap; made once.</summary>
+    private static readonly byte[] OverCap = [.. Png, .. new byte[ImageStore.MaxImageBytes]];
 
     private static IReadOnlyList<ImageSource> Pictures(params string[] urls) => [.. urls.Select(u => new PictureSource(new Uri(u)))];
 
@@ -37,7 +51,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AFetchedImageIsKeptAsAPngAndShownAfterReopeningWithoutFetchingAgain()
     {
         network.Image(Banner, 600, 300);
-        using (var store = NewStore())
+        using (var store = NewStore(decode: true))
         {
             var slot = await Fetched(store, ImageKind.Splash, Pictures(Banner));
 
@@ -46,7 +60,7 @@ public sealed class ImageStoreTests : IDisposable
         }
 
         network.Requests.Clear();
-        using (var reopened = NewStore())
+        using (var reopened = NewStore(decode: true))
         {
             var slot = reopened.Slot(ImageKind.Splash, Pictures(Banner));
             Assert.NotNull(slot.Path);
@@ -61,7 +75,7 @@ public sealed class ImageStoreTests : IDisposable
     [Fact]
     public async Task RequestsSayTheyAreFromJaunt()
     {
-        network.Image(Banner, 64, 64);
+        network.Image(Banner);
         using var store = NewStore();
 
         await Fetched(store, ImageKind.Icon, Pictures(Banner));
@@ -72,8 +86,8 @@ public sealed class ImageStoreTests : IDisposable
     [Fact]
     public async Task TheIndexIsSavedSoonAfterAFetchNotOnlyOnUnload()
     {
-        network.Image(Banner, 64, 64);
-        network.Image(Other, 64, 64);
+        network.Image(Banner);
+        network.Image(Other);
         using var store = NewStore(saveDelay: TimeSpan.Zero);
         var index = Path.Combine(folder, "index.json");
         await Fetched(store, ImageKind.Icon, Pictures(Banner));
@@ -91,7 +105,7 @@ public sealed class ImageStoreTests : IDisposable
         Directory.CreateDirectory(copy);
         foreach (var file in Directory.EnumerateFiles(folder))
             File.Copy(file, Path.Combine(copy, Path.GetFileName(file)));
-        using (var reopened = new ImageStore(copy, network, "Jaunt/test", (_, _) => { }, time))
+        using (var reopened = new ImageStore(copy, network, "Jaunt/test", (_, _) => { }, time, process: Convert))
         {
             Assert.NotNull(reopened.Slot(ImageKind.Icon, Pictures(Banner)).Path);
             Assert.NotNull(reopened.Slot(ImageKind.Icon, Pictures(Other)).Path);
@@ -120,7 +134,7 @@ public sealed class ImageStoreTests : IDisposable
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner));
         Assert.Null(slot.Path);
 
-        network.Image(Other, 64, 64);
+        network.Image(Other);
         network.Redirect(Banner, Other);
         network.Fail(Banner, null);
         time.Advance(ImageStore.RetryAfter);
@@ -134,8 +148,8 @@ public sealed class ImageStoreTests : IDisposable
     public async Task WithoutTheDecodersNativeLibraryItLogsOnceAndStopsDownloading()
     {
         var logged = new List<string>();
-        network.Image(Banner, 64, 64);
-        network.Image(Other, 64, 64);
+        network.Image(Banner);
+        network.Image(Other);
         using var store = new ImageStore(
             folder, network, "Jaunt/test", (message, _) => logged.Add(message), time,
             process: (_, _) => throw new TypeInitializationException("SkiaSharp.SkiaApi", new DllNotFoundException("libSkiaSharp")));
@@ -157,7 +171,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AnInviteAnswerThatIsntJsonFallsToTheNextSource()
     {
         network.Respond("https://discord.com/api/v10/invites/lounge", HttpStatusCode.OK, "<html>Cloudflare</html>");
-        network.Image(Banner, 600, 300);
+        network.Image(Banner);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, [new DiscordSource("lounge"), new PictureSource(new Uri(Banner))]);
@@ -168,7 +182,7 @@ public sealed class ImageStoreTests : IDisposable
     [Fact]
     public async Task OnlySlotsAskedForAreFetched()
     {
-        network.Image(Banner, 64, 64);
+        network.Image(Banner);
         using var store = NewStore();
 
         var slot = store.Slot(ImageKind.Icon, Pictures(Banner));
@@ -181,7 +195,7 @@ public sealed class ImageStoreTests : IDisposable
     [Fact]
     public async Task ASlotAskedForEveryFrameIsFetchedOnce()
     {
-        network.Image(Banner, 64, 64);
+        network.Image(Banner);
         using var store = NewStore();
         var slot = store.Slot(ImageKind.Icon, Pictures(Banner));
 
@@ -204,7 +218,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task ASourceWithoutAnImageFallsToTheNext(HttpStatusCode status)
     {
         network.Respond(Banner, status, "<html>Not here</html>");
-        network.Image(Other, 64, 64);
+        network.Image(Other);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner, Other));
@@ -216,18 +230,10 @@ public sealed class ImageStoreTests : IDisposable
     [Fact]
     public async Task AnImageLargerThan8MbIsSkippedEvenWhenItsLengthIsntStated()
     {
-        // Noise doesn't compress, so this PNG is over the cap but otherwise a good image
-        using var noise = new SKBitmap(2200, 1600);
-        var random = new Random(1);
-        var pixels = new byte[2200 * 1600 * 4];
-        random.NextBytes(pixels);
-        for (var i = 3; i < pixels.Length; i += 4)
-            pixels[i] = 255;
-        System.Runtime.InteropServices.Marshal.Copy(pixels, 0, noise.GetPixels(), pixels.Length);
-        using var encoded = noise.Encode(SKEncodedImageFormat.Png, 0);
-        Assert.True(encoded.Size > ImageStore.MaxImageBytes);
-        network.Respond(Banner, HttpStatusCode.OK, encoded.ToArray(), sendLength: false);
-        network.Image(Other, 64, 64);
+        // Over the cap but otherwise a good image
+        Assert.NotNull(Convert(OverCap, ImageKind.Icon));
+        network.Respond(Banner, HttpStatusCode.OK, OverCap, sendLength: false);
+        network.Image(Other);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner, Other));
@@ -240,7 +246,7 @@ public sealed class ImageStoreTests : IDisposable
     {
         network.Fail(Banner, new HttpRequestException(HttpRequestError.NameResolutionError));
         network.Fail("https://refused.example/a.png", new HttpRequestException(HttpRequestError.ConnectionError));
-        network.Image(Other, 64, 64);
+        network.Image(Other);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner, "https://refused.example/a.png", Other));
@@ -259,7 +265,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task ACutOffResponseOrATimeoutWaitsAndTriesAgain(Exception error)
     {
         network.Fail(Banner, error);
-        network.Image(Other, 64, 64);
+        network.Image(Other);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner, Other));
@@ -272,7 +278,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task ADownloadLargerThan8MbIsSkipped()
     {
         network.Respond(Banner, HttpStatusCode.OK, new byte[ImageStore.MaxImageBytes + 1], sendLength: false);
-        network.Image(Other, 64, 64);
+        network.Image(Other);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner, Other));
@@ -287,7 +293,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task APassingFailureWaitsAndTriesAgainRatherThanFallingToTheNext(HttpStatusCode status)
     {
         network.Respond(Banner, status, "busy");
-        network.Image(Other, 64, 64);
+        network.Image(Other);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner, Other));
@@ -299,7 +305,7 @@ public sealed class ImageStoreTests : IDisposable
         await store.Idle;
         Assert.Single(network.Requests);
 
-        network.Image(Banner, 64, 64);
+        network.Image(Banner);
         time.Advance(TimeSpan.FromSeconds(1));
         store.Want(slot);
         await store.Idle;
@@ -343,7 +349,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AKeptImageIsntLookedUpAgainWithinAWeek()
     {
         network.Json("https://discord.com/api/v10/invites/lounge", """{"guild":{"id":"1","icon":"old"}}""");
-        network.Image("https://cdn.discordapp.com/icons/1/old.png?size=128", 64, 64);
+        network.Image("https://cdn.discordapp.com/icons/1/old.png?size=128");
         IReadOnlyList<ImageSource> sources = [new DiscordSource("lounge")];
         using (var store = NewStore())
             await Fetched(store, ImageKind.Icon, sources);
@@ -360,13 +366,13 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AKeptImageIsLookedUpAgainAfterAWeekShowingTheOldOneMeanwhile()
     {
         network.Json("https://discord.com/api/v10/invites/lounge", """{"guild":{"id":"1","icon":"old"}}""");
-        network.Image("https://cdn.discordapp.com/icons/1/old.png?size=128", 64, 64);
+        network.Image("https://cdn.discordapp.com/icons/1/old.png?size=128");
         IReadOnlyList<ImageSource> sources = [new DiscordSource("lounge")];
         using (var store = NewStore())
             await Fetched(store, ImageKind.Icon, sources);
 
         network.Json("https://discord.com/api/v10/invites/lounge", """{"guild":{"id":"1","icon":"new"}}""");
-        network.Image("https://cdn.discordapp.com/icons/1/new.png?size=128", 64, 64);
+        network.Image("https://cdn.discordapp.com/icons/1/new.png?size=128");
         network.Requests.Clear();
         time.Advance(ImageStore.FreshFor);
         using (var store = NewStore())
@@ -385,7 +391,7 @@ public sealed class ImageStoreTests : IDisposable
     [Fact]
     public async Task AnImageAlreadyKeptIsNotDownloadedAgainForAnotherSlot()
     {
-        network.Image(Banner, 600, 300);
+        network.Image(Banner);
         using var store = NewStore();
         await Fetched(store, ImageKind.Icon, Pictures(Banner));
 
@@ -401,8 +407,8 @@ public sealed class ImageStoreTests : IDisposable
     public async Task ADiscordIconComesFromTheInvitesServer()
     {
         network.Json("https://discord.com/api/v10/invites/lounge", """{"guild":{"id":"1","icon":"abc","banner":null,"splash":"def"}}""");
-        network.Image("https://cdn.discordapp.com/icons/1/abc.png?size=128", 128, 128);
-        network.Image("https://cdn.discordapp.com/splashes/1/def.png?size=1024", 1024, 576);
+        network.Image("https://cdn.discordapp.com/icons/1/abc.png?size=128");
+        network.Image("https://cdn.discordapp.com/splashes/1/def.png?size=1024");
         using var store = NewStore();
         IReadOnlyList<ImageSource> sources = [new DiscordSource("lounge")];
 
@@ -421,8 +427,8 @@ public sealed class ImageStoreTests : IDisposable
         const string Invite = "https://discord.com/api/v10/invites/lounge";
         const string BannerImage = "https://cdn.discordapp.com/banners/1/b.png?size=1024";
         network.Json(Invite, """{"guild":{"id":"1","icon":"i","banner":"b","splash":"s"}}""");
-        network.Image(BannerImage, 1024, 400);
-        network.Image("https://cdn.discordapp.com/splashes/1/s.png?size=1024", 1024, 576);
+        network.Image(BannerImage);
+        network.Image("https://cdn.discordapp.com/splashes/1/s.png?size=1024");
         using var store = NewStore();
         IReadOnlyList<ImageSource> sources = [new DiscordSource("lounge")];
 
@@ -442,7 +448,7 @@ public sealed class ImageStoreTests : IDisposable
     {
         const string Invite = "https://discord.com/api/v10/invites/lounge";
         network.Respond(Invite, HttpStatusCode.TooManyRequests, "");
-        network.Image("https://cdn.discordapp.com/icons/1/i.png?size=128", 64, 64);
+        network.Image("https://cdn.discordapp.com/icons/1/i.png?size=128");
         using var store = NewStore();
         var slot = await Fetched(store, ImageKind.Icon, [new DiscordSource("lounge"), new PictureSource(new Uri(Banner))]);
         Assert.Null(slot.Path);
@@ -460,7 +466,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AnUnknownInviteFallsToTheNextSource()
     {
         network.Respond("https://discord.com/api/v10/invites/gone", HttpStatusCode.NotFound, """{"message":"Unknown Invite","code":10006}""");
-        network.Image(Banner, 600, 300);
+        network.Image(Banner);
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, [new DiscordSource("gone"), new PictureSource(new Uri(Banner))]);
@@ -472,7 +478,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AWebsitesIconIsTheOneItsHomePageNames()
     {
         network.Respond("https://lounge.example/", HttpStatusCode.OK, """<link rel="icon" href="/static/i.png">""");
-        network.Image("https://lounge.example/static/i.png", 32, 32);
+        network.Image("https://lounge.example/static/i.png");
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, [new FaviconSource(new Uri("https://lounge.example/"))]);
@@ -485,7 +491,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AWebsitesIconsAreTriedInTurn()
     {
         network.Respond("https://lounge.example/", HttpStatusCode.OK, """<link rel="icon" href="/gone.png">""");
-        network.Image("https://lounge.example/favicon.ico", 16, 16);
+        network.Image("https://lounge.example/favicon.ico");
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, [new FaviconSource(new Uri("https://lounge.example/"))]);
@@ -498,7 +504,7 @@ public sealed class ImageStoreTests : IDisposable
     {
         network.Redirect("https://lounge.example/", "https://www.lounge.example/home/");
         network.Respond("https://www.lounge.example/home/", HttpStatusCode.OK, """<link rel="icon" href="i.png">""");
-        network.Image("https://www.lounge.example/home/i.png", 32, 32);
+        network.Image("https://www.lounge.example/home/i.png");
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, [new FaviconSource(new Uri("https://lounge.example/"))]);
@@ -510,7 +516,7 @@ public sealed class ImageStoreTests : IDisposable
     public async Task AWebsiteWithoutAHomePageMayStillHaveFaviconIco()
     {
         network.Respond("https://lounge.example/", HttpStatusCode.NotFound, "");
-        network.Image("https://lounge.example/favicon.ico", 16, 16);
+        network.Image("https://lounge.example/favicon.ico");
         using var store = NewStore();
 
         var slot = await Fetched(store, ImageKind.Icon, [new FaviconSource(new Uri("https://lounge.example/"))]);
@@ -521,7 +527,7 @@ public sealed class ImageStoreTests : IDisposable
     [Fact]
     public async Task IndexEntriesNotWorkedOutForAMonthAreDroppedWithTheirFiles()
     {
-        network.Image(Banner, 64, 64);
+        network.Image(Banner);
         string path;
         using (var store = NewStore())
             path = (await Fetched(store, ImageKind.Icon, Pictures(Banner))).Path!;
@@ -555,7 +561,7 @@ public sealed class ImageStoreTests : IDisposable
     {
         Directory.CreateDirectory(folder);
         await File.WriteAllTextAsync(Path.Combine(folder, "index.json"), "{not json");
-        network.Image(Banner, 64, 64);
+        network.Image(Banner);
 
         using var store = NewStore();
         var slot = await Fetched(store, ImageKind.Icon, Pictures(Banner));
@@ -650,6 +656,10 @@ public sealed class ImageStoreTests : IDisposable
                 redirects[url] = to;
         }
 
+        /// <summary>The address serves <see cref="Png"/>, which <see cref="Convert"/> takes as an image.</summary>
+        public void Image(string url) => Respond(url, HttpStatusCode.OK, Png);
+
+        /// <summary>The address serves a real WebP image of a size, for a store that decodes.</summary>
         public void Image(string url, int width, int height) =>
             Respond(url, HttpStatusCode.OK, ImageProcessingTests.Encoded(width, height));
 

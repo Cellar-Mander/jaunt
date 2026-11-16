@@ -59,16 +59,16 @@ public class ImageProcessingTests
     [InlineData(SKEncodedImageFormat.Jpeg)]
     public void AnIconIsTheMiddleSquareAt64Pixels(SKEncodedImageFormat format)
     {
-        // A 600×300 banner: its middle square is the inner half, red on the left and blue on the right
-        using var icon = Decode(ImageProcessing.Process(Encoded(600, 300, format), ImageKind.Icon)!);
+        // A 200×100 banner: its middle square is the inner half, red on the left and blue on the right
+        using var icon = Decode(ImageProcessing.Process(Encoded(200, 100, format), ImageKind.Icon)!);
 
         Assert.Equal((64, 64), (icon.Width, icon.Height));
         Assert.True(icon.GetPixel(4, 32).Red > 200 && icon.GetPixel(60, 32).Blue > 200);
     }
 
     [Theory]
-    [InlineData(800, 400)]
-    [InlineData(400, 800)]
+    [InlineData(200, 100)]
+    [InlineData(100, 200)]
     public void AnIconCropsToTheMiddleSquareWhicheverWayTheImageIsLong(int width, int height)
     {
         using var icon = Decode(ImageProcessing.Process(Banded(width, height), ImageKind.Icon)!);
@@ -83,21 +83,21 @@ public class ImageProcessingTests
     [Fact]
     public void ASplashImageKeepsItsShapeAndIsScaledDownToAt960Wide()
     {
-        using var wide = Decode(ImageProcessing.Process(Encoded(1920, 600), ImageKind.Splash)!);
-        using var small = Decode(ImageProcessing.Process(Encoded(600, 300), ImageKind.Splash)!);
+        using var wide = Decode(ImageProcessing.Process(Encoded(1200, 300), ImageKind.Splash)!);
+        using var small = Decode(ImageProcessing.Process(Encoded(200, 100), ImageKind.Splash)!);
 
-        Assert.Equal((960, 300), (wide.Width, wide.Height));
-        Assert.Equal((600, 300), (small.Width, small.Height));
+        Assert.Equal((960, 240), (wide.Width, wide.Height));
+        Assert.Equal((200, 100), (small.Width, small.Height));
     }
 
     [Fact]
     public void ATallSplashImageKeepsItsMiddleSquare()
     {
-        using var poster = Decode(ImageProcessing.Process(Banded(400, 800), ImageKind.Splash)!);
+        using var poster = Decode(ImageProcessing.Process(Banded(100, 200), ImageKind.Splash)!);
 
-        Assert.Equal((400, 400), (poster.Width, poster.Height));
-        Assert.True(poster.GetPixel(200, 1).Red > 200);
-        Assert.True(poster.GetPixel(200, 398).Blue > 200);
+        Assert.Equal((100, 100), (poster.Width, poster.Height));
+        Assert.True(poster.GetPixel(50, 1).Red > 200);
+        Assert.True(poster.GetPixel(50, 98).Blue > 200);
     }
 
     [Fact]
@@ -139,7 +139,56 @@ public class ImageProcessingTests
     [Fact]
     public void AnImageWithMoreThan16MillionPixelsIsNotDecoded()
     {
-        Assert.Null(ImageProcessing.Process(Encoded(5000, 3201, SKEncodedImageFormat.Png), ImageKind.Splash));
-        Assert.NotNull(ImageProcessing.Process(Encoded(5000, 3200, SKEncodedImageFormat.Png), ImageKind.Splash));
+        Assert.Null(ImageProcessing.Process(GreyPngWithOneRow(5000, 3201), ImageKind.Splash));
+        Assert.NotNull(ImageProcessing.Process(GreyPngWithOneRow(5000, 3200), ImageKind.Splash));
+    }
+
+    /// <summary>
+    /// A greyscale PNG whose header claims a size but whose data holds only its first row, so it is
+    /// cheap to make while the codec still reads it as an image of that size, cut short.
+    /// </summary>
+    private static byte[] GreyPngWithOneRow(int width, int height)
+    {
+        using var png = new MemoryStream();
+        png.Write([0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        var header = new byte[13];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header, width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), height);
+        header[8] = 8; // bits per sample; colour type 0 (grey), no interlacing
+        Chunk(png, "IHDR", header);
+
+        using var row = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(row, System.IO.Compression.CompressionLevel.Fastest, leaveOpen: true))
+            zlib.Write(new byte[1 + width]); // filter byte, then the pixels
+        Chunk(png, "IDAT", row.ToArray());
+        Chunk(png, "IEND", []);
+        return png.ToArray();
+    }
+
+    private static void Chunk(Stream png, string type, byte[] data)
+    {
+        Span<byte> number = stackalloc byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(number, data.Length);
+        png.Write(number);
+        var typed = new byte[4 + data.Length];
+        System.Text.Encoding.ASCII.GetBytes(type, typed);
+        data.CopyTo(typed, 4);
+        png.Write(typed);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(number, Crc32(typed));
+        png.Write(number);
+    }
+
+    private static uint Crc32(byte[] data)
+    {
+        var crc = 0xFFFFFFFFu;
+        foreach (var b in data)
+        {
+            crc ^= b;
+            for (var bit = 0; bit < 8; bit++)
+                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+        }
+
+        return ~crc;
     }
 }
