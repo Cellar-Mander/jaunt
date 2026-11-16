@@ -7,7 +7,6 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.ImGuiNotification;
-using Dalamud.Interface.ManagedFontAtlas;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -55,10 +54,12 @@ internal sealed class ListingsWindow : Window
     private readonly Action fetchSources;
     private readonly Action saveCache;
     private readonly Func<TravelRegion?> region;
-    private readonly IFontHandle titleFont;
+    private readonly HeldFont titleFont;
+    private readonly HeldFont iconFont;
 
-    // Each icon's drawn shape (top left and bottom right) in the icon font at a size, or null if it lacks the icon
-    private static readonly Dictionary<(FontAwesomeIcon, float), (Vector2 Min, Vector2 Max)?> IconShapes = [];
+    // Each icon's drawn shape (top left and bottom right) in the icon font at a size, or null if it lacks the icon,
+    // with its text, as ToIconString makes a new string on every call
+    private static readonly Dictionary<(FontAwesomeIcon, float), (Vector2 Min, Vector2 Max, string Text)?> IconShapes = [];
 
     // Parsed once per ad text or event location and world, and derived once per venue's fields, so
     // drawing doesn't re-parse every frame
@@ -187,12 +188,14 @@ internal sealed class ListingsWindow : Window
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
     /// <param name="openSettings">Opens the Settings window, from the title bar's cog.</param>
     /// <param name="titleFont">The larger font listing titles are drawn in; owned by the caller.</param>
+    /// <param name="iconFont">Dalamud's icon font, for the marks; owned by the caller.</param>
     public ListingsWindow(
         ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
-        Action saveCache, Func<TravelRegion?> region, Action openSettings, IFontHandle titleFont)
+        Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont)
         : base("Jaunt###JauntListings")
     {
         this.titleFont = titleFont;
+        this.iconFont = iconFont;
         this.region = region;
         this.fetchSources = fetchSources;
         this.saveCache = saveCache;
@@ -222,6 +225,12 @@ internal sealed class ListingsWindow : Window
         aboutExpanded = false;
     }
 
+    public override void OnClose()
+    {
+        titleFont.Release();
+        iconFont.Release();
+    }
+
     public override void Draw()
     {
         DrawAllocations.Start();
@@ -237,6 +246,8 @@ internal sealed class ListingsWindow : Window
 
     private void DrawContents()
     {
+        titleFont.BeginFrame();
+        iconFont.BeginFrame();
         var now = DateTimeOffset.UtcNow;
         if (now >= nextRebuild)
         {
@@ -346,10 +357,10 @@ internal sealed class ListingsWindow : Window
         var style = ImGui.GetStyle();
         FlowNext(ImGui.CalcTextSize(label).X + (style.FramePadding.X * 2));
         bool clicked;
-        using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, ImGui.GetFrameHeight() / 2))
-        using (ImRaii.PushStyle(ImGuiStyleVar.FrameBorderSize, Math.Max(1, ImGuiHelpers.GlobalScale)))
-        using (ImRaii.PushColor(ImGuiCol.Button, on ? style.Colors[(int)ImGuiCol.Header] : Vector4.Zero))
-        using (ImRaii.PushColor(ImGuiCol.Text, style.Colors[on ? (int)ImGuiCol.Text : (int)ImGuiCol.TextDisabled]))
+        using (Scoped.Style(ImGuiStyleVar.FrameRounding, ImGui.GetFrameHeight() / 2))
+        using (Scoped.Style(ImGuiStyleVar.FrameBorderSize, Math.Max(1, ImGuiHelpers.GlobalScale)))
+        using (Scoped.Color(ImGuiCol.Button, on ? style.Colors[(int)ImGuiCol.Header] : Vector4.Zero))
+        using (Scoped.Color(ImGuiCol.Text, style.Colors[on ? (int)ImGuiCol.Text : (int)ImGuiCol.TextDisabled]))
             clicked = ImGui.Button(label);
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(tip);
@@ -422,7 +433,7 @@ internal sealed class ListingsWindow : Window
     {
         var row = entry.Item;
         var start = ImGui.GetCursorScreenPos();
-        using var id = ImRaii.PushId($"{(int)row.Listing.Source}:{row.Listing.Id}:{entry.When.Start?.UtcTicks ?? 0}");
+        using var id = Scoped.Id($"{(int)row.Listing.Source}:{row.Listing.Id}:{entry.When.Start?.UtcTicks ?? 0}");
         var isSelected = selected is { } key && rowsByKey.TryGetValue(key, out var selectedRow) && ReferenceEquals(selectedRow, row);
         if (ImGui.Selectable("##row", isSelected, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
             Select(row);
@@ -465,7 +476,7 @@ internal sealed class ListingsWindow : Window
     /// The favourite star and visited tick, inset from the top and right of the row's highlight by the
     /// same gap; returns their left edge, or the highlight's right edge for none.
     /// </summary>
-    private static float DrawRowMarks(Row row, Vector2 min, Vector2 max)
+    private float DrawRowMarks(Row row, Vector2 min, Vector2 max)
     {
         var favourite = EntryMarks.Has(row.Marks, row.Place, EntryMark.Favourite);
         var visited = EntryMarks.Has(row.Marks, row.Place, EntryMark.Visited);
@@ -496,9 +507,11 @@ internal sealed class ListingsWindow : Window
     /// for FontAwesome glyphs is wider than the shape and leaves it off centre.
     /// </summary>
     /// <param name="size">The size of the box it fits in; the icon's larger side is drawn this long.</param>
-    private static void DrawIcon(ImDrawListPtr drawList, FontAwesomeIcon icon, Vector2 centre, float size, uint colour)
+    private void DrawIcon(ImDrawListPtr drawList, FontAwesomeIcon icon, Vector2 centre, float size, uint colour)
     {
-        var font = UiBuilder.IconFont;
+        // Held rather than UiBuilder.IconFont, which locks the font anew, allocating, on every use
+        if (iconFont.Font is not { } font)
+            return;
         if (!IconShapes.TryGetValue((icon, font.FontSize), out var bounds))
         {
             // Found once per icon and font size, as the icon font holds over a thousand glyphs
@@ -510,7 +523,7 @@ internal sealed class ListingsWindow : Window
                 var glyph = glyphs[i];
                 if (glyph.Codepoint == (uint)icon)
                 {
-                    bounds = (new Vector2(glyph.X0, glyph.Y0), new Vector2(glyph.X1, glyph.Y1));
+                    bounds = (new Vector2(glyph.X0, glyph.Y0), new Vector2(glyph.X1, glyph.Y1), icon.ToIconString());
                     break;
                 }
             }
@@ -518,11 +531,11 @@ internal sealed class ListingsWindow : Window
             IconShapes[(icon, font.FontSize)] = bounds;
         }
 
-        if (bounds is not var (min, max))
+        if (bounds is not var (min, max, text))
             return;
         var shape = max - min;
         var scale = size / Math.Max(shape.X, shape.Y);
-        drawList.AddText(font, font.FontSize * scale, centre - ((min + max) * (scale / 2)), colour, icon.ToIconString());
+        drawList.AddText(font, font.FontSize * scale, centre - ((min + max) * (scale / 2)), colour, text);
     }
 
     private void DrawDetail(DateTimeOffset now)
@@ -637,7 +650,7 @@ internal sealed class ListingsWindow : Window
     {
         var marked = EntryMarks.Has(row.Marks, row.Place, mark);
         bool clicked;
-        using (ImRaii.PushId((int)mark))
+        using (Scoped.Id((int)mark))
             clicked = ImGui.Button("##mark", size);
         // Drawn over the button, centred by shape and a little over half its height
         var centre = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
@@ -700,7 +713,7 @@ internal sealed class ListingsWindow : Window
                 : request is null ? "This address is missing a world, district, plot or apartment, so Lifestream can't travel there."
                 : null;
 
-            using (ImRaii.Disabled(whyNot is not null))
+            using (Scoped.Disabled(whyNot is not null))
             {
                 if (ImGui.Button("Travel") && request is not null && lifestream.Travel(request) is { } error)
                     Notify(error, NotificationType.Warning, "Couldn't travel");
@@ -742,7 +755,7 @@ internal sealed class ListingsWindow : Window
         Section("Location");
         for (var i = 0; i < row.Details.Addresses.Count; i++)
         {
-            using var id = ImRaii.PushId($"a{i}");
+            using var id = Scoped.Id($"a{i}");
             var address = row.Details.Addresses[i];
             var text = view.Addresses[i];
             if (ImGui.SmallButton("Copy"))
@@ -767,7 +780,7 @@ internal sealed class ListingsWindow : Window
         {
             if (i == page || i == discord)
                 continue;
-            using var id = ImRaii.PushId($"l{i}");
+            using var id = Scoped.Id($"l{i}");
             var link = links[i];
             if (ImGui.SmallButton("Open"))
                 Util.OpenLink(link.Uri.AbsoluteUri);

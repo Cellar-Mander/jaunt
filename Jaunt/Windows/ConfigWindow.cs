@@ -284,11 +284,11 @@ public sealed class ConfigWindow : Window, IDisposable
         }
 
         var unhid = false;
-        using var indent = ImRaii.PushIndent();
+        using var indent = Scoped.Indent();
         // A hidden address hides every listing there, so it shows once, with where it is
         for (var i = 0; i < places.Count; i++)
         {
-            using var id = ImRaii.PushId($"place{i}");
+            using var id = Scoped.Id($"place{i}");
             if (ImGui.SmallButton("Un-hide"))
             {
                 places[i].Hidden = false;
@@ -305,7 +305,7 @@ public sealed class ConfigWindow : Window, IDisposable
         for (var i = 0; i < hidden.Count; i++)
         {
             var listing = hidden[i];
-            using var id = ImRaii.PushId($"{(int)listing.Source}:{listing.Id}");
+            using var id = Scoped.Id($"{(int)listing.Source}:{listing.Id}");
             if (ImGui.SmallButton("Un-hide"))
             {
                 listing.Hidden = false;
