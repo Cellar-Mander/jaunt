@@ -203,12 +203,16 @@ internal sealed class ListingsWindow : Window
     /// <summary>
     /// What the detail pane shows of <see cref="Row"/> that takes formatting or a search to work out:
     /// the status line of its first opening, its addresses as text, the Lifestream request for the
-    /// first, which link Open page and the footer's Discord take (or -1), its sources, its age or
-    /// rating with SFW or NSFW ("18+ · SFW"), and its interests' labels.
+    /// first, which link Open page and the footer's Discord take (or -1), the further links Location
+    /// lists, its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
+    /// and its lineup.
     /// </summary>
     private sealed record DetailView(
-        Row Row, string? Status, bool Open, string[] Addresses, TravelRequest? Travel, int Page, int Discord, ListingSource[] Sources,
-        string Rating, string[] Tags);
+        Row Row, string? Status, bool Open, string[] Addresses, TravelRequest? Travel, int Page, int Discord, int[] Further,
+        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup);
+
+    /// <summary>A performer as the lineup shows them: name or handle, and their Twitch channel if the ad links it.</summary>
+    private readonly record struct LineupEntry(string Text, Uri? Twitch);
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
@@ -728,6 +732,7 @@ internal sealed class ListingsWindow : Window
 
         DrawLocation(view);
         DrawAbout(view, width);
+        DrawLineup(view);
         DrawRatingAndTags(view);
         DrawFooter(view);
     }
@@ -748,10 +753,15 @@ internal sealed class ListingsWindow : Window
 
         var addresses = row.Details.Addresses;
         var links = row.Details.Links;
+        var page = PageIndex(links);
+        var discord = DiscordIndex(links);
+        LineupEntry[] lineup = [.. row.Details.Performers.Select(p => new LineupEntry(ShownText.Fold(p.Shown), p.Twitch?.Uri))];
+        // A stream the lineup links needn't be listed again under Location
+        int[] further = [.. Enumerable.Range(0, links.Count).Where(i => i != page && i != discord && !lineup.Any(e => e.Twitch == links[i].Uri))];
         return new DetailView(
             row, status, open, [.. addresses.Select(AddressText.Format)], addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
-            PageIndex(links), DiscordIndex(links), [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
-            [.. ListingFilters.LabelsOf(row.Tagging.Interests)]);
+            page, discord, further, [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
+            [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup);
     }
 
     /// <summary>
@@ -877,7 +887,7 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// Each address with Copy, a location the parser couldn't read as text, and any further links
-    /// (all but Open page's and the footer's Discord).
+    /// (all but Open page's, the footer's Discord and the lineup's streams).
     /// </summary>
     private void DrawLocation(DetailView view)
     {
@@ -886,10 +896,8 @@ internal sealed class ListingsWindow : Window
             ? row.CalendarEvent?.Location ?? (row.Event is { Location.Length: > 0 } item ? item.Location : null)
             : null;
         var links = row.Details.Links;
-        var page = view.Page;
-        var discord = view.Discord;
-        var further = links.Count - (page >= 0 ? 1 : 0) - (discord >= 0 ? 1 : 0);
-        if (row.Details.Addresses.Count == 0 && freeText is null && further == 0)
+        var further = view.Further;
+        if (row.Details.Addresses.Count == 0 && freeText is null && further.Length == 0)
             return;
 
         Section("Location");
@@ -916,10 +924,8 @@ internal sealed class ListingsWindow : Window
         if (freeText is not null)
             ImGui.TextWrapped(ShownText.Fold(freeText));
 
-        for (var i = 0; i < links.Count; i++)
+        foreach (var i in further)
         {
-            if (i == page || i == discord)
-                continue;
             using var id = Scoped.Id($"l{i}");
             var link = links[i];
             if (ImGui.SmallButton("Open"))
@@ -951,6 +957,34 @@ internal sealed class ListingsWindow : Window
         {
             if (ImGui.SmallButton(aboutExpanded ? "Show less" : "Read more"))
                 aboutExpanded = !aboutExpanded;
+        }
+    }
+
+    /// <summary>
+    /// The performers the entry's ads name, separated by dots and wrapping as needed, each linking to
+    /// their Twitch channel when an ad gives it. Nothing when no ad names any.
+    /// </summary>
+    private static void DrawLineup(DetailView view)
+    {
+        var lineup = view.Lineup;
+        if (lineup.Length == 0)
+            return;
+
+        Section("Lineup");
+        for (var i = 0; i < lineup.Length; i++)
+        {
+            var entry = lineup[i];
+            if (i > 0)
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled("·");
+                FlowNext(ImGui.CalcTextSize(entry.Text).X);
+            }
+
+            if (entry.Twitch is { } twitch)
+                DrawLinkText(entry.Text, twitch);
+            else
+                ImGui.TextUnformatted(entry.Text);
         }
     }
 
@@ -1370,7 +1404,8 @@ internal sealed class ListingsWindow : Window
             .FirstOrDefault();
         var first = byTitle[0];
         var row = new Row(
-            first.Listing, first.Title, byAddress.Details with { Links = links }, byAddress.World, merged.Schedule, about?.About,
+            first.Listing, first.Title, byAddress.Details with { Links = links, Performers = Performers.Merge(byTitle.Select(m => m.Details.Performers)) },
+            byAddress.World, merged.Schedule, about?.About,
             byTitle.Select(m => m.Event).FirstOrDefault(e => e is not null),
             byTitle.Select(m => m.CalendarEvent).FirstOrDefault(e => e is not null),
             about?.AboutCut ?? false)

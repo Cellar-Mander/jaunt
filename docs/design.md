@@ -110,6 +110,46 @@ normalises it), in the order written. `WebLinksTests` checks every labelled corp
 - Each link keeps the text as written and gets a URI to open: always http or https, https when the
   ad gives no scheme. A link that can't form a valid URI ("canvas..site") is left out.
 
+### Performers in ad text
+
+`Performers.Find` reads the performers a Party Finder ad names: the DJs, bards and acts after a
+marker, and the Twitch channels it links. `PerformersCorpusTests` checks every labelled corpus ad
+(`Corpus/README.md`, `people` with role `performer`) and that at least 95% of what it finds is right.
+The rules come from spike `fe1b7d02`, which also scored them on 534 later ads from the plugin's cache.
+
+- It reads the normalised text with decoration kept as a boundary (`PartyFinderText.Normalise` with
+  `markDecoration`), so "DJ QUEEN BAE ♥ HAPPY BIRTHDAY" ends the name at the heart.
+- A list of names follows a marker: "DJ", "DJs" or "DJ's" in any case, "Music by", "presenting" or
+  "Bard Night |", optionally with ":" or "-" after it. "DJ" glued to a capitalised name ("DJKhaosVoid"),
+  "DJay"/"Djay" before a name and a byline such as "djayYAMS @ VENUE" are part of the name.
+- "LIVE DJs", "Live DJ" and "7 DJs" are amenities, not markers, unless a colon follows ("LIVE DJs:
+  Erebus • Velo"). A marker followed by a link ("DJ: twitch.tv/x") names no one by name.
+- A name is up to 3 words: any word first, then capitalised ones, with "in", "of", "the" or "de"
+  between ("Crying in Colour"). Amenities and filler (Gamba, Bar, Courts, Raffle, LIVE, NOW, ...),
+  amounts and times ("20m", "11pm") are never names. A repeated "DJ" ends a list and starts the next
+  ("DJ Seikat, DJ Luckroll and DJ Stella" names all three).
+- A list keeps the separator it starts with: `&`/"and", ", ", "/", "-" without spaces, " - ", " x "
+  or "•". A different separator ends it ("Cynaxia Dyn-Raff"), and after another kind a final "&" or
+  "and" gives the last name ("A, B and C"). A comma list after a singular "DJ" must go on with names,
+  so "DJ Damsca, Gamba, Tarot" names one, and "DJ Kio, Bell" too, unless a comma, "&" or "and"
+  follows the second name.
+- A name of several words that ends a list needs something that ends it after it: the end of the text
+  or line, a number, punctuation or decoration (a comma or quote too) other than "-", "&", "/" or an
+  opening bracket, or "from",
+  "at", "on" or "with". Otherwise only its first word counts ("Syren Mad Mist W6" is Syren), and a
+  " - " list that ends that way wasn't a list ("DJ REIKO BEING GOOBY - REMNANT LOUNGE [SIREN]" is
+  REIKO).
+- A twitch.tv link (from `WebLinks.Find`) is a performer's stream. It goes with a named performer
+  when its handle contains the name without spaces ("XIANA", `xianaforever`) or the ad writes the
+  name just before it ("DJ Saber @ twitch.tv/0xsabrieln"); otherwise it is a performer shown by
+  handle. Each channel counts once.
+- Names without a marker are left out, as the corpus can't tell performers from hosts and birthdays
+  ("HOPE / POTATE / KIO", "IANNA THOT BAE AND PHILIP", "HAPPY BIRTHDAY OPHE"). Known misses: a marker
+  followed by "|" ("DJs | Damsca / Radio Sundae", read as a marker it would turn "DJs | Courts" into a
+  name), a list broken by "• |", and bands named without a marker.
+- Performers are read only from Party Finder and xivpf ads; FFXIV Venues has no performer field, and
+  Partake and calendar descriptions aren't read for them yet.
+
 ### Settings
 
 `ConfigurationBase` holds the settings; `Normalize` runs after every load. The window groups them
@@ -563,7 +603,10 @@ and copy link (`6e2b5199`) are separate tasks.
   Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
   a location given only as text, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
-  less"), with "Read the rest on the website" after a description cut at the limit; Age / rating: each age or rating its listings give, once each (Partake's `ageRating` as "Mature", the RP
+  less"), with "Read the rest on the website" after a description cut at the limit; Lineup: the
+  performers its ads name (see "Performers in ad text"), each once across the entry's ads, separated
+  by dots and wrapping as needed, a name or handle linking to the performer's Twitch channel when an
+  ad gives it, which Location then leaves out; Age / rating: each age or rating its listings give, once each (Partake's `ageRating` as "Mature", the RP
   calendar's rating or `[M]`-style tag, else an age in the text such as "18+" or "21+", the highest
   if several; FFXIV Venues gives none), then SFW or NSFW as the safety filter counts the entry
   ("18+ · SFW", or just "SFW"); Tags: its interests as outlined chips, not clickable, left out when
@@ -763,6 +806,9 @@ Caps on user-configurable lists and text, and how input from other players or th
 - The refresh cooldown is entered as a number and clamped to 10–1440 minutes, in the window and in
   `Normalize`.
 - Link finding is one pass over the normalised ad with no regex, so it stays linear in the ad's length.
+- Performer finding is one pass over the normalised ad with no regex: each name list is read once and
+  the scan carries on after it, and a name looks at most 3 words ahead, so it stays linear in the ad's
+  length. Tying streams to names compares each twitch.tv link with the names found, a handful per ad.
 - Tagging a listing is one pass over its normalised text into words, a dictionary lookup per word
   (and per word of a phrase starting there), and one substring search per Japanese keyword (about
   40), with no regex, so it stays linear in the text's length. The browser tags each listing once per

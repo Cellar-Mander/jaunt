@@ -5,13 +5,19 @@ namespace Jaunt.Core.Listings;
 /// <summary>What the parsers read from one ad: its addresses and website links, in the order written.</summary>
 public sealed record ListingDetails(IReadOnlyList<HousingAddress> Addresses, IReadOnlyList<WebLink> Links)
 {
+    /// <summary>The performers the ad names (<see cref="Text.Performers.Find"/>); empty for listings that aren't ads.</summary>
+    public IReadOnlyList<Performer> Performers { get; init; } = [];
+
     /// <summary>The longest title taken from an ad, in characters, before it is cut with an ellipsis.</summary>
     public const int MaxTitleLength = 60;
 
     /// <summary>Parses an ad's text, as the game sends it.</summary>
     /// <param name="listedOn">The world the ad is listed on, for addresses that name none.</param>
-    public static ListingDetails Parse(AddressParser parser, string adText, string? listedOn) =>
-        new(parser.Parse(adText, listedOn), WebLinks.Find(adText));
+    public static ListingDetails Parse(AddressParser parser, string adText, string? listedOn)
+    {
+        var links = WebLinks.Find(adText);
+        return new(parser.Parse(adText, listedOn), links) { Performers = Text.Performers.Find(adText, links) };
+    }
 
     /// <summary>
     /// A title for an ad, which has none of its own: the first line of its normalised text, cut to

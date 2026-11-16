@@ -105,6 +105,9 @@ times as in FFXIV Venues 1 first.
    not under Location; one whose only link is the invite has no Open page. A long ad shows "Read more", which expands it and becomes "Show less".
    Each shows Age / rating: an ad saying "SFW 18+" shows "18+ · SFW"; a Partake or calendar event shows its rating first ("Mature · SFW"); a venue
    shows only "SFW" or "NSFW". Tags shows its interests as outlined chips that wrap at the pane's edge; a listing with none has no Tags.
+   An ad naming DJs ("DJs: KK, Moon Cat, and Sleepy") shows them under Lineup, separated by dots; a name or handle whose
+   Twitch channel the ad links is blue and underlined and opens it, and that link isn't listed again under Location. An ad
+   naming no performer, or only a birthday ("HAPPY BIRTHDAY OPHE"), has no Lineup.
 6. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
    Disable and re-enable Jaunt: still selected. Press Settings → Clear cached listings, so it drops
    out of the data: the detail pane shows "Select a listing on the left to see its details."
