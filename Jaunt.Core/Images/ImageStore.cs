@@ -267,7 +267,7 @@ public sealed class ImageStore : IDisposable
                             log("Images are off: SkiaSharp's native library (libSkiaSharp.dll) couldn't be loaded", e);
                         }
 
-                        Retry(slot);
+                        // The slot stays queued, so it isn't asked for again: the library won't appear while the game runs
                     }
                     catch (Exception e)
                     {
@@ -300,12 +300,9 @@ public sealed class ImageStore : IDisposable
     /// <summary>Tries the slot's sources in turn; the first picture wins. A passing failure stops and retries later, keeping any image shown.</summary>
     private async Task ResolveAsync(ImageSlot slot, CancellationToken token)
     {
+        // Kept images still show; new ones can't be converted, so the slot stays queued and isn't asked for again
         if (decoderMissing)
-        {
-            // Kept images still show; new ones can't be converted
-            Retry(slot);
             return;
-        }
 
         foreach (var source in slot.Sources)
         {
