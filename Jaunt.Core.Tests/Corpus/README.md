@@ -1,6 +1,6 @@
 # Labelled Party Finder corpus
 
-`pf-listings.jsonl` holds 392 Party Finder ads from category `None` (venues, events and everything
+`pf-listings.jsonl` holds 393 Party Finder ads from category `None` (venues, events and everything
 else posted there), each labelled by hand for kind, name, addresses, times, URLs and the people it names. The parsers for
 addresses (`eceb260e`), links (`368d1e40`) and opening times (`a7558238`) are tested against it, and
 the performer spike (`fe1b7d02`) measures against the people labels.

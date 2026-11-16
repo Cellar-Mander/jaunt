@@ -350,15 +350,17 @@ public sealed class AddressParser(Gazetteer gazetteer)
         }
 
         /// <summary>
-        /// Walks back from an address: the nearest district, then the nearest world before it. A token
-        /// that could be either ("Gob": Goblet or Goblin) is the district when none has been found yet.
-        /// A data centre where the world would be means the ad names none.
+        /// Walks back from an address: the nearest district, then the nearest world before it, or the
+        /// nearest world, then the nearest district before it ("Goblet Zalera W7 P5"). A token that could
+        /// be either ("Gob": Goblet or Goblin) is the district when none has been found yet. A data
+        /// centre where the world would be means the ad names none.
         /// </summary>
         private void ScanBack(int j, int lower, ref District? district, ref GameWorld? world)
         {
             var reach = district is null ? DistrictReach : WorldReach;
             var skipped = 0;
-            while (j >= lower)
+            // Stryker disable once Logical : below lower every match is empty, so the loop only counts skips until reach ends it
+            while (j >= lower && (district is null || world is null))
             {
                 var m = MatchEndingAt(j, lower);
                 if (district is null && m.District is { } d)
@@ -370,10 +372,13 @@ public sealed class AddressParser(Gazetteer gazetteer)
                     continue;
                 }
 
-                if (m.World is { } w)
+                if (world is null && m.World is { } w)
                 {
                     world = w;
-                    return;
+                    j -= m.Length;
+                    reach = WorldReach;
+                    skipped = 0;
+                    continue;
                 }
 
                 if (m.DataCenter)
