@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using Dalamud.Game.Command;
 using Dalamud.Interface.ManagedFontAtlas;
@@ -6,6 +7,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Jaunt.Core.Images;
 using Jaunt.Core.Listings;
 using Jaunt.Listings;
 using Jaunt.Text;
@@ -25,6 +27,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static INotificationManager NotificationManager { get; private set; } = null!;
     [PluginService] internal static ISelfTestRegistry SelfTestRegistry { get; private set; } = null!;
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
+    [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
 
     private const string CommandName = "/jaunt";
 
@@ -41,6 +44,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly IFontHandle titleFontHandle;
     private readonly HeldFont titleFont;
     private readonly HeldFont iconFont;
+    private readonly ImageStore imageStore;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
@@ -73,9 +77,12 @@ public sealed class Plugin : IDalamudPlugin
         titleFontHandle = PluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(-1.25f)));
         titleFont = new HeldFont(titleFontHandle);
         iconFont = new HeldFont(PluginInterface.UiBuilder.IconFontHandle);
+        imageStore = new ImageStore(
+            Path.Combine(PluginInterface.ConfigDirectory.FullName, "images"), PublicNetwork.Handler(), FetchedListings.UserAgent,
+            (message, e) => Log.Warning(e, message));
         ListingsWindow = new ListingsWindow(
             ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
-            titleFont, iconFont);
+            titleFont, iconFont, imageStore, TextureProvider);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
@@ -107,6 +114,7 @@ public sealed class Plugin : IDalamudPlugin
         titleFont.Dispose();
         iconFont.Dispose();
         titleFontHandle.Dispose();
+        imageStore.Dispose();
         listingCacheStore.Dispose();
     }
 

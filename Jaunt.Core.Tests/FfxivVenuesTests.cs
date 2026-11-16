@@ -23,8 +23,9 @@ public class FfxivVenuesTests
         string approved = "true",
         string sfw = "true",
         string tags = """["Bar"]""",
-        string description = "[]") => $$"""
-        {"id":"{{id}}","name":{{JsonSerializer.Serialize(name)}},"description":{{description}},"location":{{location}},"website":{{website}},"discord":{{discord}},
+        string description = "[]",
+        string bannerUri = "\"https://images.ffxivvenues.com/abc123/KqB9\"") => $$"""
+        {"id":"{{id}}","name":{{JsonSerializer.Serialize(name)}},"bannerUri":{{bannerUri}},"description":{{description}},"location":{{location}},"website":{{website}},"discord":{{discord}},
          "hiring":false,"sfw":{{sfw}},"schedule":{{schedule}},"scheduleOverrides":[],"managers":["1"],"tags":{{tags}},"approved":{{approved}}}
         """;
 
@@ -87,6 +88,23 @@ public class FfxivVenuesTests
 
         Assert.False(fields.Sfw);
         Assert.Equal(["Bath house", null, "Tarot"], fields.Tags!);
+    }
+
+    [Fact]
+    public void KeepsTheBannerAsSentThroughTheCache()
+    {
+        var cache = new ListingCache();
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson()}]"), Now);
+
+        var fields = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!.Venue!;
+
+        Assert.Equal("https://images.ffxivvenues.com/abc123/KqB9", fields.BannerUri);
+    }
+
+    [Fact]
+    public void AVenueWithoutABannerHasNone()
+    {
+        Assert.Null(Cached(VenueJson(bannerUri: "null")).Venue!.BannerUri);
     }
 
     [Fact]

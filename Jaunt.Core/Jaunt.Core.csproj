@@ -16,4 +16,8 @@
     <InternalsVisibleTo Include="Jaunt.Core.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="4.156.1" />
+  </ItemGroup>
+
 </Project>

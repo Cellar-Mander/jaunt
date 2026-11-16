@@ -35,4 +35,16 @@
   <ItemGroup>
     <ProjectReference Include="..\Jaunt.Core\Jaunt.Core.csproj" />
   </ItemGroup>
+
+  <!-- SkiaSharp brings its native library for every platform, each with a ~95 MB PDB. The game is
+       always 64-bit Windows, also under Wine and XIV on Mac, so only win-x64's DLL is shipped, as a
+       plain native asset beside SkiaSharp.dll rather than under runtimes/: the dev deploy copies only
+       the output's top level, and Dalamud loads a native library from where Jaunt.deps.json says. -->
+  <Target Name="KeepOnlyWinX64Natives" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_WinX64Natives Include="@(RuntimeTargetsCopyLocalItems)" Condition="'%(RuntimeTargetsCopyLocalItems.AssetType)' == 'native' And '%(RuntimeTargetsCopyLocalItems.RuntimeIdentifier)' == 'win-x64' And '%(Extension)' == '.dll'" />
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)" Condition="'%(RuntimeTargetsCopyLocalItems.AssetType)' == 'native'" />
+      <NativeCopyLocalItems Include="@(_WinX64Natives)" DestinationSubPath="%(Filename)%(Extension)" DestinationSubDirectory="" RuntimeIdentifier="" PathInPackage="%(Filename)%(Extension)" />
+    </ItemGroup>
+  </Target>
 </Project>

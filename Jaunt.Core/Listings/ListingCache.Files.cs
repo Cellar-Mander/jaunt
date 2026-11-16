@@ -93,7 +93,7 @@ public sealed partial class ListingCache
         ListingSource.FfxivVenues => Snapshot(source, l => new FfxivVenues.Venue(l.Id, l.Title, l.Venue!, l.About)),
         ListingSource.Partake => Snapshot(source, l => new Partake.Event(
             l.Id, l.Title, l.StartsAt ?? default, l.EndsAt ?? default, l.ListedOn ?? "", l.DataCentre, l.Location, l.LinkTexts,
-            l.Rating, l.SourceTags, l.About)),
+            l.Rating, l.SourceTags, l.About, l.Attachments, l.DescriptionImages)),
         ListingSource.RpEventCalendar => Snapshot(source, l => new RpEventCalendar.Event(
             l.Id, l.Title, l.ListedOn, l.Location, l.Rating, l.LinkTexts, l.Openings, l.OneOff, l.LastValidated, l.About)),
         _ => Snapshot(source, l => new Xivpf.Ad(l.Id, l.Description, l.ListedOn)),
@@ -175,7 +175,11 @@ public sealed partial class ListingCache
                 break;
             case ListingSource.Partake:
                 foreach (var (item, seen, _) in Read<Partake.Event>(json))
-                    Partake.Record(this, [item with { Title = item.Title ?? "", World = item.World ?? "", LinkTexts = Present(item.LinkTexts), Tags = Present(item.Tags), About = Present(item.About) }], seen);
+                    Partake.Record(this, [item with
+                    {
+                        Title = item.Title ?? "", World = item.World ?? "", LinkTexts = Present(item.LinkTexts), Tags = Present(item.Tags),
+                        About = Present(item.About), Attachments = Present(item.Attachments), DescriptionImages = Present(item.DescriptionImages),
+                    }], seen);
                 break;
             case ListingSource.RpEventCalendar:
                 foreach (var (item, seen, _) in Read<RpEventCalendar.Event>(json))

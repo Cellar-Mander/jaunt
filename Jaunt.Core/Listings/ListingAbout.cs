@@ -77,6 +77,33 @@ public sealed record ListingAbout(string Text, bool Cut, IReadOnlyList<string> I
             : new ListingAbout(Shorten(cleaned), true, invites);
     }
 
+    /// <summary>
+    /// The addresses of the Markdown images (<c>![alt](address "title")</c>) a description shows, as
+    /// written and in order, each once; null when it shows none. A title after the address is left out.
+    /// </summary>
+    public static IReadOnlyList<string>? Images(string? written)
+    {
+        if (string.IsNullOrWhiteSpace(written))
+            return null;
+
+        var images = new List<string>();
+        foreach (var line in written.ReplaceLineEndings("\n").Split('\n'))
+        {
+            for (var i = line.IndexOf("![", StringComparison.Ordinal); i >= 0; i = line.IndexOf("![", i + 1, StringComparison.Ordinal))
+            {
+                if (LinkEnd(line, i + 1) is not var (close, end))
+                    continue;
+                var target = line[(close + 2)..end].Trim();
+                var space = target.IndexOfAny([' ', '\t']);
+                var address = (space < 0 ? target : target[..space]).Trim('<', '>');
+                if (address.Length > 0 && !images.Contains(address))
+                    images.Add(address);
+            }
+        }
+
+        return images.Count == 0 ? null : images;
+    }
+
     /// <summary>The line without a leading heading, quote or rule marker; a list item's marker becomes "•".</summary>
     private static string Block(string line)
     {

@@ -76,9 +76,12 @@ internal sealed class FetchedListings : IDisposable
         this.save = save;
         this.time = time;
         http = new HttpClient(handler) { Timeout = Timeout };
-        var version = typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "0";
-        http.DefaultRequestHeaders.UserAgent.ParseAdd($"Jaunt/{version} (+https://github.com/Cellar-Mander/jaunt)");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
     }
+
+    /// <summary>The User-Agent Jaunt's requests send: its version and repository, nothing about the player.</summary>
+    internal static string UserAgent { get; } =
+        $"Jaunt/{typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "0"} (+https://github.com/Cellar-Mander/jaunt)";
 
     /// <summary>The venue list from FFXIV Venues, one request per data centre due.</summary>
     public static FetchedListings FfxivVenues(

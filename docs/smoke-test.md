@@ -91,7 +91,7 @@ times as in FFXIV Venues 1 first.
    later today), "Tomorrow" and the weekday, then dates in the Settings format with the weekday
    dimmed. 24/7 venues are at the end of "Open now". A venue open now also shows under its next
    opening's day; one not open shows once.
-3. **Rows**: each has a grey square, a status line (green "Open now · until …" or the times), the
+3. **Rows**: each has a rounded square icon level with the first line (grey until its image loads, and for one with none), a status line (green "Open now · until …" or the times), the
    title in a larger font and the world. Above the list, at the right, "N listings" counts the
    entries (a venue under both "Open now" and its next day counts once). Narrow the window: long titles end in "…" rather than running under the
    detail pane.
@@ -99,7 +99,7 @@ times as in FFXIV Venues 1 first.
    dividers and the detail follow at once. A venue's opening matches its FFXIV Venues page in your
    time zone.
 5. **Detail**: select a Party Finder ad, a venue, a Partake event and a calendar event. Each shows a
-   grey band, its title in a larger font, status, world, Travel and Open page where it has an address or link, Location,
+   band with its splash image (grey for one with none), its title in a larger font, status, world, Travel and Open page where it has an address or link, Location,
    and a footer naming its source ("Sources: FFXIV Venues"), each source but Party Finder linking to its
    site, in blue and underlined. A venue with a Discord invite shows "Discord" (also blue and underlined) first in the footer, opening the invite, and
    not under Location; one whose only link is the invite has no Open page. A long ad shows "Read more", which expands it and becomes "Show less".
@@ -120,6 +120,15 @@ times as in FFXIV Venues 1 first.
    are covered by `DuplicatesTests`)*
 9. **Zone from a venue**: an ad that gives a time with no zone, for an FFXIV Venues venue, shows at the
    venue's opening time in your time zone, not hours away from it.
+10. **Icons and splash images**: with `images/` in the plugin's config folder deleted, open `/jaunt`.
+    Rows in view get icons within a few seconds: a venue with a Discord invite shows its server icon,
+    and one without shows its website's icon or a square from its FFXIV Venues banner. Select an FFXIV
+    Venues venue: its banner fills the band, cropped to it, not stretched. Select a Partake event: its
+    image shows. Only rows that have been in view have files in `images/` (scroll to the bottom and
+    more appear). Block the network, then close and reopen `/jaunt` and disable and re-enable
+    Jaunt: the images still show at once, from `images/`. Under
+    Wine (XIVLauncher.Core), FFXIV Venues banners show, as they are WebP. *(self-test: none; fetching,
+    fallbacks and keeping are covered by `ImageStoreTests`)*
 
 ## xivpf
 
