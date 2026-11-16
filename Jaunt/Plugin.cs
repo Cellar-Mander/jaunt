@@ -41,7 +41,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly FetchedListings ffxivVenuesListings;
     private readonly FetchedListings partakeListings;
     private readonly FetchedListings rpEventCalendarListings;
-    private readonly IFontHandle titleFont;
+    private readonly IFontHandle titleFontHandle;
+    private readonly HeldFont titleFont;
+    private readonly HeldFont iconFont;
     private readonly ImageStore imageStore;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
@@ -72,13 +74,15 @@ public sealed class Plugin : IDalamudPlugin
         partakeListings = FetchedListings.Partake(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
         rpEventCalendarListings = FetchedListings.RpEventCalendar(region.Get, ListingCache, Configuration, Framework, Log, SaveListingCache);
         // Titles are a quarter larger than the default font, at whatever size the user set it
-        titleFont = PluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(-1.25f)));
+        titleFontHandle = PluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(-1.25f)));
+        titleFont = new HeldFont(titleFontHandle);
+        iconFont = new HeldFont(PluginInterface.UiBuilder.IconFontHandle);
         imageStore = new ImageStore(
             Path.Combine(PluginInterface.ConfigDirectory.FullName, "images"), PublicNetwork.Handler(), FetchedListings.UserAgent,
             (message, e) => Log.Warning(e, message));
         ListingsWindow = new ListingsWindow(
             ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
-            titleFont, imageStore, TextureProvider);
+            titleFont, iconFont, imageStore, TextureProvider);
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
@@ -108,6 +112,8 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
         titleFont.Dispose();
+        iconFont.Dispose();
+        titleFontHandle.Dispose();
         imageStore.Dispose();
         listingCacheStore.Dispose();
     }
