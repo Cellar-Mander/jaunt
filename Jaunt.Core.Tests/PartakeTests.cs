@@ -19,8 +19,9 @@ public class PartakeTests
         string team = """{"websiteUrl":"https://virtue-xiv.club/","discordUrl":"discord.gg/xivvirtue"}""",
         string ageRating = "\"ADULT\"",
         string tags = """["Live DJs","Casino & Gambling"]""",
-        string description = "null") => $$"""
-        {"id":{{id}},"title":{{title}},"description":{{description}},"startsAt":{{startsAt}},"endsAt":{{endsAt}},"location":{{location}},
+        string description = "null",
+        string attachments = "[]") => $$"""
+        {"id":{{id}},"title":{{title}},"description":{{description}},"attachments":{{attachments}},"startsAt":{{startsAt}},"endsAt":{{endsAt}},"location":{{location}},
          "server":{{server}},"dataCenter":{{dataCenter}},"team":{{team}},"ageRating":{{ageRating}},"tags":{{tags}} }
         """;
 
@@ -128,6 +129,67 @@ public class PartakeTests
 
         Assert.Equal(("Live DJs at discord.gg/backup", false), (back.About!.Text, back.About.Cut));
         Assert.Equal(["https://discord.gg/backup"], back.About.Invites);
+    }
+
+    [Fact]
+    public void KeepsAttachmentsAndDescriptionImagesThroughTheCache()
+    {
+        var cache = new ListingCache();
+        var description = JsonSerializer.Serialize("![](https://cdn.partake.gg/assets/b.webp)\n**Live DJs** ![poster](https://cdn.partake.gg/assets/c.webp \"Poster\")");
+        Partake.Record(cache, [Single(EventJson(description: description, attachments: """["a.webp", null, "d"]"""))], Now);
+
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.Partake, "56564")!;
+
+        Assert.Equal(["a.webp", "d"], back.Attachments);
+        Assert.Equal(["https://cdn.partake.gg/assets/b.webp", "https://cdn.partake.gg/assets/c.webp"], back.DescriptionImages);
+        Assert.Equal("Live DJs", back.About!.Text);
+    }
+
+    [Fact]
+    public void RecordingAnEventWithoutImagesKeepsNone()
+    {
+        var cache = new ListingCache();
+        Partake.Record(cache, [Single(EventJson()) with { Attachments = null, DescriptionImages = null }], Now);
+
+        var listing = cache.Find(ListingSource.Partake, "56564")!;
+
+        Assert.Empty(listing.Attachments);
+        Assert.Empty(listing.DescriptionImages);
+    }
+
+    [Fact]
+    public void AnEventWithoutImagesHasNone()
+    {
+        var cache = new ListingCache();
+        Partake.Record(cache, [Single(EventJson(attachments: "null"))], Now);
+
+        var back = SavedFiles.RoundTrip(cache).Find(ListingSource.Partake, "56564")!;
+
+        Assert.Empty(back.Attachments);
+        Assert.Empty(back.DescriptionImages);
+    }
+
+    [Theory]
+    [InlineData("a21bc48c.webp", "https://cdn.partake.gg/assets/a21bc48c.webp")]
+    [InlineData("a_6944ada3.gif", "https://cdn.partake.gg/assets/a_6944ada3.gif")]
+    [InlineData("205b72ae", "https://cdn.partake.gg/assets/205b72ae.webp")] // sent without an extension; WebP there
+    [InlineData("02fcdfdc-5c0d-41e9.jpeg", "https://cdn.partake.gg/assets/02fcdfdc-5c0d-41e9.jpeg")]
+    [InlineData("", null)]
+    [InlineData("../secret.png", null)]
+    [InlineData(".hidden", null)]
+    [InlineData("a/b.png", null)]
+    [InlineData("a b.png", null)]
+    [InlineData("a?x=1.png", null)]
+    public void AnAttachmentIsAPlainFileOnPartakesCdn(string name, string? expected)
+    {
+        Assert.Equal(expected, Partake.AttachmentUri(name)?.AbsoluteUri);
+    }
+
+    [Fact]
+    public void AnAttachmentNameOver100CharactersIsSkipped()
+    {
+        Assert.NotNull(Partake.AttachmentUri(new string('a', 100)));
+        Assert.Null(Partake.AttachmentUri(new string('a', 101)));
     }
 
     [Fact]

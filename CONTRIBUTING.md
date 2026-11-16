@@ -87,7 +87,7 @@ A suppression covers every mutant of that kind in the code that follows it, so k
 - Before a statement, it covers the whole statement, and for an `if`, a loop or a member, everything inside. Before a condition on its own line it covers only that condition. It also covers the condition's other mutants of that kind, such as `<` turned into `>`; the tests still catch those faults, but Stryker no longer checks that they do.
 - Diff a full run's report against one from before the change with `mutant-triage diff before after`: a suppression should turn only the intended survivors, and that condition's other mutants of the same kind, into Ignored. It lists every mutant the tests caught before that is now ignored; confirm a condition's own with `record KEY suppressed --note <why>`, and narrow the comment for any other.
 
-`stryker-config.json` sets no ignore rules for mutants. Add one only for code whose mutants can't matter, such as logging, and say why beside it.
+`stryker-config.json` sets one ignore rule for mutants: `ConfigureAwait`'s argument, since Jaunt.Core runs no code with a synchronisation context, so `true` and `false` behave the same. Add another only for code whose mutants can't matter, such as logging, and say why here.
 
 It does tell PR runs to ignore changes to test data (`since.ignore-changes-in`: `Fixtures/` and `Corpus/`). Without that, Stryker treats any non-C# file changed in the test project as touching everything and tests all mutants, about 25 minutes in CI. The tests that read those files still run on every PR. Manual and labelled runs don't use `--since`, so they still test everything.
 

@@ -220,8 +220,8 @@ works out from each venue's schedule. A venue left out stays in the cache with i
 and in the browser while it has openings to list, until it expires (see "Listing cache"). `FfxivVenues`
 records each in the listing cache as `FfxivVenues`, keyed by the venue's ID, with the fields below as
 the API sent them: its name as the title, and its location, website, Discord, schedule, `sfw` and
-tags, each schedule entry with its time zone (the start's `timeZone`, an IANA ID); and its
-`description`, cleaned when read (see "Descriptions"). The title,
+tags, each schedule entry with its time zone (the start's `timeZone`, an IANA ID), and its
+`bannerUri` (see "Icons and splash images"); and its `description`, cleaned when read (see "Descriptions"). The title,
 address, links and 24/7 shown are derived from those fields when listed, once per change, so a change
 to how they are read applies to cached venues without fetching again. A venue cached without them
 shows no address until the next fetch. Opening the browser asks for each data centre in the region
@@ -345,8 +345,8 @@ data centre is in the travel region; the API has no region filter.
   with `start` 24 hours before now, so events already under way are included. Pages of 200 (`limit`,
   `offset`) until a page comes back with fewer, at most 5 pages per fetch. About 150 events are
   listed at once, so one page is usual. Only the fields shown or filtered on are asked for: `id`,
-  `title`, `description`, `startsAt`, `endsAt`, `location`, `ageRating`, `tags`, `server.name`, `dataCenter.name`
-  and the host team's `websiteUrl` and `discordUrl`. `server` and `dataCenter` work but aren't in Partake's docs.
+  `title`, `description`, `attachments`, `startsAt`, `endsAt`, `location`, `ageRating`, `tags`, `server.name`, `dataCenter.name`
+  and the host team's `websiteUrl` and `discordUrl`. `attachments` isn't in Partake's docs either. `server` and `dataCenter` work but aren't in Partake's docs.
 - **Title**: shown trimmed and cut to 60 characters like an ad's.
 - **Times**: `startsAt` and `endsAt` (UTC), shown in local time in the chosen time and date formats,
   "Sat 14 Nov 20:00–23:00", with the end's date too when it ends on a later day, and "on now" once
@@ -359,8 +359,12 @@ data centre is in the travel region; the API has no region filter.
   Travel.
 - **Links**: the host's website then Discord, then the Discord invites the description links to,
   shown like FFXIV Venues links: http or https only. On load, the cache drops missing link texts.
-- **Description**: Markdown, often with images; 88 of 100 events had text left once cleaned. An
-  image in it is for 185b66ad's splash images; About leaves it out.
+- **Description**: Markdown, often with images; 88 of 100 events had text left once cleaned. About
+  leaves images out; their addresses, as written and each once, are kept for the splash image.
+- **Images**: `attachments`, the event's own images as file names on `https://cdn.partake.gg/assets/`
+  (57 of 60 events had one), kept as sent. A name sent without an extension is a WebP file there
+  ("205b…" is at "205b….webp"). A name that isn't letters, digits, "-", "_" and "." (or starts with
+  ".") is never used. On load, the cache drops missing names.
 - An event is skipped, without failing the others, when it lacks an ID or either time, its title
   or world is missing or blank, its end is not after its start, or its fields have the wrong types.
   A response with GraphQL `errors` (Partake answers those with HTTP 200), without `data.events`, or
@@ -469,7 +473,7 @@ again.
 
 `/jaunt` and the installer's Open button toggle the browser; `/jaunt config` and the cog in its title
 bar open Settings. The window has the list on the left and the selected listing's details on the
-right, under a line of search and filters. The narrow single-column layout (`2dce5769`), icons and splash images (`185b66ad`, plain placeholders until then)
+right, under a line of search and filters. The narrow single-column layout (`2dce5769`)
 and copy link (`6e2b5199`) are separate tasks.
 
 - **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
@@ -544,15 +548,16 @@ and copy link (`6e2b5199`) are separate tasks.
   Settings time format.
 - **Count**: above the panes, at the right, "14 listings" ("1 listing") counts the entries listed,
   each once however many of its openings are listed.
-- **Rows**: a placeholder square for the icon, then three lines, each cut with "…" to the pane's
+- **Rows**: the icon (see "Icons and splash images"), a rounded square about 32 px at the default
+  scale (no taller than the row) level with the first line, then three lines, each cut with "…" to the pane's
   width: the status, the title in a font a quarter larger than the default, and the world dimmed. The status is "Open now · until 23:00" in green
   ("until Mon 16 Nov 23:00" when it closes more than a day ahead), "Open now" when the end isn't
   known, "Open now · 24h", or for a later opening its times ("20:00–23:00", or "20:00" without an end).
   Rows out of view are spaced, not drawn. The list is rebuilt every second. An opening that ends
   before then shows "Closed" in the row and detail pane, and is left out when the list is next
   grouped (on the rebuild or a filter change).
-- **Detail pane**, top to bottom, each part only when the listing has it: a placeholder band for the
-  splash image; the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
+- **Detail pane**, top to bottom, each part only when the listing has it: the splash image band
+  (see "Icons and splash images"); the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"); the world;
   Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
   a location given only as text, and any further links; About: an ad's normalised text, or else the
@@ -658,6 +663,67 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Open page** opens the first link's URI (any further links are listed under Location, each with Open) in the browser. `WebLinks` only ever returns http or https URIs,
   so another player's ad can't make it open anything else; the button's tooltip shows the full URI.
 
+### Icons and splash images
+
+Each entry in the browser shows an icon in its row and a splash image at the top of its detail pane.
+`ImageSources` picks where each may come from, in order, and `ImageStore` fetches, converts and keeps
+them; the browser draws them.
+
+- **Sources**, from the entry's members and links, at most two of each kind, each once:
+  - Icon: the server icon of each Discord invite among its links, then the icon of each website FFXIV
+    Venues (the venue's `website`) or Partake (the host's `websiteUrl`) gives, then a square from the
+    FFXIV Venues banner. Server icons are made to read as small squares;
+    a banner's middle square is often a dark scene, so it comes last (decision with the user, `185b66ad`).
+  - Splash: the FFXIV Venues banner, then each invite's server banner, else its invite splash, then
+    the Partake event's attachments and then its description's images.
+  - Websites in Party Finder ads and RP calendar pages aren't used: any player writes an ad's links,
+    and fetching their icon would tell the ad's author the address of everyone who scrolls past it
+    (decision with the user, `185b66ad`). Invites from any member are, as they are looked up only on
+    Discord. Of the websites used, only those places compare count (see "Matching" under "Marks"):
+    links to people and single events (Twitch, Partake) would show their icon, not the venue's. An
+    invite code that isn't letters, digits and "-", at most 32, is skipped.
+- **Discord**: `https://discord.com/api/v10/invites/<code>`, which needs no sign-in, gives the server's
+  ID and its icon, banner and splash hashes; the images are `cdn.discordapp.com` PNGs (icon at
+  128 px, banner and splash at 1024 px). An invite to a group DM, or one Discord doesn't know, gives
+  none. Each invite is asked once per session for both kinds.
+- **Website icons** (`Favicons`): the site's home page (scheme and host, path "/"), read up to 512 KB,
+  and the icons its `<link>` tags name: `apple-touch-icon` first, then `icon` by the largest of its
+  `sizes`, then `/favicon.ico`, at most three, each once. SVG icons are skipped, as they can't be
+  decoded. Relative addresses are read against where redirects led. A home page that isn't there
+  still tries `/favicon.ico`.
+- **Fetching**: only when the row or detail pane is drawn (rows out of view are spaced, not drawn), so
+  opening the browser doesn't fetch every entry's images. Three fetches run at once, off the game
+  thread. A source tries the next one in order when it has no image: not found or another refusal, a
+  host that is unknown or refuses the connection, data that isn't an image Skia can decode, or more
+  than 8 MB (Partake has sent 60 MB GIFs). A timeout, a 429 or a 5xx stops there and tries the same
+  sources again 10 minutes later, while the game runs, showing any kept image meanwhile.
+- **Only the public internet**: image and website addresses come from other players' ads, so every
+  connection, redirects included, goes only to a public address: never loopback, private (10/8,
+  172.16/12, 192.168/16, fc00::/7), shared (100.64/10), link-local, multicast or reserved ranges,
+  checked on the address a name resolves to (`PublicNetwork`). Image requests use no proxy, as the
+  check is on the address connected to. Requests send Jaunt's version and repository as their
+  User-Agent, nothing about the player.
+- **Converting** (`ImageProcessing`): decoded with SkiaSharp (PNG, JPEG, WebP, GIF, ICO, BMP; the first
+  frame of an animation), as every FFXIV Venues banner and most Partake images are WebP, which the
+  game's own decoder can't read under Wine. An image over 16 million pixels isn't decoded. An icon is
+  its middle square at 64 px; a splash image is at most as tall as it is wide (its middle part) and at
+  most 960 px wide, keeping its shape. Both are kept as PNG.
+- **Keeping**: in the plugin's config folder under `images/`: one PNG per image address and kind, named
+  by a hash of both, so the same picture is downloaded once for any entry; and `index.json`
+  (`version` 1), recording for each entry's kind and sources the file they gave, or none, and when.
+  Reopening the window or restarting the game shows kept images without fetching. A kept image's
+  sources are tried again when shown 7 days after (a server's new icon has a new address), showing
+  the old one meanwhile; an address already kept isn't downloaded again. Sources that gave none are
+  tried again when shown a day after. On load, entries not worked out for 30 days are dropped, and
+  so is any file no entry names. An unreadable index starts empty, and a file name in it that isn't
+  one the store makes is ignored.
+- **Drawing**: a plain rounded box in the frame colour shows until the image is kept, and stays when
+  there is none. The image covers the box, cropped to its shape about the middle: the row's square,
+  or the detail pane's band (as wide as the pane, 0.3 of its width tall, at most 140 px at the
+  default scale). Textures are loaded by Dalamud from the kept PNGs.
+- The plugin ships only SkiaSharp's 64-bit Windows native library: the game is always 64-bit Windows,
+  also under Wine and XIV on Mac.
+
 ## Limits
 
 Caps on user-configurable lists and text, and how input from other players or the game is bounded.
@@ -694,6 +760,12 @@ Caps on user-configurable lists and text, and how input from other players or th
   Japan, 2 for Europe, 1 for Oceania), each read in one pass over its venues, off the game thread; a venue's links
   are two plus any invites in its description, and titles are cut to 60 characters when shown. The list (about 750 of 1,400 venues,
   1.6 MB) keeps `cache/FfxivVenues.json` under about 1.1 MB, of which descriptions are about 260 KB.
+- Images are fetched only for entries drawn, three at a time, each source a handful of requests at
+  most (an invite lookup or home page, then an image); downloads stop at 8 MB and home pages at
+  512 KB. Decoding refuses images over 16 million pixels. Finding an entry's sources happens once per
+  rebuild of the list for each row drawn; asking for a kept image each frame is a field check that
+  allocates nothing. Kept files are about 8 KB per icon and up to about 1 MB per splash image, and
+  those not shown for 30 days are deleted on load.
 - Cleaning a description is one pass over its lines plus a link search, once per fetch, off the game
   thread; the cleaned text is at most 1,501 characters. The list derives a venue's title, address, links and
   24/7 once per change to its cached fields, not per frame.

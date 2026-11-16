@@ -113,6 +113,15 @@ public sealed class CachedListing
     /// </summary>
     public ListingAbout? About { get; set; }
 
+    /// <summary>A Partake event's images' file names on Partake's CDN as sent; empty for other sources.</summary>
+    public IReadOnlyList<string> Attachments { get; set; } = [];
+
+    /// <summary>
+    /// The addresses of the images a Partake event's description shows, as written, which
+    /// <see cref="ListingAbout.Clean"/> leaves out of About; empty for other sources.
+    /// </summary>
+    public IReadOnlyList<string> DescriptionImages { get; set; } = [];
+
     /// <summary>When any source last listed it.</summary>
     public DateTimeOffset LastSeen { get; set; }
 

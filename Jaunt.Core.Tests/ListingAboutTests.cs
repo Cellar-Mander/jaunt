@@ -16,6 +16,24 @@ public class ListingAboutTests
     public void NothingButImagesLinksAndSymbolsIsNoDescription(string? written) =>
         Assert.Null(ListingAbout.Clean(written));
 
+    [Theory]
+    [InlineData("![](https://a.example/1.webp)", new[] { "https://a.example/1.webp" })]
+    [InlineData("Text ![alt](https://a.example/1.webp \"Title\") and ![b](<https://a.example/2.png>)", new[] { "https://a.example/1.webp", "https://a.example/2.png" })]
+    [InlineData("[![](https://a.example/1.webp)](https://venue.example)", new[] { "https://a.example/1.webp" })] // an image inside a link
+    [InlineData("![](https://a.example/1.webp)\r\n![](https://a.example/1.webp)\n![](https://a.example/3.gif)", new[] { "https://a.example/1.webp", "https://a.example/3.gif" })]
+    public void ImagesAreTheAddressesMarkdownImagesShowInOrderEachOnce(string written, string[] expected) =>
+        Assert.Equal(expected, ListingAbout.Images(written));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("No images, just [a link](https://venue.example) and a ! [bracket]")]
+    [InlineData("![unclosed](https://a.example/1.webp")]
+    [InlineData("![no target]")]
+    [InlineData("![]()")]
+    public void ADescriptionWithoutImagesHasNone(string? written) =>
+        Assert.Null(ListingAbout.Images(written));
+
     [Fact]
     public void AnInviteOnItsOwnIsKeptWithoutText()
     {

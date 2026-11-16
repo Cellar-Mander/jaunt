@@ -8,6 +8,8 @@ using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.ManagedFontAtlas;
+using Dalamud.Interface.Textures;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -15,6 +17,7 @@ using Dalamud.Plugin.Services;
 using Dalamud.Utility;
 using Jaunt.Core.Browser;
 using Jaunt.Core.Display;
+using Jaunt.Core.Images;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
 using Jaunt.Travel;
@@ -56,6 +59,8 @@ internal sealed class ListingsWindow : Window
     private readonly Action saveCache;
     private readonly Func<TravelRegion?> region;
     private readonly IFontHandle titleFont;
+    private readonly ImageStore images;
+    private readonly ITextureProvider textures;
 
     // Each icon's drawn shape (top left and bottom right) in the icon font at a size, or null if it lacks the icon
     private static readonly Dictionary<(FontAwesomeIcon, float), (Vector2 Min, Vector2 Max)?> IconShapes = [];
@@ -97,6 +102,19 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<BrowserEntry<Row>, (string Text, bool Open)> statuses = new(ReferenceEqualityComparer.Instance);
     private string countText = "0 listings";
     private DetailView? detail;
+
+    // Each row's icon and splash image slots, worked out on its first draw after the list is, as
+    // finding their sources allocates; and each kept image's texture, found once per file
+    private readonly Dictionary<Row, (ImageSlot Icon, ImageSlot Splash)> imageSlots = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, KeptTexture> imageTextures = new(StringComparer.Ordinal);
+
+    /// <summary>A kept image's texture, and the wrapper Dalamud last gave for drawing it.</summary>
+    private sealed class KeptTexture(ISharedImmediateTexture texture)
+    {
+        public ISharedImmediateTexture Texture { get; } = texture;
+
+        public IDalamudTextureWrap? Wrap { get; set; }
+    }
 
     // The removable chip for each tag picked, as ListingFilters.Labels lists them
     private static readonly string[] TagChipLabels = [.. ListingFilters.Labels.Select(l => $"{l.Label} ×")];
@@ -187,12 +205,16 @@ internal sealed class ListingsWindow : Window
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
     /// <param name="openSettings">Opens the Settings window, from the title bar's cog.</param>
     /// <param name="titleFont">The larger font listing titles are drawn in; owned by the caller.</param>
+    /// <param name="images">Fetches and keeps icons and splash images; owned by the caller.</param>
+    /// <param name="textures">Loads the kept images for drawing.</param>
     public ListingsWindow(
         ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
-        Action saveCache, Func<TravelRegion?> region, Action openSettings, IFontHandle titleFont)
+        Action saveCache, Func<TravelRegion?> region, Action openSettings, IFontHandle titleFont, ImageStore images, ITextureProvider textures)
         : base("Jaunt###JauntListings")
     {
         this.titleFont = titleFont;
+        this.images = images;
+        this.textures = textures;
         this.region = region;
         this.fetchSources = fetchSources;
         this.saveCache = saveCache;
@@ -416,7 +438,7 @@ internal sealed class ListingsWindow : Window
         }
     }
 
-    /// <summary>A placeholder icon, then the status line, the title cut to fit and the world.</summary>
+    /// <summary>The icon, then the status line, the title cut to fit and the world.</summary>
     /// <remarks>The status line is worked out on the row's first draw after the list is, so it may lag the clock by up to <see cref="RebuildInterval"/>.</remarks>
     private void DrawRow(BrowserEntry<Row> entry, (ListingSource, string)? selected, float rowHeight, DateTimeOffset now, CultureInfo locale)
     {
@@ -430,10 +452,11 @@ internal sealed class ListingsWindow : Window
         var highlight = (Min: ImGui.GetItemRectMin(), Max: ImGui.GetItemRectMax());
         var after = ImGui.GetCursorScreenPos();
 
-        // Icons and images are 185b66ad; a plain square holds their place
+        // A rounded square level with the status line; a plain one until the icon is fetched, or if there is none
         var spacing = ImGui.GetStyle().ItemSpacing.X;
-        ImGui.GetWindowDrawList().AddRectFilled(start, start + new Vector2(rowHeight, rowHeight), ImGui.GetColorU32(ImGuiCol.FrameBg), 4 * ImGuiHelpers.GlobalScale);
-        var textLeft = start.X + rowHeight + spacing;
+        var iconSize = Math.Min(rowHeight, 32 * ImGuiHelpers.GlobalScale);
+        DrawImage(SlotsOf(row).Icon, start, start + new Vector2(iconSize), 6 * ImGuiHelpers.GlobalScale);
+        var textLeft = start.X + iconSize + spacing;
         var width = ImGui.GetContentRegionMax().X + ImGui.GetWindowPos().X - textLeft;
 
         // Favourite and visited show as icons in the highlight's top right corner, and the status line is cut to leave room
@@ -491,6 +514,67 @@ internal sealed class ListingsWindow : Window
         return right + gap;
     }
 
+    /// <summary>The entry's icon and splash image slots, worked out on its first draw after the list is.</summary>
+    private (ImageSlot Icon, ImageSlot Splash) SlotsOf(Row row)
+    {
+        if (!imageSlots.TryGetValue(row, out var slots))
+        {
+            AllocationWatch.Filled();
+            var listings = row.Members.Select(m => m.Listing).ToList();
+            var links = row.Details.Links.Select(l => l.Uri).ToList();
+            slots = (images.Slot(ImageKind.Icon, ImageSources.For(ImageKind.Icon, listings, links)),
+                images.Slot(ImageKind.Splash, ImageSources.For(ImageKind.Splash, listings, links)));
+            imageSlots[row] = slots;
+        }
+
+        return slots;
+    }
+
+    /// <summary>
+    /// A plain rounded box, with the slot's image over it once kept, cropped to the box's shape about its
+    /// middle. Asks for the image, as it is in view.
+    /// </summary>
+    private void DrawImage(ImageSlot slot, Vector2 min, Vector2 max, float rounding)
+    {
+        // Starting a fetch allocates its queue entry
+        if (images.Want(slot))
+            AllocationWatch.Filled();
+        var drawList = ImGui.GetWindowDrawList();
+        drawList.AddRectFilled(min, max, ImGui.GetColorU32(ImGuiCol.FrameBg), rounding);
+        if (slot.Path is not { } path)
+            return;
+
+        if (!imageTextures.TryGetValue(path, out var kept))
+        {
+            AllocationWatch.Filled();
+            kept = new KeptTexture(textures.GetFromFileAbsolute(path));
+            imageTextures[path] = kept;
+        }
+
+        if (!kept.Texture.TryGetWrap(out var wrap, out var failed) || wrap.Width <= 0 || wrap.Height <= 0)
+        {
+            // Dalamud loads the file over the next frames, which may allocate; a failed load stays failed
+            if (failed is null)
+                AllocationWatch.Filled();
+            return;
+        }
+
+        // Dalamud makes a new wrapper the first frame a texture is ready, and again once it reloads after a while out of view
+        if (!ReferenceEquals(wrap, kept.Wrap))
+        {
+            AllocationWatch.Filled();
+            kept.Wrap = wrap;
+        }
+
+        // Cover the box: the image's middle part with the box's shape fills it
+        var box = max - min;
+        var image = wrap.Size;
+        var scale = Math.Max(box.X / image.X, box.Y / image.Y);
+        var shown = box / scale / image;
+        var uvMin = (Vector2.One - shown) / 2;
+        drawList.AddImageRounded(wrap.Handle, min, max, uvMin, uvMin + shown, ImGui.GetColorU32(Vector4.One), rounding);
+    }
+
     /// <summary>
     /// An icon centred on <paramref name="centre"/> by its drawn shape rather than its advance, which
     /// for FontAwesome glyphs is wider than the shape and leaves it off centre.
@@ -542,10 +626,10 @@ internal sealed class ListingsWindow : Window
         var view = detail!;
         var width = ImGui.GetContentRegionAvail().X;
 
-        // Splash images are 185b66ad; a plain band holds their place
+        // A plain band until the splash image is fetched, or if there is none
         var top = ImGui.GetCursorScreenPos();
         var splashHeight = Math.Min(width * 0.3f, 140 * ImGuiHelpers.GlobalScale);
-        ImGui.GetWindowDrawList().AddRectFilled(top, top + new Vector2(width, splashHeight), ImGui.GetColorU32(ImGuiCol.FrameBg), 4 * ImGuiHelpers.GlobalScale);
+        DrawImage(SlotsOf(row).Splash, top, top + new Vector2(width, splashHeight), 4 * ImGuiHelpers.GlobalScale);
         ImGui.Dummy(new Vector2(width, splashHeight));
 
         // The mark buttons sit at the right of the title, which wraps short of them
@@ -995,6 +1079,7 @@ internal sealed class ListingsWindow : Window
     /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
+        imageSlots.Clear();
         unfiltered.Clear();
         unfilteredKeys.Clear();
         var travel = region();
