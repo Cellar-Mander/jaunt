@@ -149,6 +149,7 @@ public class ListingTagsTests
     [InlineData("Tavern night", "Mature", "Mature")]
     [InlineData("[AO] Tavern night", null, "Adults Only")] // the name's tag when no rating is sent
     [InlineData("[AO] Tavern night", "Teen", "Teen")] // the rating sent wins over the tag
+    [InlineData("Tavern night 18+", "Mature", "Mature")] // the rating wins over the name's age
     [InlineData("Tavern night 18+", " ", "18+")]
     [InlineData("Tavern night", null, null)]
     public void ACalendarEventsAgeIsItsRating(string name, string? rating, string? age) => Assert.Equal(age, ListingTags.AgeOf(CalendarEvent(name, rating)));
