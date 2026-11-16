@@ -413,9 +413,9 @@ data centre is in the travel region; the API has no region filter.
 - Events that have ended by the time a fetch is recorded aren't recorded, and the list leaves out
   cached events once they end.
 - **Credit**: Partake's API terms (https://partake.gg/developers) bar apps from presenting
-  themselves as endorsed, and set no placement for a disclaimer. A selected event's detail footer
-  and Settings → Data (see "Settings") say "Jaunt is not affiliated with or endorsed by Partake.";
-  the list itself carries no credit line, which overflowed its narrow pane. Each event's source reads "Partake". Hidden venues shows a hidden event's title as
+  themselves as endorsed, and set no placement for a disclaimer. Settings → Data (see "Settings")
+  says "Jaunt is not affiliated with or endorsed by Partake."; the list and the detail pane carry
+  no credit line. Each event's source reads "Partake". Hidden venues shows a hidden event's title as
   the list does.
 
 ### Descriptions
@@ -614,8 +614,7 @@ and copy link (`6e2b5199`) are separate tasks.
   first Discord invite among the links (`discord.gg/…`, or `discord.com/invite/…` and
   `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
   ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source
-  but Party Finder linking to its site, and the calendar's licence link after them; for a Partake
-  event, a line that Jaunt is not affiliated with or endorsed by Partake. Links in the footer, as
+  but Party Finder linking to its site, and the calendar's licence link after them. Links in the footer, as
   in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
   and open in the browser when clicked. Who listed an ad
   ("Listed by …") is `d12eb2c4`.

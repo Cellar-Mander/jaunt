@@ -171,8 +171,8 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `P
    date formats chosen in Settings. One under way is under "Open now" and says "Open now · until …".
 3. **Location**: selected, an event whose location names a district, ward and plot has Travel and
    Copy; one whose location Jaunt can't read shows the text under Location instead.
-4. **Credit**: a selected event's footer says "Jaunt is not affiliated with or endorsed by Partake."
-   The list has no credit line under its last row; Settings → Data carries it (Settings 5).
+4. **Credit**: neither the list nor a selected event's footer says "Jaunt is not affiliated with or
+   endorsed by Partake."; Settings → Data carries it (Settings 5).
 5. **Cooldown**: close and reopen `/jaunt`: no second Partake fetch is logged within 8 hours.
    *(self-test: no fetch a minute before the 8 h are up)*
 6. **Offline**: as in FFXIV Venues 7, with the `Partake` fetch time: `/xllog` shows a warning
