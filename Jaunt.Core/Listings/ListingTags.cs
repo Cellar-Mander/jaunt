@@ -162,9 +162,9 @@ public static class ListingTags
     private static readonly Dictionary<string, List<(string[] Tail, Interests Interests)>> Phrases = new(StringComparer.Ordinal);
     private static readonly List<(string Keyword, Interests Interests)> Substrings = [];
 
-    // Words saying the listing is age-restricted. Japanese ones are matched as substrings.
+    // Words saying the listing is age-restricted, with the age. Japanese ones are matched as substrings.
     // Words starting "18+" or "21+" ("18+only") count too.
-    private static readonly HashSet<string> AgeWords = new(StringComparer.Ordinal) { "+18", "+21", "r18", "r18+" };
+    private static readonly Dictionary<string, int> AgeWords = new(StringComparer.Ordinal) { ["+18"] = 18, ["+21"] = 21, ["r18"] = 18, ["r18+"] = 18 };
     private static readonly string[] AgePhrases = ["r 18", "adults only", "adult only"];
     private static readonly string[] AgeSubstrings = ["18禁", "成人向け"];
 
@@ -231,6 +231,40 @@ public static class ListingTags
     }
 
     /// <summary>
+    /// The age or content rating a listing gives, for the detail pane: the rating its source sent
+    /// (Partake's "Mature", the RP calendar's "Teen"), else an age restriction in its text ("18+");
+    /// null when it gives none. FFXIV Venues has no rating field.
+    /// </summary>
+    public static string? AgeOf(CachedListing listing)
+    {
+        switch (listing.Source)
+        {
+            case ListingSource.FfxivVenues:
+                return null;
+
+            case ListingSource.Partake:
+                {
+                    // Sent in capitals ("MATURE")
+                    var rating = listing.Rating?.Trim();
+                    return string.IsNullOrEmpty(rating) ? AgeText(Read(listing.Title).MinAge)
+                        : string.Concat(rating[..1].ToUpperInvariant(), rating[1..].ToLowerInvariant());
+                }
+
+            case ListingSource.RpEventCalendar:
+                {
+                    var (name, taggedRating) = RpEventCalendar.WithoutRatingTag(listing.Title);
+                    var rating = string.IsNullOrWhiteSpace(listing.Rating) ? taggedRating : listing.Rating.Trim();
+                    return rating ?? AgeText(Read(name).MinAge);
+                }
+
+            default:
+                return AgeText(Read(listing.Description).MinAge);
+        }
+    }
+
+    private static string? AgeText(int minAge) => minAge > 0 ? $"{minAge}+" : null;
+
+    /// <summary>
     /// The tagging of listings shown as one: every member's interests, and NSFW when any member is,
     /// as NSFW always wins over SFW.
     /// </summary>
@@ -249,8 +283,12 @@ public static class ListingTags
 
     /// <summary>What a text says.</summary>
     /// <param name="Nsfw">True when it says NSFW, false when it says SFW and not NSFW, null when it says neither.</param>
-    /// <param name="AgeRestricted">Whether it gives an age restriction ("18+", "R18", "18禁").</param>
-    internal readonly record struct TextSignals(Interests Interests, bool? Nsfw, bool AgeRestricted);
+    /// <param name="MinAge">The age restriction it gives ("18+", "R18", "18禁" are 18; "21+" is 21), the highest if several; 0 if none.</param>
+    internal readonly record struct TextSignals(Interests Interests, bool? Nsfw, int MinAge)
+    {
+        /// <summary>Whether it gives an age restriction.</summary>
+        public bool AgeRestricted => MinAge > 0;
+    }
 
     /// <summary>Reads a listing's text, Party Finder glyphs included, for keywords and SFW, NSFW and age words.</summary>
     internal static TextSignals Read(string raw)
@@ -261,7 +299,8 @@ public static class ListingTags
         var text = PartyFinderText.Normalise(raw).Text.ToLowerInvariant();
         var words = Split(text);
         var interests = Interests.None;
-        bool sfw = false, nsfw = false, age = false;
+        bool sfw = false, nsfw = false;
+        var age = 0;
         for (var i = 0; i < words.Count; i++)
         {
             var word = words[i];
@@ -269,8 +308,12 @@ public static class ListingTags
                 nsfw = true;
             else if (word == "sfw")
                 sfw = true;
-            if (AgeWords.Contains(word) || word.StartsWith("18+", StringComparison.Ordinal) || word.StartsWith("21+", StringComparison.Ordinal))
-                age = true;
+            if (AgeWords.TryGetValue(word, out var wordAge))
+                age = Math.Max(age, wordAge);
+            else if (word.StartsWith("21+", StringComparison.Ordinal))
+                age = 21;
+            else if (word.StartsWith("18+", StringComparison.Ordinal))
+                age = Math.Max(age, 18);
 
             interests |= Lookup(word);
             if (Phrases.TryGetValue(word, out var phrases))
@@ -283,10 +326,18 @@ public static class ListingTags
             }
         }
 
+        // Each of these means 18
         foreach (var phrase in AgePhrases)
-            age |= HasPhrase(words, phrase.Split(' '));
+        {
+            if (HasPhrase(words, phrase.Split(' ')))
+                age = Math.Max(age, 18);
+        }
+
         foreach (var keyword in AgeSubstrings)
-            age |= text.Contains(keyword, StringComparison.Ordinal);
+        {
+            if (text.Contains(keyword, StringComparison.Ordinal))
+                age = Math.Max(age, 18);
+        }
         foreach (var (keyword, keywordInterests) in Substrings)
         {
             if (text.Contains(keyword, StringComparison.Ordinal))
