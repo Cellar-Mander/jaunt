@@ -50,6 +50,7 @@ public sealed class ImageStoreTests : IDisposable
         {
             var slot = reopened.Slot(ImageKind.Splash, Pictures(Banner));
             Assert.NotNull(slot.Path);
+            // revert-check: not revert-sensitive (checks Want's existing answer for a kept image, which this change didn't touch)
             Assert.False(reopened.Want(slot));
             await reopened.Idle;
         }
