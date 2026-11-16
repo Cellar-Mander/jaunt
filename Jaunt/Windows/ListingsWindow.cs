@@ -1029,9 +1029,6 @@ internal sealed class ListingsWindow : Window
             ImGui.SameLine();
             DrawLinkText(RpEventCalendar.LicenceName, RpEventCalendar.LicenceUrl);
         }
-
-        if (row.Event is not null)
-            ImGui.TextDisabled(Partake.Disclaimer);
     }
 
     /// <summary>The first link that isn't a Discord invite, for Open page, or -1.</summary>
