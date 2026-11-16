@@ -869,9 +869,9 @@ internal sealed class ListingsWindow : Window
                 ImGui.SameLine();
             var link = row.Details.Links[page];
             if (ImGui.Button("Open page"))
-                Util.OpenLink(link.Uri.AbsoluteUri);
+                Util.OpenLink(LinkAddress(link.Uri));
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(link.Uri.AbsoluteUri);
+                ImGui.SetTooltip(LinkAddress(link.Uri));
         }
     }
 
@@ -923,9 +923,9 @@ internal sealed class ListingsWindow : Window
             using var id = Scoped.Id($"l{i}");
             var link = links[i];
             if (ImGui.SmallButton("Open"))
-                Util.OpenLink(link.Uri.AbsoluteUri);
+                Util.OpenLink(LinkAddress(link.Uri));
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(link.Uri.AbsoluteUri);
+                ImGui.SetTooltip(LinkAddress(link.Uri));
             ImGui.SameLine();
             ImGui.TextUnformatted(link.Text);
         }
@@ -1077,11 +1077,20 @@ internal sealed class ListingsWindow : Window
         if (ImGui.IsItemHovered())
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            ImGui.SetTooltip(uri.AbsoluteUri);
+            ImGui.SetTooltip(LinkAddress(uri));
         }
 
         if (ImGui.IsItemClicked())
-            Util.OpenLink(uri.AbsoluteUri);
+            Util.OpenLink(LinkAddress(uri));
+    }
+
+    /// <summary>A link's address to show or open; the first read of each allocates, so counts as a fill.</summary>
+    private static string LinkAddress(Uri uri)
+    {
+        var address = Core.Text.WebLinks.Address(uri, out var filled);
+        if (filled)
+            AllocationWatch.Filled();
+        return address;
     }
 
     private (ListingSource, string)? SelectedKey =>
