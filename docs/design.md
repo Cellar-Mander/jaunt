@@ -352,9 +352,9 @@ data centre is in the travel region; the API has no region filter.
 - **Times**: `startsAt` and `endsAt` (UTC), shown in local time in the chosen time and date formats,
   "Sat 14 Nov 20:00–23:00", with the end's date too when it ends on a later day, and "on now" once
   it has started.
-- **World**: `server.name`, shown trimmed and corrected like an FFXIV Venues world, with the data
-  centre trimmed (none when blank): "Lich (Light)". It is the world for addresses in the location
-  that name none.
+- **World**: `server.name`, shown trimmed and corrected like an FFXIV Venues world, without the
+  data centre: "Lich". It is the world for addresses in the location that name none, and counts as
+  written there, since Partake gives it as data (not marked as the world the ad is listed on).
 - **Location**: free text ("LB W19 P58", "57 plot, ward15 , lavender beds"), trimmed, for the same
   address parser as ad text. When no address is read from it, the text is shown instead, without
   Travel.

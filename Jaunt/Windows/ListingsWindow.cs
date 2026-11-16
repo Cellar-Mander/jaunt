@@ -1454,8 +1454,7 @@ internal sealed class ListingsWindow : Window
                     // Shown without an address too: the location is free text the parser may not read
                     var item = Partake.Show(listing, gazetteer);
                     var location = Parsed(listing, item.Location, item.World);
-                    var world = item.DataCentre is { } dataCentre ? $"{item.World} ({dataCentre})" : item.World;
-                    return new Row(listing, item.Title, location with { Links = WebLinks(item.Links) }, world,
+                    return new Row(listing, item.Title, location with { Links = WebLinks(item.Links) }, item.World,
                         Schedules.ForEvent(listing.StartsAt, listing.EndsAt), Described(listing), Event: item,
                         AboutCut: listing.About?.Cut ?? false);
                 }
@@ -1531,7 +1530,9 @@ internal sealed class ListingsWindow : Window
         if (!parsed.TryGetValue(key, out var entry)
             || !string.Equals(entry.Text, text, StringComparison.Ordinal) || !string.Equals(entry.ListedOn, listedOn, StringComparison.Ordinal))
         {
-            entry = (text, listedOn, ListingDetails.Parse(parser, text, listedOn));
+            entry = (text, listedOn, listing.Source == ListingSource.Partake
+                ? new ListingDetails(Partake.Addresses(text, listedOn ?? "", parser), [])
+                : ListingDetails.Parse(parser, text, listedOn));
             parsed[key] = entry;
         }
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Jaunt.Core.Listings;
+using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Tests;
 
@@ -254,8 +255,8 @@ public class PartakeTests
     }
 
     private static CachedListing Cached(
-        string title = "Gala", string? world = "Lich", string? dataCentre = "Light", string? location = "LB W19 P58", params string[] links) =>
-        new() { Source = ListingSource.Partake, Id = "1", Title = title, ListedOn = world, DataCentre = dataCentre, Location = location, LinkTexts = links };
+        string title = "Gala", string? world = "Lich", string? location = "LB W19 P58", params string[] links) =>
+        new() { Source = ListingSource.Partake, Id = "1", Title = title, ListedOn = world, DataCentre = "Light", Location = location, LinkTexts = links };
 
     private static Partake.Shown Show(CachedListing listing) => Partake.Show(listing, TestGazetteer.Instance);
 
@@ -264,7 +265,7 @@ public class PartakeTests
     {
         var shown = Show(Cached(links: ["https://virtue-xiv.club/", "discord.gg/xivvirtue"]));
 
-        Assert.Equal(new Partake.Shown("Gala", "Lich", "Light", "LB W19 P58", shown.Links), shown);
+        Assert.Equal(new Partake.Shown("Gala", "Lich", "LB W19 P58", shown.Links), shown);
         Assert.Equal([new Uri("https://virtue-xiv.club/"), new Uri("https://discord.gg/xivvirtue")], shown.Links);
     }
 
@@ -279,13 +280,26 @@ public class PartakeTests
         Assert.Equal(expected, Show(Cached(world: sent)).World);
     }
 
-    [Theory]
-    [InlineData(" Light ", "Light")]
-    [InlineData("  ", null)]
-    [InlineData(null, null)]
-    public void ShowsTheDataCentreTrimmed(string? sent, string? expected)
+    [Fact]
+    public void AnAddressNamingNoWorldIsOnTheEventsWorldAsWritten()
     {
-        Assert.Equal(expected, Show(Cached(dataCentre: sent)).DataCentre);
+        Assert.Equal(
+            [new HousingAddress("Lich", WorldSource.Text, District.LavenderBeds, 19, 58)],
+            Partake.Addresses("LB W19 P58", "Lich", TestGazetteer.Parser));
+    }
+
+    [Fact]
+    public void AnAddressNamingAWorldKeepsIt()
+    {
+        Assert.Equal(
+            [new HousingAddress("Siren", WorldSource.Text, District.Mist, 5, 12)],
+            Partake.Addresses("Siren Mist W5 P12", "Lich", TestGazetteer.Parser));
+    }
+
+    [Fact]
+    public void ALocationWithoutAnAddressHasNone()
+    {
+        Assert.Empty(Partake.Addresses("Somewhere in Limsa", "Lich", TestGazetteer.Parser));
     }
 
     [Theory]

@@ -68,10 +68,9 @@ public static class Partake
 
     /// <summary>What the list shows for a cached event, worked out from the values Partake sent.</summary>
     /// <param name="World">Corrected to the game's spelling where the gazetteer knows it.</param>
-    /// <param name="DataCentre">Trimmed; null when blank.</param>
     /// <param name="Location">Trimmed; empty when none.</param>
     /// <param name="Links">The website and Discord, then the Discord invites its description links to, http or https only.</param>
-    public sealed record Shown(string Title, string World, string? DataCentre, string Location, IReadOnlyList<Uri> Links);
+    public sealed record Shown(string Title, string World, string Location, IReadOnlyList<Uri> Links);
 
     /// <summary>One response: the events kept, and how many the page held before any were skipped.</summary>
     public sealed record Page(IReadOnlyList<Event> Events, int Received);
@@ -151,18 +150,20 @@ public static class Partake
         }
     }
 
-    /// <summary>The title, world, data centre, location and links to show for a cached event.</summary>
+    /// <summary>The title, world, location and links to show for a cached event.</summary>
     /// <param name="gazetteer">Worlds, to correct a misspelt world name.</param>
-    public static Shown Show(CachedListing listing, Gazetteer gazetteer)
-    {
-        var dataCentre = listing.DataCentre?.Trim();
-        return new Shown(
-            Title(listing.Title),
-            FfxivVenues.World((listing.ListedOn ?? "").Trim(), gazetteer),
-            string.IsNullOrEmpty(dataCentre) ? null : dataCentre,
-            (listing.Location ?? "").Trim(),
-            FfxivVenues.Links([.. listing.LinkTexts, .. listing.About?.Invites ?? []]));
-    }
+    public static Shown Show(CachedListing listing, Gazetteer gazetteer) => new(
+        Title(listing.Title),
+        FfxivVenues.World((listing.ListedOn ?? "").Trim(), gazetteer),
+        (listing.Location ?? "").Trim(),
+        FfxivVenues.Links([.. listing.LinkTexts, .. listing.About?.Invites ?? []]));
+
+    /// <summary>
+    /// The housing addresses in an event's location, in the order written. One that names no world is
+    /// on the event's world, which Partake gives as data, so that world counts as written.
+    /// </summary>
+    public static IReadOnlyList<HousingAddress> Addresses(string location, string world, AddressParser parser) =>
+        [.. parser.Parse(location, world).Select(a => a.WorldFrom == WorldSource.Listing ? a with { WorldFrom = WorldSource.Text } : a)];
 
     /// <summary>
     /// The address of an event image on Partake's CDN, from its file name as sent. Names sent without
