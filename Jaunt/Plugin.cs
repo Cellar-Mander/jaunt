@@ -82,7 +82,7 @@ public sealed class Plugin : IDalamudPlugin
             (message, e) => Log.Warning(e, message));
         ListingsWindow = new ListingsWindow(
             ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
-            titleFont, iconFont, imageStore, TextureProvider);
+            titleFont, iconFont, imageStore, TextureProvider, PlaceholderArt.Backdrops(DataManager));
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 

@@ -106,10 +106,18 @@ internal sealed class ListingsWindow : Window
 
     // Each row's icon and splash image slots, worked out on its first draw after the list is, as
     // finding their sources allocates; and each kept image's texture, found once per file
-    private readonly Dictionary<Row, (ImageSlot Icon, ImageSlot Splash)> imageSlots = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Row, (ImageSlot Icon, ImageSlot Splash, string? Backdrop)> imageSlots = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, KeptTexture> imageTextures = new(StringComparer.Ordinal);
 
-    /// <summary>A kept image's texture, and the wrapper Dalamud last gave for drawing it.</summary>
+    // The game art standing in for missing splash images, and each loading screen's texture once first drawn, by its path
+    private readonly Backdrops backdrops;
+    private readonly Dictionary<string, KeptTexture> backdropTextures = new(StringComparer.Ordinal);
+
+    // The part of a loading screen shown, leaving out its dark top edge and the fade along its bottom
+    private static readonly Vector2 BackdropMin = new(0, 0.05f);
+    private static readonly Vector2 BackdropMax = new(1, 0.85f);
+
+    /// <summary>A texture drawn when kept or shown as a placeholder, and the wrapper Dalamud last gave for drawing it.</summary>
     private sealed class KeptTexture(ISharedImmediateTexture texture)
     {
         public ISharedImmediateTexture Texture { get; } = texture;
@@ -210,16 +218,19 @@ internal sealed class ListingsWindow : Window
     /// <param name="titleFont">The larger font listing titles are drawn in; owned by the caller.</param>
     /// <param name="iconFont">Dalamud's icon font, for the marks; owned by the caller.</param>
     /// <param name="images">Fetches and keeps icons and splash images; owned by the caller.</param>
-    /// <param name="textures">Loads the kept images for drawing.</param>
+    /// <param name="textures">Loads the kept images and the district art for drawing.</param>
+    /// <param name="backdrops">The loading screens standing in for missing splash images (<see cref="PlaceholderArt.Backdrops"/>).</param>
     public ListingsWindow(
         ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
-        Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont, ImageStore images, ITextureProvider textures)
+        Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont, ImageStore images, ITextureProvider textures,
+        Backdrops backdrops)
         : base("Jaunt###JauntListings")
     {
         this.titleFont = titleFont;
         this.iconFont = iconFont;
         this.images = images;
         this.textures = textures;
+        this.backdrops = backdrops;
         this.region = region;
         this.fetchSources = fetchSources;
         this.saveCache = saveCache;
@@ -465,10 +476,15 @@ internal sealed class ListingsWindow : Window
         var highlight = (Min: ImGui.GetItemRectMin(), Max: ImGui.GetItemRectMax());
         var after = ImGui.GetCursorScreenPos();
 
-        // A rounded square level with the status line; a plain one until the icon is fetched, or if there is none
+        // A rounded square level with the status line; a pictogram of its leading interest until the icon is fetched, or if there is none
         var spacing = ImGui.GetStyle().ItemSpacing.X;
         var iconSize = Math.Min(rowHeight, 32 * ImGuiHelpers.GlobalScale);
-        DrawImage(SlotsOf(row).Icon, start, start + new Vector2(iconSize), 6 * ImGuiHelpers.GlobalScale);
+        if (!DrawImage(SlotsOf(row).Icon, start, start + new Vector2(iconSize), 6 * ImGuiHelpers.GlobalScale))
+        {
+            var icon = PlaceholderArt.Icon(Placeholders.IconInterest(row.Tagging.Interests));
+            DrawIcon(ImGui.GetWindowDrawList(), icon, start + new Vector2(iconSize / 2), iconSize * 0.55f, ImGui.GetColorU32(ImGuiCol.TextDisabled));
+        }
+
         var textLeft = start.X + iconSize + spacing;
         var width = ImGui.GetContentRegionMax().X + ImGui.GetWindowPos().X - textLeft;
 
@@ -527,16 +543,21 @@ internal sealed class ListingsWindow : Window
         return right + gap;
     }
 
-    /// <summary>The entry's icon and splash image slots, worked out on its first draw after the list is.</summary>
-    private (ImageSlot Icon, ImageSlot Splash) SlotsOf(Row row)
+    /// <summary>
+    /// The entry's icon and splash image slots, and the game art standing in for its splash image, worked out on
+    /// its first draw after the list is.
+    /// </summary>
+    private (ImageSlot Icon, ImageSlot Splash, string? Backdrop) SlotsOf(Row row)
     {
         if (!imageSlots.TryGetValue(row, out var slots))
         {
             AllocationWatch.Filled();
             var listings = row.Members.Select(m => m.Listing).ToList();
             var links = row.Details.Links.Select(l => l.Uri).ToList();
+            var locations = row.Members.SelectMany(m => new[] { m.CalendarEvent?.Location, m.Event?.Location });
             slots = (images.Slot(ImageKind.Icon, ImageSources.For(ImageKind.Icon, listings, links)),
-                images.Slot(ImageKind.Splash, ImageSources.For(ImageKind.Splash, listings, links)));
+                images.Slot(ImageKind.Splash, ImageSources.For(ImageKind.Splash, listings, links)),
+                backdrops.For(row.Details.Addresses, locations));
             imageSlots[row] = slots;
         }
 
@@ -547,15 +568,15 @@ internal sealed class ListingsWindow : Window
     /// A plain rounded box, with the slot's image over it once kept, cropped to the box's shape about its
     /// middle. Asks for the image, as it is in view.
     /// </summary>
-    private void DrawImage(ImageSlot slot, Vector2 min, Vector2 max, float rounding)
+    /// <returns>Whether the image was drawn; false while it is fetched or loaded, or if there is none.</returns>
+    private bool DrawImage(ImageSlot slot, Vector2 min, Vector2 max, float rounding)
     {
         // Starting a fetch allocates its queue entry
         if (images.Want(slot))
             AllocationWatch.Filled();
-        var drawList = ImGui.GetWindowDrawList();
-        drawList.AddRectFilled(min, max, ImGui.GetColorU32(ImGuiCol.FrameBg), rounding);
+        ImGui.GetWindowDrawList().AddRectFilled(min, max, ImGui.GetColorU32(ImGuiCol.FrameBg), rounding);
         if (slot.Path is not { } path)
-            return;
+            return false;
 
         if (!imageTextures.TryGetValue(path, out var kept))
         {
@@ -564,12 +585,40 @@ internal sealed class ListingsWindow : Window
             imageTextures[path] = kept;
         }
 
+        return DrawCover(kept, min, max, Vector2.Zero, Vector2.One, Vector4.One, rounding);
+    }
+
+    /// <summary>
+    /// A loading screen, dimmed so it reads as a backdrop rather than the entry's own image, over the box
+    /// <see cref="DrawImage"/> left. Nothing for no path.
+    /// </summary>
+    private void DrawBackdrop(string? path, Vector2 min, Vector2 max, float rounding)
+    {
+        if (path is null)
+            return;
+        if (!backdropTextures.TryGetValue(path, out var kept))
+        {
+            AllocationWatch.Filled();
+            kept = new KeptTexture(textures.GetFromGame(path));
+            backdropTextures[path] = kept;
+        }
+
+        DrawCover(kept, min, max, BackdropMin, BackdropMax, new Vector4(0.7f, 0.7f, 0.7f, 1), rounding);
+    }
+
+    /// <summary>
+    /// The texture's region from <paramref name="regionMin"/> to <paramref name="regionMax"/> (in texture
+    /// coordinates) covering the box: the region's middle part with the box's shape fills it.
+    /// </summary>
+    /// <returns>Whether it was drawn; false while Dalamud loads it, or if loading failed.</returns>
+    private static bool DrawCover(KeptTexture kept, Vector2 min, Vector2 max, Vector2 regionMin, Vector2 regionMax, Vector4 tint, float rounding)
+    {
         if (!kept.Texture.TryGetWrap(out var wrap, out var failed) || wrap.Width <= 0 || wrap.Height <= 0)
         {
             // Dalamud loads the file over the next frames, which may allocate; a failed load stays failed
             if (failed is null)
                 AllocationWatch.Filled();
-            return;
+            return false;
         }
 
         // Dalamud makes a new wrapper the first frame a texture is ready, and again once it reloads after a while out of view
@@ -579,13 +628,14 @@ internal sealed class ListingsWindow : Window
             kept.Wrap = wrap;
         }
 
-        // Cover the box: the image's middle part with the box's shape fills it
         var box = max - min;
-        var image = wrap.Size;
+        var region = regionMax - regionMin;
+        var image = wrap.Size * region;
         var scale = Math.Max(box.X / image.X, box.Y / image.Y);
-        var shown = box / scale / image;
-        var uvMin = (Vector2.One - shown) / 2;
-        drawList.AddImageRounded(wrap.Handle, min, max, uvMin, uvMin + shown, ImGui.GetColorU32(Vector4.One), rounding);
+        var shown = box / scale / image * region;
+        var uvMin = regionMin + ((region - shown) / 2);
+        ImGui.GetWindowDrawList().AddImageRounded(wrap.Handle, min, max, uvMin, uvMin + shown, ImGui.GetColorU32(tint), rounding);
+        return true;
     }
 
     /// <summary>
@@ -641,10 +691,13 @@ internal sealed class ListingsWindow : Window
         var view = detail!;
         var width = ImGui.GetContentRegionAvail().X;
 
-        // A plain band until the splash image is fetched, or if there is none
+        // Its district's or zone's art until the splash image is fetched, or if there is none; a plain band without either
         var top = ImGui.GetCursorScreenPos();
         var splashHeight = Math.Min(width * 0.3f, 140 * ImGuiHelpers.GlobalScale);
-        DrawImage(SlotsOf(row).Splash, top, top + new Vector2(width, splashHeight), 4 * ImGuiHelpers.GlobalScale);
+        var splashMax = top + new Vector2(width, splashHeight);
+        var slots = SlotsOf(row);
+        if (!DrawImage(slots.Splash, top, splashMax, 4 * ImGuiHelpers.GlobalScale))
+            DrawBackdrop(slots.Backdrop, top, splashMax, 4 * ImGuiHelpers.GlobalScale);
         ImGui.Dummy(new Vector2(width, splashHeight));
 
         // The mark buttons sit at the right of the title, which wraps short of them
