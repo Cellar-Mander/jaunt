@@ -124,6 +124,22 @@ public class PartyFinderTextTests
 
         Assert.Equal(expected, result.Boxed.Select(r => result.Text[r]));
     }
+
+    [Theory]
+    [InlineData("DJ QUEEN BAE \ue05d HAPPY", "DJ QUEEN BAE | HAPPY")] // a glyph
+    [InlineData("A \u2605 B \u2665 C", "A | B | C")] // symbols
+    [InlineData("Erebus \u2022 Velo \u25cf Quade", "Erebus \u2022 Velo \u2022 Quade")] // bullets
+    [InlineData("a \ue04a b", "a | b")] // a letter-like glyph on its own
+    [InlineData("M\ue04aN", "MON")] // and inside a word
+    [InlineData("10\ue06e EST", "10PM EST")] // time glyphs are words, not decoration
+    public void MarkedDecorationKeepsWhereItWas(string raw, string expected) =>
+        Assert.Equal(expected, PartyFinderText.Normalise(raw, markDecoration: true).Text);
+
+    [Fact]
+    public void MarkedDecorationIsNotBoxed() => Assert.Empty(PartyFinderText.Normalise("A  B", markDecoration: true).Boxed);
+
+    [Fact]
+    public void DecorationIsASpaceUnlessMarked() => Assert.Equal("A B C", N("A \u2605 B \u2022 C"));
 }
 
 public class PartyFinderTextCorpusTests
