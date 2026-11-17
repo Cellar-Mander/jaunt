@@ -149,6 +149,27 @@ public static class Duplicates
         return null;
     }
 
+    /// <summary>
+    /// A merged entry's links: each member's in turn, the same URI once. The FFXIV RP Event Calendar's
+    /// forwarder links (<see cref="RpEventCalendar.IsForwarder"/>) are left out when another member gives
+    /// a page, as they forward to the venue's page, which would then show again under Location.
+    /// </summary>
+    /// <param name="byMember">Each member's links, in the order the entry's title ranks them.</param>
+    public static IReadOnlyList<WebLink> Links(IEnumerable<IReadOnlyList<WebLink>> byMember)
+    {
+        var links = new List<WebLink>();
+        var seen = new HashSet<Uri>();
+        foreach (var link in byMember.SelectMany(l => l))
+        {
+            if (seen.Add(link.Uri))
+                links.Add(link);
+        }
+
+        if (links.Exists(l => !RpEventCalendar.IsForwarder(l.Uri) && !WebLinks.IsDiscordInvite(l.Uri)))
+            links.RemoveAll(l => RpEventCalendar.IsForwarder(l.Uri));
+        return links;
+    }
+
     /// <summary>Whose title a merged entry shows: FFXIV Venues' name first (decision <c>25e33e0a</c>), then events', then an ad's.</summary>
     public static int TitleRank(ListingSource source) => source switch
     {
