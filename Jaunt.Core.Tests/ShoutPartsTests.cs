@@ -96,14 +96,27 @@ public class ShoutPartsTests
     }
 
     [Fact]
-    public void ManyShoutersStillJoinTheirOwnParts()
+    public void APartHeardAtTheSameInstantIsJoined()
     {
         var parts = new ShoutParts();
-        for (var i = 0; i < 300; i++)
-            Join(parts, Address, 0, id: $"old{i}");
-        Join(parts, Address, 100);
+        Join(parts, Address, 0);
 
-        Assert.Equal(Address + "\n" + Lineup, Join(parts, Lineup, 110));
+        Assert.Equal(Address + "\n" + Lineup, Join(parts, Lineup, 0));
+    }
+
+    [Theory]
+    // Others heard just after the shouter, so none is past the window when they are pruned
+    [InlineData(1, 2)]
+    // The part at the window's very end, when every other shouter is as old
+    [InlineData(0, 60)]
+    public void AmongManyShoutersEachStillJoinsTheirOwnParts(double othersAt, double partAt)
+    {
+        var parts = new ShoutParts();
+        Join(parts, Address, 0);
+        for (var i = 0; i < 300; i++)
+            Join(parts, Address, othersAt, id: $"other{i}");
+
+        Assert.Equal(Address + "\n" + Lineup, Join(parts, Lineup, partAt));
     }
 
     [Fact]
