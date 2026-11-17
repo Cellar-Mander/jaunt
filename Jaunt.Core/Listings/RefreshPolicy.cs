@@ -24,7 +24,7 @@ public static class RefreshPolicy
     /// <summary>The source's own minimum time between fetches, or null for a source that is never fetched.</summary>
     public static TimeSpan? Minimum(ListingSource source) => source switch
     {
-        ListingSource.InGamePartyFinder => null,
+        ListingSource.InGamePartyFinder or ListingSource.Shout => null,
         ListingSource.Xivpf => TimeSpan.FromMinutes(MinCooldownMinutes),
         // Schedules and events change little within a day; the RP calendar also asks for few fetches
         ListingSource.FfxivVenues or ListingSource.Partake or ListingSource.RpEventCalendar => TimeSpan.FromHours(8),

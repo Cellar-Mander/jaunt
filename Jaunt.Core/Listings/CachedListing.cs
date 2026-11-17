@@ -29,7 +29,7 @@ public sealed class CachedListing
     {
         get
         {
-            if (Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf) || Description.Length == 0)
+            if (!Source.IsAd() || Description.Length == 0)
                 return title;
             if (!ReferenceEquals(titledFrom, Description))
             {

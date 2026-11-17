@@ -288,19 +288,28 @@ public class DuplicatesTests
     [Fact]
     public void AMergedEntryTakesFfxivVenuesNameThenAnEventsThenAnAds()
     {
-        ListingSource[] sources = [ListingSource.InGamePartyFinder, ListingSource.RpEventCalendar, ListingSource.Partake, ListingSource.FfxivVenues, ListingSource.Xivpf];
+        ListingSource[] sources = [ListingSource.Shout, ListingSource.InGamePartyFinder, ListingSource.RpEventCalendar, ListingSource.Partake, ListingSource.FfxivVenues, ListingSource.Xivpf];
         Assert.Equal(
-            [ListingSource.FfxivVenues, ListingSource.Partake, ListingSource.RpEventCalendar, ListingSource.InGamePartyFinder, ListingSource.Xivpf],
+            [ListingSource.FfxivVenues, ListingSource.Partake, ListingSource.RpEventCalendar, ListingSource.InGamePartyFinder, ListingSource.Xivpf, ListingSource.Shout],
             sources.OrderBy(Duplicates.TitleRank));
     }
 
     [Fact]
     public void AMergedEntryTakesAnAdsAddressFirst()
     {
-        ListingSource[] sources = [ListingSource.Partake, ListingSource.RpEventCalendar, ListingSource.FfxivVenues, ListingSource.Xivpf, ListingSource.InGamePartyFinder];
+        ListingSource[] sources = [ListingSource.Partake, ListingSource.RpEventCalendar, ListingSource.FfxivVenues, ListingSource.Xivpf, ListingSource.Shout, ListingSource.InGamePartyFinder];
         Assert.Equal(
-            [ListingSource.Xivpf, ListingSource.InGamePartyFinder, ListingSource.FfxivVenues, ListingSource.RpEventCalendar, ListingSource.Partake],
+            [ListingSource.Xivpf, ListingSource.Shout, ListingSource.InGamePartyFinder, ListingSource.FfxivVenues, ListingSource.RpEventCalendar, ListingSource.Partake],
             sources.OrderBy(Duplicates.AddressRank));
+    }
+
+    [Fact]
+    public void AMergedEntryTakesAShoutsAboutThenAnAdsOrEventsThenAVenues()
+    {
+        ListingSource[] sources = [ListingSource.FfxivVenues, ListingSource.Xivpf, ListingSource.Partake, ListingSource.Shout, ListingSource.InGamePartyFinder, ListingSource.RpEventCalendar];
+        Assert.Equal(
+            [ListingSource.Shout, ListingSource.Xivpf, ListingSource.Partake, ListingSource.InGamePartyFinder, ListingSource.RpEventCalendar, ListingSource.FfxivVenues],
+            sources.OrderBy(Duplicates.AboutRank));
     }
 
     // UnstatedZone

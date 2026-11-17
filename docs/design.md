@@ -147,7 +147,7 @@ The rules come from spike `fe1b7d02`, which also scored them on 534 later ads fr
   ("HOPE / POTATE / KIO", "IANNA THOT BAE AND PHILIP", "HAPPY BIRTHDAY OPHE"). Known misses: a marker
   followed by "|" ("DJs | Damsca / Radio Sundae", read as a marker it would turn "DJs | Courts" into a
   name), a list broken by "• |", and bands named without a marker.
-- Performers are read only from Party Finder and xivpf ads; FFXIV Venues has no performer field, and
+- Performers are read only from Party Finder, xivpf and shout ads; FFXIV Venues has no performer field, and
   Partake and calendar descriptions aren't read for them yet.
 
 ### Settings
@@ -214,7 +214,8 @@ as separate files, each with a `version` (1); sources are named, not numbered:
   the source's own shape (a Party Finder ad's text and world; a venue's name and fields; an event's
   values), with when it was last seen. Written only when that source records, re-sees or loses a
   listing. An xivpf ad the game also sent writes both ad files when it moves the in-game copy's
-  last-seen time.
+  last-seen time. Shouts (`cache/Shout.json`) are kept in an ad's shape: their text and the world
+  they were heard on.
 
 Nothing derived is saved: titles shown, an ad's title, addresses, opening times, 24/7 and
 whether a listing is marked are worked out again from what the source sent. An ad's title is
@@ -240,7 +241,7 @@ On load:
   hidden and says how many it removed. Cancelling removes nothing.
 - **Expiry**: on load, a listing that is not favourited, visited or hidden is dropped once one
   calendar month has passed since it was last seen (last seen 14 Oct 20:00 → dropped from 14 Nov
-  20:00). An unmarked Party Finder ad (in-game or xivpf) is dropped sooner: once two days have
+  20:00). An unmarked Party Finder ad (in-game or xivpf) or shout is dropped sooner: once two days have
   passed since it was last seen and its text states no time ending, or with no end starting, later
   than two days before now (last seen 12 Nov 20:00 → dropped from 14 Nov 20:00, unless a time it
   states is still ahead or ended after 12 Nov 20:00). The two days cover how long an ad may still
@@ -321,6 +322,36 @@ before it is sent, so a failed one counts too. Download and parsing run off the 
   and the cached ads stay.
 - Only the fields above are read; others, such as the recruiter's name and the party's jobs, are
   never stored.
+
+### Shout chat
+
+`ShoutListings` reads every message in the Shout chat channel while a character is logged in on a
+world in the travel region, and `Shouts` records each that reads as a venue or event advert in the
+listing cache as `Shout`, saving a few seconds after the last one. A shout is never fetched, so it has
+no cooldown; Clear and expiry treat it as a Party Finder ad (see "Listing cache").
+
+- **Advert**: a shout is kept only when the address parser finds a housing address in it with a
+  district and a ward ("Mist W14 P33", "Empyreum W20 Apt 14", "Lavender Beds ward 8"); a world it
+  doesn't name is the one it was heard on. Hunt calls, trade and party recruitment name no housing
+  address and are dropped. A shout that isn't an advert changes nothing.
+- **Parts**: an advert split over several shouts is read as one. A shout heard within 60 seconds of
+  the same shouter's last one is joined after it on a new line, in the order heard, before the advert
+  check, so an address in one part and the lineup in the other make one advert; a third part joins the
+  first two, the 60 seconds running from the latest. Not joined: a shout repeating the last part's
+  text exactly, and parts whose addresses are different places (each gives one, and none is the same
+  plot or apartment, or names only the ward the other's is in). Parts are kept in memory only.
+- **Listed on**: the world the character is on when it hears the shout, since shouts reach only the
+  shouter's zone.
+- **One per shouter**: the ID is the first 16 hex digits of the SHA-256 of the shouter's name and home
+  world (from the message's player link; the character's own shouts have none, so the name alone).
+  The shouter's latest advert replaces their last, as a new ad text does (a new first sighting); the
+  same text again moves only when it was last seen. The name itself is never stored.
+- **Read as an ad**: the text, glyphs included, is read by the same parsers as a Party Finder ad, for
+  title, addresses, times, links, tags and performers. It counts as listed for 1 hour after it was
+  last heard.
+- **Matching**: a shout merges with other listings like an ad (see "Duplicates" under "Listing
+  browser"): at the same address with overlapping openings, or with exactly the same text as an ad.
+  It gives a merged entry its About and Lineup first.
 
 ### FFXIV RP Event Calendar
 
@@ -572,15 +603,18 @@ and copy link (`6e2b5199`) are separate tasks.
   - The entry lists every member's listed openings, overlapping ones combined into one from the
     earliest start to the latest end; it is 24/7 when any member is, and one-off only when every member
     is.
-  - Its title is FFXIV Venues' name, else a Partake event's, else an RP calendar event's, else an ad's.
+  - Its title is FFXIV Venues' name, else a Partake event's, else an RP calendar event's, else a Party
+    Finder ad's, else a shout's.
     Its addresses and world are those of a member naming a plot or apartment rather than only the
-    ward: a Party Finder ad's, as an ad can name the room, else FFXIV Venues', else the calendar's, else
+    ward: a Party Finder ad's or shout's, as an ad can name the room, else FFXIV Venues', else the calendar's, else
     Partake's. Its links are every member's, the title's source first, each once; so different pages
     at one address become links of one entry. The RP calendar's `xiv.fyi` forwarder links are left
     out when another member gives a page that isn't a Discord invite, as they forward to the venue's
-    page. About is the text of the ad or event that stops being
-    listed soonest (for an ad, last seen plus 1 hour, plus the cooldown for xivpf), as it is about the
-    opening listed; failing that, the FFXIV Venues description. The footer names every member's
+    page. About is a shout's text, as a shout is usually longer than a Party Finder ad and about the
+    opening at hand; failing that, the text of the ad or event that stops being
+    listed soonest (for an ad or shout, last seen plus 1 hour, plus the cooldown for xivpf), as it is about the
+    opening listed; failing that, the FFXIV Venues description. Two shouts go by the same rule. The
+    Lineup lists the performers in that same order of members. The footer names every member's
     source, plus the calendar's licence and the Partake line when a member is from them.
   - Selecting any member selects the entry, and a saved selection of any member still finds it.
   - An ad's times that state no zone take the zone of an FFXIV Venues venue at its address; failing
@@ -825,6 +859,9 @@ Caps on user-configurable lists and text, and how input from other players or th
   and text (a few titles, About of at most 1,501 characters, a few labels). It runs on each rebuild
   and each filter or search change, without working out schedules, merges or marks again. The search
   text is parsed once per change.
+- Each shout heard is parsed for an address once, on the game thread, as an ad is; shouts are at
+  most a few hundred characters. Shout listings are one per shouter, so a shouter repeating an advert
+  adds none.
 - An xivpf response (about 700 listings, 1.6 MB) is read in one pass over its listings, off the
   game thread, keeping about 150 ads; their text is at most a few hundred characters. Checking
   whether the game also sent an ad is one cache lookup.

@@ -28,6 +28,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ISelfTestRegistry SelfTestRegistry { get; private set; } = null!;
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
+    [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
 
     private const string CommandName = "/jaunt";
 
@@ -37,6 +38,7 @@ public sealed class Plugin : IDalamudPlugin
     internal ListingCache ListingCache { get; }
     private readonly ListingCacheStore listingCacheStore;
     private readonly PartyFinderListings partyFinderListings;
+    private readonly ShoutListings shoutListings;
     private readonly FetchedListings xivpfListings;
     private readonly FetchedListings ffxivVenuesListings;
     private readonly FetchedListings partakeListings;
@@ -66,6 +68,7 @@ public sealed class Plugin : IDalamudPlugin
         var gazetteer = GazetteerLoader.Load(DataManager);
         var region = new CurrentRegion(PlayerState, gazetteer);
         partyFinderListings = new PartyFinderListings(PartyFinderGui, Framework, Log, ListingCache, region.Get, SaveListingCache);
+        shoutListings = new ShoutListings(ChatGui, Framework, PlayerState, Log, ListingCache, gazetteer, region.Get, SaveListingCache);
 
         ConfigWindow = new ConfigWindow(this);
         WindowSystem.AddWindow(ConfigWindow);
@@ -104,6 +107,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
         partyFinderListings.Dispose();
+        shoutListings.Dispose();
         xivpfListings.Dispose();
         ffxivVenuesListings.Dispose();
         partakeListings.Dispose();
