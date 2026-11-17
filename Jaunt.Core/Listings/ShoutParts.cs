@@ -23,6 +23,9 @@ public sealed class ShoutParts
 
     private readonly Dictionary<string, (string Joined, string LastPart, DateTimeOffset At)> last = new(StringComparer.Ordinal);
 
+    /// <summary>How many shouters' last shouts are remembered, for tests of the bound on memory.</summary>
+    internal int Remembered => last.Count;
+
     /// <summary>
     /// The text to read for a shout: joined after the shouter's earlier parts when it is the next part,
     /// else the shout alone. Remembers it as the shouter's last shout either way.

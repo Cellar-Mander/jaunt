@@ -119,6 +119,35 @@ public class ShoutPartsTests
         Assert.Equal(Address + "\n" + Lineup, Join(parts, Lineup, partAt));
     }
 
+    [Theory]
+    // Below 256 nothing is forgotten, however old
+    [InlineData(255, 256)]
+    // At 256 those past the window are forgotten before the new shouter is remembered
+    [InlineData(256, 1)]
+    [InlineData(300, 1)]
+    public void ShoutersPastTheWindowAreForgottenOnceThereAreMany(int earlier, int remembered)
+    {
+        var parts = new ShoutParts();
+        for (var i = 0; i < earlier; i++)
+            Join(parts, Address, 0, id: $"other{i}");
+
+        Join(parts, Address, 61);
+
+        Assert.Equal(remembered, parts.Remembered);
+    }
+
+    [Fact]
+    public void ShoutersWithinTheWindowAreNotForgotten()
+    {
+        var parts = new ShoutParts();
+        for (var i = 0; i < 300; i++)
+            Join(parts, Address, 0, id: $"other{i}");
+
+        Join(parts, Address, 60);
+
+        Assert.Equal(301, parts.Remembered);
+    }
+
     [Fact]
     public void AJoinedAdvertIsRecordedWithBothParts()
     {
