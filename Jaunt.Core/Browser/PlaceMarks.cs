@@ -8,7 +8,7 @@ namespace Jaunt.Core.Browser;
 /// evidence: the same FFXIV Venues ID, then the same address, then the same website at a new address
 /// when nothing at the old one shows it any more. A Discord invite never moves a mark on its own, as
 /// brand and community servers are shared by several venues; nor does a name (decision
-/// <c>25e33e0a</c>). The measurements behind this order are in <c>spikes/mark-identity</c>.
+/// <c>25e33e0a</c>).
 /// </summary>
 public static class PlaceMarks
 {

@@ -674,7 +674,7 @@ and copy link (`6e2b5199`) are separate tasks.
   - **Tooltips** say what will carry the mark: "Favourite Siren, Empyreum, W16, P20: every listing
     there, from any source, now or later", "Mark this event visited", "Hide these ads"; a lit button
     says "Remove from favourites", "Mark not visited" or "Un-hide".
-  - **Matching**, from the surest evidence down (measured in `spikes/mark-identity`):
+  - **Matching**, from the surest evidence down:
     1. The same FFXIV Venues ID as one seen at a place: the entry carries it. A place at one of the
        entry's addresses stays put; otherwise it moves to the entry's first address, as the venue's
        owner has said where it is now, unless an entry still at its address shows another of its IDs.

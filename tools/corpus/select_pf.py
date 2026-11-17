@@ -3,10 +3,10 @@
 
 Usage: python3 -I select_pf.py <xivpf-captures-dir> <ingame-capture-dir> <out.jsonl>
 
-Reads xivpf polls (*.json.gz, from spikes/pf-vs-venues/poll.sh) and the plugin's dev-build
-captures (*.jsonl), keeps category `None`, merges ads with identical text, and writes an
-unlabelled candidate file. Poster names, content IDs and home worlds are never read into the
-output. The selection is seeded, so a rerun on the same captures gives the same candidates.
+Reads xivpf polls (*.json.gz) and the plugin's dev-build captures (*.jsonl), keeps category
+`None`, merges ads with identical text, and writes an unlabelled candidate file. Poster names,
+content IDs and home worlds are never read into the output. The selection is seeded, so a rerun
+on the same captures gives the same candidates.
 
 Duplicates: two sightings are one ad when the text is identical. Fields that change over time
 (capture time, listing ID, seconds remaining) are dropped; the worlds it was listed on are kept
