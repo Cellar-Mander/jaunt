@@ -211,6 +211,40 @@ public class DuplicatesTests
         Assert.Equal([new Occurrence(null, null)], merged.Listed);
     }
 
+    private static MergeCandidate<string> Said(string name, string text, AddressKey? at, params Occurrence[] listed) =>
+        Ad(name, at, listed) with { AdText = text };
+
+    [Fact]
+    public void AdsWithIdenticalTextMergeWhateverTheirAddressOrOpenings()
+    {
+        const string text = "Velvet Lounge is OPEN! Mist W5 P12, drinks and dancing";
+        var merged = Assert.Single(Duplicates.Merge([Said("in game", text, Lounge, At(0, 3)), Said("xivpf", text, null, At(30, 32))], Now));
+
+        Assert.Equal(["in game", "xivpf"], merged.Members);
+        Assert.Equal([At(0, 3), At(30, 32)], merged.Listed);
+    }
+
+    [Fact]
+    public void IdenticalTextChainsWithAddressMatches()
+    {
+        const string text = "Velvet Lounge is OPEN!";
+        Assert.Equal(
+            [["venue", "ad", "repost"]],
+            Groups(Venue("venue", Lounge, At(-1, 2)), Said("ad", text, Lounge, At(0, 1)), Said("repost", text, Bar, At(40, 41))));
+    }
+
+    [Theory]
+    [InlineData("Velvet Lounge is OPEN!", "Velvet Lounge is open!")]
+    [InlineData("Velvet Lounge is OPEN!", "Velvet Lounge is OPEN! ")]
+    [InlineData("", "")]
+    [InlineData("  ", "  ")]
+    public void AdsWhoseTextDiffersOrIsBlankDoNotMergeOnIt(string a, string b) =>
+        Assert.Equal([["a"], ["b"]], Groups(Said("a", a, Lounge, At(0, 1)), Said("b", b, null, At(0, 1))));
+
+    [Fact]
+    public void ListingsWithoutAdTextNeverMergeOnIt() =>
+        Assert.Equal([["a"], ["b"]], Groups(Ad("a", Lounge, At(0, 1)), Ad("b", null, At(0, 1))));
+
     [Fact]
     public void AMergedEntryListsEveryOpeningOverlappingOnesCombined()
     {

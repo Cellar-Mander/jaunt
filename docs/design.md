@@ -552,6 +552,12 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Duplicates** (`Duplicates`): listings at the same address, in one source or several, whose listed
   openings overlap show as one entry, so a re-posted ad, a venue's several ads and an ad for an FFXIV
   Venues venue each show once. Names never decide a match (decision `25e33e0a`).
+  - Party Finder ads, from the game or xivpf, whose text is exactly the same (case and spacing
+    included) are also one entry, whatever their address or openings, as a re-post, in game or on
+    xivpf, comes under a new listing ID. This fits decision `25e33e0a`: the whole text matches, not a
+    name taken from it. Blank text never merges. An ad giving a relative time ("tonight 8pm")
+    re-posted on another day reads as a different opening, so the entry lists both. It chains with
+    address matches like any other.
   - The address is the first one a listing gives: world (case ignored), district, ward, and plot or
     apartment (with whether it is in the subdivision), or neither for one naming only the ward. A room
     is left out. One with no world or no district never merges.

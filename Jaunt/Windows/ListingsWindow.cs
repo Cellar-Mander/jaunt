@@ -28,7 +28,8 @@ namespace Jaunt.Windows;
 /// details on the right. Lists in-game and xivpf Party Finder ads with an address, FFXIV Venues venues
 /// with an address, Partake events and FFXIV RP Event Calendar events with an address or location, on
 /// worlds the character can travel to, at the openings <see cref="Schedules.Listed"/> picks. Listings at
-/// one address with overlapping openings show as one entry (<see cref="Duplicates"/>). Search and
+/// one address with overlapping openings, and ads with identical text, show as one entry
+/// (<see cref="Duplicates"/>). Search and
 /// filter chips above the list narrow it (<see cref="ListingFilters"/>).
 /// </summary>
 internal sealed class ListingsWindow : Window
@@ -1246,7 +1247,7 @@ internal sealed class ListingsWindow : Window
         {
             var listed = Schedules.Listed(row.Schedule, now);
             if (listed.Count > 0)
-                candidates.Add(new MergeCandidate<Row>(row, address, row.Schedule, listed));
+                candidates.Add(new MergeCandidate<Row>(row, address, row.Schedule, listed, row.Listing.Source is ListingSource.InGamePartyFinder or ListingSource.Xivpf ? row.Listing.Description : null));
         }
 
         var merged = Duplicates.Merge(candidates, now).Select(Entry).ToList();

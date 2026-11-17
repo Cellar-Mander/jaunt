@@ -38,7 +38,8 @@ public readonly record struct AddressKey(string World, District District, int Wa
 /// <param name="Item">The listing, as the caller describes it.</param>
 /// <param name="Address">Its first address's key; null never merges.</param>
 /// <param name="Listed">The openings the browser lists for it (<see cref="Schedules.Listed"/>), earliest first.</param>
-public sealed record MergeCandidate<T>(T Item, AddressKey? Address, ListingSchedule Schedule, IReadOnlyList<Occurrence> Listed);
+/// <param name="AdText">A Party Finder ad's text, from the game or xivpf; null for other sources. Blank text never merges.</param>
+public sealed record MergeCandidate<T>(T Item, AddressKey? Address, ListingSchedule Schedule, IReadOnlyList<Occurrence> Listed, string? AdText = null);
 
 /// <summary>Listings shown as one entry.</summary>
 /// <param name="Members">In the order they were given; one for a listing with no duplicate.</param>
@@ -50,7 +51,8 @@ public sealed record MergedListing<T>(IReadOnlyList<T> Members, ListingSchedule 
 
 /// <summary>
 /// Finds listings that are the same thing listed more than once, in one source or several: the same
-/// address (<see cref="AddressKey"/>) with listed openings that overlap. A name never decides a match
+/// address (<see cref="AddressKey"/>) with listed openings that overlap, or Party Finder ads with exactly
+/// the same text, as a re-post or the xivpf copy of an ad gets a new ID. A name never decides a match
 /// (decision <c>25e33e0a</c>). See "Duplicates" under "Listing browser" in <c>docs/design.md</c>.
 /// </summary>
 public static class Duplicates
@@ -59,17 +61,22 @@ public static class Duplicates
     /// Groups the candidates into entries. Two candidates at one address are one entry when any of
     /// their listed openings overlap, or either is 24/7; the grouping is transitive. A candidate whose
     /// address names only the ward also joins the plot or apartment in that ward it overlaps, when
-    /// there is exactly one, as a busy ward can have several venues open at once. Candidates at an
-    /// address or in a ward are compared pairwise, which stays small as each has a handful of listings at most.
+    /// there is exactly one, as a busy ward can have several venues open at once. Ads with exactly the
+    /// same non-blank text are one entry whatever their address or openings. Candidates at an address or
+    /// in a ward are compared pairwise, which stays small as each has a handful of listings at most.
     /// </summary>
     /// <param name="now">An opening without a start is open now, so it counts as starting now.</param>
     public static IReadOnlyList<MergedListing<T>> Merge<T>(IReadOnlyList<MergeCandidate<T>> candidates, DateTimeOffset now)
     {
         var parent = new int[candidates.Count];
         var byAddress = new Dictionary<AddressKey, List<int>>();
+        var byText = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 0; i < candidates.Count; i++)
         {
             parent[i] = i;
+            if (candidates[i].AdText is { } text && !string.IsNullOrWhiteSpace(text) && !byText.TryAdd(text, i))
+                parent[Root(parent, i)] = Root(parent, byText[text]);
+
             if (candidates[i].Address is not { } key)
                 continue;
             if (!byAddress.TryGetValue(key, out var others))
