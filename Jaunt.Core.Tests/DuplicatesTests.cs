@@ -338,4 +338,53 @@ public class DuplicatesTests
 
         Assert.Equal(new DateTimeOffset(2026, 11, 6, 19, 0, 0, TimeSpan.Zero), Assert.Single(schedule.Occurrences).Start);
     }
+
+    // Links
+
+    private static WebLink Link(string url) => new(url, new Uri(url));
+
+    [Fact]
+    public void TheRpCalendarsForwarderIsDroppedWhenAnotherListingGivesAPage()
+    {
+        // VLVT DRMS: FFXIV Venues gives the site, the calendar a xiv.fyi link that forwards to it
+        var links = Duplicates.Links([
+            [Link("https://vlvt-drms.carrd.co/"), Link("https://discord.gg/vlvt-drms")],
+            [Link("https://xiv.fyi/k1yK")]]);
+
+        Assert.Equal(["https://vlvt-drms.carrd.co/", "https://discord.gg/vlvt-drms"], links.Select(l => l.Text));
+    }
+
+    [Fact]
+    public void TheForwarderIsDroppedWhicheverListingComesFirst()
+    {
+        var links = Duplicates.Links([[Link("https://xiv.fyi/k1yK")], [Link("https://vlvt-drms.carrd.co/")]]);
+
+        Assert.Equal(["https://vlvt-drms.carrd.co/"], links.Select(l => l.Text));
+    }
+
+    [Fact]
+    public void TheForwarderStaysWhenNoOtherListingGivesAPage()
+    {
+        // A Discord invite isn't a page, so the forwarder is still the entry's Open page
+        var links = Duplicates.Links([[Link("https://discord.gg/oasis")], [Link("https://xiv.fyi/ZE2J")]]);
+
+        Assert.Equal(["https://discord.gg/oasis", "https://xiv.fyi/ZE2J"], links.Select(l => l.Text));
+    }
+
+    [Fact]
+    public void ALinkGivenTwiceIsKeptOnce()
+    {
+        var links = Duplicates.Links([[Link("https://teatime.carrd.co/")], [Link("https://teatime.carrd.co/"), Link("https://x.com/teatime")]]);
+
+        Assert.Equal(["https://teatime.carrd.co/", "https://x.com/teatime"], links.Select(l => l.Text));
+    }
+
+    [Theory]
+    [InlineData("https://xiv.fyi/ZE2J", true)]
+    [InlineData("http://XIV.FYI/ZE2J", true)]
+    [InlineData("https://www.xiv.fyi/ZE2J", true)]
+    [InlineData("https://notxiv.fyi/ZE2J", false)]
+    [InlineData("https://xiv.fyi.example.com/ZE2J", false)]
+    public void RecognisesTheRpCalendarsForwarder(string url, bool forwarder) =>
+        Assert.Equal(forwarder, RpEventCalendar.IsForwarder(new Uri(url)));
 }
