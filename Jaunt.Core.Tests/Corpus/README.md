@@ -9,7 +9,7 @@ the performer spike (`fe1b7d02`) measures against the people labels.
 ## Where the ads come from
 
 Captured 2026-11-05 to 2026-11-07 from two sources:
-- xivpf polls every 10 minutes (`spikes/pf-vs-venues/poll.sh`), all regions
+- xivpf polls every 10 minutes, all regions
 - the plugin's dev-build capture (`pf-capture/*.jsonl`), NA only
 
 `tools/corpus/select_pf.py` merges them and picks the ads with a fixed seed:
