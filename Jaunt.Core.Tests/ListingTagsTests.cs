@@ -54,6 +54,9 @@ public class ListingTagsTests
     [InlineData("雑談しましょう", Interests.Chill)]
     [InlineData("喫茶 珈琲", Interests.Cafes)] // two Japanese keywords with one interest
     [InlineData("Truth or dare tonight", Interests.Games)]
+    [InlineData("Fae-inspired Bar, Fight Ring!", Interests.Bars | Interests.Games)]
+    [InlineData("Bounties, Brawls and a Wrestling Pit", Interests.Games)]
+    [InlineData("Through Darkness or Light, we fight together", Interests.None)] // "fight" alone isn't a fight night
     [InlineData("LavB W25/P6/Bar", Interests.Bars)] // "/" between a digit and a letter splits words
     public void KeywordsTagTheirInterest(string text, Interests expected) => Assert.Equal(expected, InterestsOf(text));
 
