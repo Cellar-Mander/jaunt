@@ -488,7 +488,8 @@ again.
   and a word ending in "s" also matches without it (`bars`, `hot springs`); "starts" is not "art"
   and "team" is not "tea". Japanese keywords (喫茶, 雑談, 読書, 見学, 珈琲, ...) match anywhere in the
   text. Gambling shorthand (`DRT`, `BJ`, `50/50`, raffle) counts as Gambling, and bingo, trivia,
-  prizes and giveaways as Games; a Twitch link or "party" counts as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
+  prizes, giveaways and fighting (fight club, fight ring, brawls, wrestling, duels) as Games;
+  "fight" alone doesn't count, as FC ads use it ("we fight together"); a Twitch link or "party" counts as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
   lists were tuned on those ads.
 - **Source tags**: FFXIV Venues' owner-chosen tags and Partake's event tags map to interests,
   ignoring case and surrounding spaces ("Bath house" → Spa, "Live DJs" → Clubs, "Cafes, Taverns &
