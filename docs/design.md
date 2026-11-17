@@ -569,7 +569,9 @@ and copy link (`6e2b5199`) are separate tasks.
     Its addresses and world are those of a member naming a plot or apartment rather than only the
     ward: a Party Finder ad's, as an ad can name the room, else FFXIV Venues', else the calendar's, else
     Partake's. Its links are every member's, the title's source first, each once; so different pages
-    at one address become links of one entry. About is the text of the ad or event that stops being
+    at one address become links of one entry. The RP calendar's `xiv.fyi` forwarder links are left
+    out when another member gives a page that isn't a Discord invite, as they forward to the venue's
+    page. About is the text of the ad or event that stops being
     listed soonest (for an ad, last seen plus 1 hour, plus the cooldown for xivpf), as it is about the
     opening listed; failing that, the FFXIV Venues description. The footer names every member's
     source, plus the calendar's licence and the Partake line when a member is from them.

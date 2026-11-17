@@ -151,6 +151,16 @@ public static class RpEventCalendar
             FfxivVenues.Links([.. listing.LinkTexts, .. listing.About?.Invites ?? []]));
     }
 
+    /// <summary>
+    /// Whether a link is on <c>xiv.fyi</c>, the calendar's link forwarder, which organisers' page links
+    /// are often shortened to. It forwards to a page another listing of the same venue usually gives directly.
+    /// </summary>
+    public static bool IsForwarder(Uri uri)
+    {
+        var host = uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host;
+        return host.Equals("xiv.fyi", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>The title shown for an event's name as sent: without its rating tag, first line only, cut to 60 characters.</summary>
     public static string Title(string name) => FfxivVenues.Title(WithoutRatingTag(name).Name);
 

@@ -1387,12 +1387,7 @@ internal sealed class ListingsWindow : Window
             .OrderBy(m => m.Details.Addresses.Count == 0 || AddressKey.Of(m.Details.Addresses[0]) is not { WardOnly: false })
             .ThenBy(m => Duplicates.AddressRank(m.Listing.Source))
             .First();
-        var links = new List<WebLink>();
-        foreach (var link in byTitle.SelectMany(m => m.Details.Links))
-        {
-            if (!links.Exists(l => l.Uri == link.Uri))
-                links.Add(link);
-        }
+        var links = Duplicates.Links(byTitle.Select(m => m.Details.Links));
 
         // An ad or event is about the opening listed, so its text wins over a venue's standing description
         var about = byTitle.Where(m => m.About is { Length: > 0 })
