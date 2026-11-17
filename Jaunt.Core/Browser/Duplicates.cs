@@ -38,7 +38,7 @@ public readonly record struct AddressKey(string World, District District, int Wa
 /// <param name="Item">The listing, as the caller describes it.</param>
 /// <param name="Address">Its first address's key; null never merges.</param>
 /// <param name="Listed">The openings the browser lists for it (<see cref="Schedules.Listed"/>), earliest first.</param>
-/// <param name="AdText">A Party Finder ad's text, from the game or xivpf; null for other sources. Blank text never merges.</param>
+/// <param name="AdText">An ad's text, from the game, xivpf or a shout; null for other sources. Blank text never merges.</param>
 public sealed record MergeCandidate<T>(T Item, AddressKey? Address, ListingSchedule Schedule, IReadOnlyList<Occurrence> Listed, string? AdText = null);
 
 /// <summary>Listings shown as one entry.</summary>
@@ -177,19 +177,35 @@ public static class Duplicates
         return links;
     }
 
-    /// <summary>Whose title a merged entry shows: FFXIV Venues' name first (decision <c>25e33e0a</c>), then events', then an ad's.</summary>
+    /// <summary>
+    /// Whose title a merged entry shows: FFXIV Venues' name first (decision <c>25e33e0a</c>), then
+    /// events', then a Party Finder ad's, then a shout's, which is one long line.
+    /// </summary>
     public static int TitleRank(ListingSource source) => source switch
     {
         ListingSource.FfxivVenues => 0,
         ListingSource.Partake => 1,
         ListingSource.RpEventCalendar => 2,
+        ListingSource.Shout => 4,
         _ => 3,
     };
 
-    /// <summary>Whose addresses a merged entry shows: a Party Finder ad's first, as it can name the room, then the structured sources'.</summary>
+    /// <summary>
+    /// Whose text a merged entry's About and lineup take first: a shout's, which is usually longer than
+    /// a Party Finder ad and about the opening at hand; then other ads' and events'; a venue's standing
+    /// description last. Ties go to the one that stops being listed soonest.
+    /// </summary>
+    public static int AboutRank(ListingSource source) => source switch
+    {
+        ListingSource.Shout => 0,
+        ListingSource.FfxivVenues => 2,
+        _ => 1,
+    };
+
+    /// <summary>Whose addresses a merged entry shows: an ad's first, as it can name the room, then the structured sources'.</summary>
     public static int AddressRank(ListingSource source) => source switch
     {
-        ListingSource.InGamePartyFinder or ListingSource.Xivpf => 0,
+        ListingSource.InGamePartyFinder or ListingSource.Xivpf or ListingSource.Shout => 0,
         ListingSource.FfxivVenues => 1,
         ListingSource.RpEventCalendar => 2,
         _ => 3,

@@ -183,7 +183,7 @@ public static class Schedules
         return new ListingSchedule(false, true, occurrences);
     }
 
-    /// <summary>How long a Party Finder ad stays up unless its recruiter renews it.</summary>
+    /// <summary>How long a Party Finder ad stays up unless its recruiter renews it; a shout counts as listed as long.</summary>
     public static readonly TimeSpan AdLifetime = TimeSpan.FromHours(1);
 
     /// <summary>

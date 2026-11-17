@@ -172,6 +172,7 @@ public sealed class ConfigWindow : Window, IDisposable
     {
         ImGui.TextUnformatted("Listings come from");
         ImGui.BulletText(SourceName(ListingSource.InGamePartyFinder));
+        ImGui.BulletText(SourceName(ListingSource.Shout));
         Bulleted(SourceName(ListingSource.Xivpf), Xivpf.SiteUrl);
         Bulleted(SourceName(ListingSource.FfxivVenues), FfxivVenues.SiteUrl);
         Bulleted(SourceName(ListingSource.Partake), Partake.SiteUrl);
@@ -391,6 +392,7 @@ public sealed class ConfigWindow : Window, IDisposable
         ListingSource.FfxivVenues => "FFXIV Venues",
         ListingSource.Partake => "Partake",
         ListingSource.RpEventCalendar => "FFXIV RP Event Calendar",
+        ListingSource.Shout => "Shout chat",
         _ => source.ToString(),
     };
 
@@ -404,7 +406,8 @@ public sealed class ConfigWindow : Window, IDisposable
             .AppendLine($"Each source waits this long ({RefreshPolicy.MinCooldownMinutes} min to {RefreshPolicy.MaxCooldownMinutes / 60} h), or its own minimum if longer:");
         foreach (var source in RefreshPolicy.FetchedSources)
             lines.AppendLine($"  - {SourceName(source)}: {MinimumText(source)}");
-        lines.Append($"  - {SourceName(ListingSource.InGamePartyFinder)}: no cooldown; recorded while you have it open");
+        lines.AppendLine($"  - {SourceName(ListingSource.InGamePartyFinder)}: no cooldown; recorded while you have it open");
+        lines.Append($"  - {SourceName(ListingSource.Shout)}: no cooldown; venue adverts recorded as you hear them");
         return lines.ToString();
     }
 

@@ -181,7 +181,7 @@ public sealed partial class ListingCache
     /// </summary>
     /// <returns>How many were removed.</returns>
     public int RemoveExpired(DateTimeOffset now) =>
-        RemoveWhere(l => l.Source is ListingSource.InGamePartyFinder or ListingSource.Xivpf && !l.IsMarked
+        RemoveWhere(l => l.Source.IsAd() && !l.IsMarked
             ? AdExpired(l, now)
             : (l.OneOff || !l.IsMarked) && l.LastSeen.AddMonths(1) <= now);
 

@@ -178,7 +178,7 @@ internal sealed class ListingsWindow : Window
     private readonly record struct TaggedFields(string Title, string Description, FfxivVenues.Fields? Venue, string? Rating, IReadOnlyList<string> SourceTags)
     {
         public static TaggedFields Of(CachedListing listing) =>
-            new(listing.Source is ListingSource.InGamePartyFinder or ListingSource.Xivpf ? "" : listing.Title, listing.Description,
+            new(listing.Source.IsAd() ? "" : listing.Title, listing.Description,
                 listing.Venue, listing.Rating, listing.SourceTags);
 
         public bool Same(TaggedFields other) =>
@@ -1247,7 +1247,7 @@ internal sealed class ListingsWindow : Window
         {
             var listed = Schedules.Listed(row.Schedule, now);
             if (listed.Count > 0)
-                candidates.Add(new MergeCandidate<Row>(row, address, row.Schedule, listed, row.Listing.Source is ListingSource.InGamePartyFinder or ListingSource.Xivpf ? row.Listing.Description : null));
+                candidates.Add(new MergeCandidate<Row>(row, address, row.Schedule, listed, row.Listing.Source.IsAd() ? row.Listing.Description : null));
         }
 
         var merged = Duplicates.Merge(candidates, now).Select(Entry).ToList();
@@ -1350,7 +1350,7 @@ internal sealed class ListingsWindow : Window
         foreach (var (row, address) in rows)
         {
             if (address is not { } key || !starts.TryGetValue(key, out var there)
-                || row.Listing.Source is not (ListingSource.InGamePartyFinder or ListingSource.Xivpf))
+                || !row.Listing.Source.IsAd())
             {
                 yield return (row, address);
                 continue;
@@ -1372,8 +1372,9 @@ internal sealed class ListingsWindow : Window
     /// <summary>
     /// The entry for listings shown as one: the title of the member <see cref="Duplicates.TitleRank"/>
     /// puts first, the addresses and world of the one <see cref="Duplicates.AddressRank"/> does among
-    /// those naming a plot or apartment, every member's links once each, and the About of the ad or
-    /// event that stops being listed soonest, else the venue's description.
+    /// those naming a plot or apartment, every member's links once each, and the About and lineup
+    /// (performers in that order) of the member <see cref="Duplicates.AboutRank"/> puts first, ties going
+    /// to the one that stops being listed soonest.
     /// </summary>
     private Row Entry(MergedListing<Row> merged)
     {
@@ -1390,14 +1391,14 @@ internal sealed class ListingsWindow : Window
             .First();
         var links = Duplicates.Links(byTitle.Select(m => m.Details.Links));
 
-        // An ad or event is about the opening listed, so its text wins over a venue's standing description
-        var about = byTitle.Where(m => m.About is { Length: > 0 })
-            .OrderBy(m => m.Listing.Source == ListingSource.FfxivVenues)
+        // A shout, then an ad or event, is about the opening listed, so its text wins over a venue's standing description
+        var byAbout = byTitle.OrderBy(m => Duplicates.AboutRank(m.Listing.Source))
             .ThenBy(m => Schedules.ListedUntil(m.Listing.Source, m.Listing.LastSeen, configuration.RefreshCooldownMinutes))
-            .FirstOrDefault();
+            .ToList();
+        var about = byAbout.Find(m => m.About is { Length: > 0 });
         var first = byTitle[0];
         var row = new Row(
-            first.Listing, first.Title, byAddress.Details with { Links = links, Performers = Performers.Merge(byTitle.Select(m => m.Details.Performers)) },
+            first.Listing, first.Title, byAddress.Details with { Links = links, Performers = Performers.Merge(byAbout.Select(m => m.Details.Performers)) },
             byAddress.World, merged.Schedule, about?.About,
             byTitle.Select(m => m.Event).FirstOrDefault(e => e is not null),
             byTitle.Select(m => m.CalendarEvent).FirstOrDefault(e => e is not null),
@@ -1509,7 +1510,7 @@ internal sealed class ListingsWindow : Window
                         AboutCut: listing.About?.Cut ?? false);
                 }
 
-            case ListingSource.InGamePartyFinder or ListingSource.Xivpf:
+            case ListingSource.InGamePartyFinder or ListingSource.Xivpf or ListingSource.Shout:
                 {
                     if (Xivpf.ShownInGame(cache, listing) || Xivpf.ShownFromXivpf(cache, listing))
                         return null;
@@ -1624,6 +1625,7 @@ internal sealed class ListingsWindow : Window
         ListingSource.Xivpf => "xivpf",
         ListingSource.Partake => "Partake",
         ListingSource.RpEventCalendar => "FFXIV RP Event Calendar",
+        ListingSource.Shout => "Shout chat",
         _ => "Party Finder",
     };
 }

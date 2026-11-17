@@ -61,5 +61,7 @@ public class RefreshPolicyTests
     {
         Assert.All(RefreshPolicy.FetchedSources, source => Assert.NotNull(RefreshPolicy.Minimum(source)));
         Assert.DoesNotContain(ListingSource.InGamePartyFinder, RefreshPolicy.FetchedSources);
+        Assert.DoesNotContain(ListingSource.Shout, RefreshPolicy.FetchedSources);
+        Assert.Null(RefreshPolicy.Minimum(ListingSource.Shout));
     }
 }

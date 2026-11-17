@@ -153,7 +153,7 @@ public sealed partial class ListingCache
     {
         switch (source)
         {
-            case ListingSource.InGamePartyFinder:
+            case ListingSource.InGamePartyFinder or ListingSource.Shout:
                 foreach (var (ad, seen, first) in Read<Xivpf.Ad>(json))
                 {
                     SeenAd(source, ad.Id, ad.Description ?? "", ad.ListedOn, seen);

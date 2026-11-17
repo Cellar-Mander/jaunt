@@ -80,6 +80,7 @@ public class ListingCacheTests
     [Theory]
     [InlineData(ListingSource.InGamePartyFinder)]
     [InlineData(ListingSource.Xivpf)]
+    [InlineData(ListingSource.Shout)]
     public void AnAdsFirstSightingIsSaved(ListingSource source)
     {
         var cache = new ListingCache();
@@ -178,6 +179,8 @@ public class ListingCacheTests
     [InlineData(ListingSource.Xivpf, "2026-11-12T20:00:01Z", false)]
     [InlineData(ListingSource.InGamePartyFinder, "2026-11-12T20:00:00Z", true)]
     [InlineData(ListingSource.InGamePartyFinder, "2026-11-12T20:00:01Z", false)]
+    [InlineData(ListingSource.Shout, "2026-11-12T20:00:00Z", true)]
+    [InlineData(ListingSource.Shout, "2026-11-12T20:00:01Z", false)]
     public void UnmarkedAdsStatingNoTimeExpireTwoDaysAfterTheyWereLastSeen(ListingSource source, string lastSeen, bool expired)
     {
         var cache = new ListingCache();
@@ -355,7 +358,7 @@ public class ListingCacheTests
 
         string[] expected =
         [
-            "cache/FfxivVenues.json", "cache/InGamePartyFinder.json", "cache/Partake.json", "cache/RpEventCalendar.json",
+            "cache/FfxivVenues.json", "cache/InGamePartyFinder.json", "cache/Partake.json", "cache/RpEventCalendar.json", "cache/Shout.json",
             "cache/Xivpf.json", ListingCache.FetchTimesFile, ListingCache.MarksFile,
         ];
         Assert.Equal(expected, files.Keys.Order(StringComparer.Ordinal));
