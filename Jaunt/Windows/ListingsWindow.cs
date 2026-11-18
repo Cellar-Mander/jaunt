@@ -206,11 +206,11 @@ internal sealed class ListingsWindow : Window
     /// the status line of its first opening, its addresses as text, the Lifestream request for the
     /// first, which link Open page and the footer's Discord take (or -1), the further links Location
     /// lists, its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
-    /// and its lineup.
+    /// its lineup, and what Copy link copies.
     /// </summary>
     private sealed record DetailView(
         Row Row, string? Status, bool Open, string[] Addresses, TravelRequest? Travel, int Page, int Discord, int[] Further,
-        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup);
+        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy);
 
     /// <summary>A performer as the lineup shows them: name or handle, and their Twitch channel if the ad links it.</summary>
     private readonly record struct LineupEntry(string Text, Uri? Twitch);
@@ -679,6 +679,25 @@ internal sealed class ListingsWindow : Window
         drawList.AddText(font, font.FontSize * scale, centre - ((min + max) * (scale / 2)), colour, text);
     }
 
+    /// <summary>
+    /// A button with an icon before its label, both drawn over it, as Dalamud's
+    /// <c>ImGuiComponents.IconButtonWithText</c> allocates on every call. Dimmed with the button when disabled.
+    /// </summary>
+    /// <param name="id">The button's ID, hidden ("##travel").</param>
+    private bool IconButton(string id, FontAwesomeIcon icon, string label)
+    {
+        var style = ImGui.GetStyle();
+        var iconSize = ImGui.GetFontSize();
+        var labelX = style.FramePadding.X + iconSize + style.ItemInnerSpacing.X;
+        var clicked = ImGui.Button(id, new Vector2(labelX + ImGui.CalcTextSize(label).X + style.FramePadding.X, ImGui.GetFrameHeight()));
+        var min = ImGui.GetItemRectMin();
+        var drawList = ImGui.GetWindowDrawList();
+        var colour = ImGui.GetColorU32(ImGuiCol.Text);
+        DrawIcon(drawList, icon, new Vector2(min.X + style.FramePadding.X + (iconSize / 2), (min.Y + ImGui.GetItemRectMax().Y) / 2), iconSize * 0.85f, colour);
+        drawList.AddText(new Vector2(min.X + labelX, min.Y + style.FramePadding.Y), colour, label);
+        return clicked;
+    }
+
     private void DrawDetail(DateTimeOffset now)
     {
         // With nothing listed, or nothing the filters let through, the list's own line says so and the help text would only add noise
@@ -762,7 +781,8 @@ internal sealed class ListingsWindow : Window
         return new DetailView(
             row, status, open, [.. addresses.Select(AddressText.Format)], addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
             page, discord, further, [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
-            [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup);
+            [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup,
+            CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]));
     }
 
     /// <summary>
@@ -866,7 +886,7 @@ internal sealed class ListingsWindow : Window
 
             using (Scoped.Disabled(whyNot is not null))
             {
-                if (ImGui.Button("Travel") && request is not null && lifestream.Travel(request) is { } error)
+                if (IconButton("##travel", FontAwesomeIcon.Compass, "Travel") && request is not null && lifestream.Travel(request) is { } error)
                     Notify(error, NotificationType.Warning, "Couldn't travel");
             }
 
@@ -879,10 +899,25 @@ internal sealed class ListingsWindow : Window
             if (address is not null)
                 ImGui.SameLine();
             var link = row.Details.Links[page];
-            if (ImGui.Button("Open page"))
+            if (IconButton("##openPage", FontAwesomeIcon.ExternalLinkAlt, "Open page"))
                 Util.OpenLink(LinkAddress(link.Uri));
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip(LinkAddress(link.Uri));
+        }
+
+        // Copy link: the entry's own website, else an event or venue page, its address in the tooltip
+        if (view.Copy.Uri is { } uri)
+        {
+            if (address is not null || view.Page >= 0)
+                ImGui.SameLine();
+            if (IconButton("##copyLink", FontAwesomeIcon.Clone, "Copy link"))
+            {
+                ImGui.SetClipboardText(LinkAddress(uri));
+                Notify($"Copied {LinkAddress(uri)}", NotificationType.Success, "Copied the link");
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip($"Copy {LinkAddress(uri)}");
         }
     }
 

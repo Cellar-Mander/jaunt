@@ -190,8 +190,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `R
    minutes: no second calendar fetch is logged. *(self-test: no fetch a minute before the 8 h are up)*
 3. **Detail**: a selected event shows its date and times or "Open now · until …" in your time zone and
    the Settings formats, and no "Validated" line. An open-world
-   event shows its location as text with no Travel button. An event with no upcoming date isn't listed. *(self-test: the address, location, dates and validation are recorded)*
-4. **Credit**: in the footer, hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
+   event shows its location as text with no Travel button. An event with no upcoming date isn't listed. *(self-test: the address, location, dates and validation are recorded)*4. **Credit**: in the footer, hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
    clicking it opens the site. "CC BY-SA 4.0" does the same with the licence page.
 5. **No contacts**: `cache/RpEventCalendar.json` holds no `contacts` and no Discord handles from the calendar. *(self-test)*
 
@@ -211,6 +210,8 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `F
 4. **Address**: on a selected venue, Copy copies its world, district, ward and plot; Travel works with
    Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark". *(self-test: the Bismarck spelling)*
 5. **Links**: Open page, and Open beside a further link under Location, open the browser at the URI in the tooltip.
+   Copy link on a venue with a website copies that website; on one without, it copies
+   `https://ffxivvenues.com/venue/<id>`, which opens the venue's page.
 6. **Scrolling**: scroll quickly through the whole list: rows don't jump or overlap, and the scrollbar
    reaches the last row.
 7. **Offline**: block the network (or set a bad DNS), clear the `FfxivVenues/…` fetch times as in 1, and
