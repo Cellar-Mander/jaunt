@@ -886,7 +886,7 @@ internal sealed class ListingsWindow : Window
 
             using (Scoped.Disabled(whyNot is not null))
             {
-                if (IconButton("##travel", FontAwesomeIcon.LocationArrow, "Travel") && request is not null && lifestream.Travel(request) is { } error)
+                if (IconButton("##travel", FontAwesomeIcon.Compass, "Travel") && request is not null && lifestream.Travel(request) is { } error)
                     Notify(error, NotificationType.Warning, "Couldn't travel");
             }
 

@@ -643,7 +643,7 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   (see "Icons and splash images"); the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"); the world;
   Travel, Open page (the first link that isn't a Discord invite) and Copy link (below), each with an
-  icon before its label (a location arrow, an external-link square and two overlapping squares); Location: each
+  icon before its label (a compass, an external-link square and two overlapping squares); Location: each
   address with Copy, a location given only as text, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
   less"), with "Read the rest on the website" after a description cut at the limit; Lineup: the
