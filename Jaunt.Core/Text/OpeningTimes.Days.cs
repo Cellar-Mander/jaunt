@@ -45,51 +45,87 @@ public static partial class OpeningTimes
     }
 
     /// <summary>
-    /// The first date: 7/11, 07.11., Nov 5th, 16th Nov. Skips the tokens of 24/7. Its own tokens
-    /// need no marking: none of them can start a time, since a time needs AM/PM, a zone, a colon
-    /// or 時 right after its hour, and <see cref="NumberedDateAt"/> refuses a dotted date followed
-    /// by AM or PM.
+    /// Every date, with the index of its first token: 7/11, 07.11., Nov 5th, 16th Nov. Skips the
+    /// tokens of 24/7. Its own tokens need no marking: none of them can start a time, since a time
+    /// needs AM/PM, a zone, a colon or 時 right after its hour, and <see cref="NumberedDateAt"/>
+    /// refuses a dotted date followed by AM or PM.
     /// </summary>
-    private static DateOnly? FindDate(List<Token> tokens, bool[] used, DateOnly seen)
+    private static List<(int First, DateOnly Date)> FindDates(List<Token> tokens, bool[] used, DateOnly seen)
     {
-        for (var i = 0; i < tokens.Count; i++)
+        var dates = new List<(int, DateOnly)>();
+        var i = 0;
+        while (i < tokens.Count)
         {
-            if (used[i])
+            var found = used[i] ? null : DateAt(tokens, i, seen);
+            if (found is null)
+            {
+                i++;
                 continue;
-            var t = tokens[i];
-
-            var numbered = t.Kind == Kind.Number ? NumberedDateAt(tokens, i, seen) : null;
-            if (numbered is not null)
-                return numbered;
-
-            if (t.Kind == Kind.Number && t.Text.Length <= 2)
-            {
-                // 16th Nov
-                var j = i + 1;
-                var suffix = At(tokens, j);
-                if (suffix is { Kind: Kind.Word } && Adjacent(t, suffix.Value) && suffix.Value.Text.ToLowerInvariant() is "st" or "nd" or "rd" or "th")
-                    j++;
-                var month = MonthOf(At(tokens, j));
-                var named = month is not null ? Day(month.Value, t, seen) : null;
-                if (named is not null)
-                    return named;
             }
 
-            var mo = MonthOf(t);
-            if (mo is not null)
-            {
-                // Nov 5th, Nov. 5
-                var j = i + 1;
-                if (IsSymbol(At(tokens, j), '.'))
-                    j++;
-                var n = At(tokens, j);
-                var monthFirst = n is { Kind: Kind.Number } && n.Value.Text.Length <= 2 ? Day(mo.Value, n.Value, seen) : null;
-                if (monthFirst is not null)
-                    return monthFirst;
-            }
+            dates.Add((i, found.Value.Date));
+            i = found.Value.Next;
+        }
+
+        return dates;
+    }
+
+    /// <summary>A date starting at <paramref name="i"/>, and the index of the token after it.</summary>
+    private static (DateOnly Date, int Next)? DateAt(List<Token> tokens, int i, DateOnly seen)
+    {
+        var t = tokens[i];
+
+        var numbered = t.Kind == Kind.Number ? NumberedDateAt(tokens, i, seen) : null;
+        if (numbered is not null)
+            return (numbered.Value, i + 3);
+
+        if (t.Kind == Kind.Number && t.Text.Length <= 2)
+        {
+            // 16th Nov
+            var j = i + 1;
+            var suffix = At(tokens, j);
+            if (suffix is { Kind: Kind.Word } && Adjacent(t, suffix.Value) && suffix.Value.Text.ToLowerInvariant() is "st" or "nd" or "rd" or "th")
+                j++;
+            var month = MonthOf(At(tokens, j));
+            var named = month is not null ? Day(month.Value, t, seen) : null;
+            if (named is not null)
+                return (named.Value, j + 1);
+        }
+
+        var mo = MonthOf(t);
+        if (mo is not null)
+        {
+            // Nov 5th, Nov. 5
+            var j = i + 1;
+            if (IsSymbol(At(tokens, j), '.'))
+                j++;
+            var n = At(tokens, j);
+            var monthFirst = n is { Kind: Kind.Number } && n.Value.Text.Length <= 2 ? Day(mo.Value, n.Value, seen) : null;
+            if (monthFirst is not null)
+                return (monthFirst.Value, j + 1);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The date each span is on: the last date before it, or the first date when none comes before
+    /// it ("8pm on 11/13"). One merge pass, since both lists are in text order.
+    /// </summary>
+    private static Dictionary<Span, DateOnly> DatesOfSpans(List<(int First, DateOnly Date)> dates, List<Span> spans)
+    {
+        var result = new Dictionary<Span, DateOnly>();
+        if (dates.Count == 0)
+            return result;
+        var d = 0;
+        foreach (var span in spans)
+        {
+            while (d + 1 < dates.Count && dates[d + 1].First <= span.First)
+                d++;
+            result[span] = dates[d].Date;
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -208,8 +244,8 @@ public static partial class OpeningTimes
                     day = day == OpeningDay.None ? OpeningDay.Today : day;
                 else if (lower == "tomorrow")
                     day = day == OpeningDay.None ? OpeningDay.Tomorrow : day;
-                else if (Weekdays.TryGetValue(lower, out var w) || (lower.EndsWith('s') && Weekdays.TryGetValue(lower[..^1], out w)))
-                    weekday = w;
+                else
+                    weekday = WeekdayOf(lower);
             }
             else if (t.Kind == Kind.Cjk)
             {
@@ -235,8 +271,8 @@ public static partial class OpeningTimes
             if (weekday is null)
                 continue;
 
-            // Skip up to two of . , @ - between the weekday and its time.
-            for (var skipped = 0; skipped < 2 && IsDaySeparator(At(tokens, after)); skipped++)
+            // Skip up to two of . , @ - "at" between the weekday and its time.
+            for (var skipped = 0; skipped < 2 && (IsDaySeparator(At(tokens, after)) || IsWord(At(tokens, after), "at")); skipped++)
                 after++;
             if (spanAt.TryGetValue(after, out var span))
                 weekdays.TryAdd(span, weekday.Value);
@@ -244,6 +280,10 @@ public static partial class OpeningTimes
 
         return (day, weekdays);
     }
+
+    /// <summary>A weekday name or its plural ("Tues", "Mondays"), lower-cased, or null.</summary>
+    private static DayOfWeek? WeekdayOf(string lower) =>
+        Weekdays.TryGetValue(lower, out var w) || (lower.EndsWith('s') && Weekdays.TryGetValue(lower[..^1], out w)) ? w : null;
 
     /// <summary>The weekday of 金曜 and the like at the start of <paramref name="rest"/>, in DayOfWeek order, or -1.</summary>
     private static int JapaneseWeekday(ReadOnlySpan<char> rest) =>

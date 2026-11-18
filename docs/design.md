@@ -12,9 +12,9 @@ tests should hold, including edge cases and limits.
 instants. `OpeningTimesCorpusTests` checks every labelled corpus ad (`Corpus/README.md`, `times`).
 
 - **Open now**: "open now", "now open", "is open", a bare "NOW", 営業中 and similar. A bare "open"
-  doesn't count when a time, "from", "tonight" and the like follow it, or a word says what is open
-  ("Open Stage", "Open Recruitment", "open to all"). "starts now" and "now hiring" don't count.
-  A closing time with no start ("open until 1am") belongs to the now opening.
+  doesn't count when a time, "from", "tonight", a weekday and the like follow it, or a word says
+  what is open ("Open Stage", "Open Recruitment", "open to all"). "starts now" and "now hiring"
+  don't count. A closing time with no start ("open until 1am") belongs to the now opening.
 - **Always**: "24/7" and "always open". 24/7 is never a date.
 - **Times** need AM/PM, a zone, minutes or 時 after the hour; a bare number ("Gob 14-35", "W30") is
   not a time. Bare hours 1–11 read as evening ("8-12" is 20:00–00:00); a leading zero, an hour over
@@ -25,9 +25,11 @@ instants. `OpeningTimesCorpusTests` checks every labelled corpus ad (`Corpus/REA
   missing zones use the region default (`aca1be81`): NA New York, OCE Sydney, JP Tokyo, EU Berlin
   for German or French ads and London otherwise. A lower-case "st" after 1 or 21 is an ordinal.
 - **Days**: today/tonight/tomorrow apply to the whole ad, the first one written wins. A weekday
-  applies only to a time or date right after it ("FRI 17 ST"), so "Goth Friday" names an event. A
-  date beats both. a/b dates take whichever of month/day and day/month is nearer the day seen,
-  month/day on a tie; a year is never written, so the nearest year is used.
+  applies only to a time or date right after it ("FRI 17 ST", "Tues at 8pm"), so "Goth Friday"
+  names an event. A date beats both. Each time is on the last date before it, or on the first date
+  when none comes before it ("11/13 8pm ⇔ 11/14 7pm" is two nights, "8pm on 11/13" one). a/b
+  dates take whichever of month/day and day/month is nearer the day seen, month/day on a tie; a
+  year is never written, so the nearest year is used.
 - **Resolving**: an undated start is today's in the ad's zone, unless yesterday's overnight opening
   is still running. A weekday is the next one, counting today. A closing time alone is the next one
   after the ad was first seen with its text, so it stays put while the ad stays listed, unless one
@@ -508,8 +510,8 @@ for the browser's filters (`d68d407e`) and detail pane (`5d36be20`). Both are wo
 fields the source sent, so a change to the keyword lists applies to cached listings without fetching
 again.
 
-- **Interests**: Clubs (and DJs), Bars (and taverns), Cafes (and food), Live music (and open stage),
-  Games (contests and giveaways too), Gambling, Roleplay, Spa (and baths), Art, Photography, Tarot,
+- **Interests**: Clubs (and DJs), Bars (and taverns), Cafes (and food), Live shows (live music, open
+  stage, comedy and theatre), Games (contests and giveaways too), Gambling, Roleplay, Spa (and baths), Art, Photography, Tarot,
   and Chill (AFK, open house, 24/7). A listing has any number of them; the median venue ad has two.
 - **Keywords**: developer-maintained lists in `ListingTags`, read from an ad's text, an event's
   title or a venue's name after Party Finder glyphs are decoded (boxed letters read as letters) and
@@ -519,7 +521,9 @@ again.
   and a word ending in "s" also matches without it (`bars`, `hot springs`); "starts" is not "art"
   and "team" is not "tea". Japanese keywords (喫茶, 雑談, 読書, 見学, 珈琲, ...) match anywhere in the
   text. Gambling shorthand (`DRT`, `BJ`, `50/50`, raffle) counts as Gambling, and bingo, trivia,
-  prizes, giveaways and fighting (fight club, fight ring, brawls, wrestling, duels) as Games;
+  prizes, giveaways and fighting (fight club, fight ring, brawls, wrestling, duels) as Games,
+  and comedy, comedians, stand-up, improv and theatre as Live shows ("play", "drama", "show" and
+  "line" don't count, being common in other ads);
   "fight" alone doesn't count, as FC ads use it ("we fight together"); a Twitch link or "party" counts as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
   lists were tuned on those ads.
 - **Source tags**: FFXIV Venues' owner-chosen tags and Partake's event tags map to interests,
@@ -827,7 +831,7 @@ them; the browser draws them.
 - **Placeholders** (`Placeholders`, `PlaceholderArt`; decisions with the user, `9ef7d11c`):
   - Icon: a FontAwesome pictogram in the disabled text colour, 0.55 of the square, for the entry's
     first interest in venue-type-first order: Clubs (headphones), Bars (martini glass), Cafes (steaming
-    mug), Spa, Gambling (dice), Live music (note), Games (trophy), Art (palette), Photography (camera),
+    mug), Spa, Gambling (dice), Live shows (note), Games (trophy), Art (palette), Photography (camera),
     Tarot (moon), Roleplay (theatre masks), Chill (couch). An entry with no interests shows a house.
   - Splash (`Backdrops`): a loading screen read from the game's data (the `TerritoryType`'s
     `LoadingImage`, the 1920×1080 version), so nothing ships with the plugin. It is the screen of the

@@ -38,7 +38,7 @@ public static class ListingFilters
         (Interests.Bars, "Bars"),
         (Interests.Cafes, "Cafes"),
         (Interests.Clubs, "Clubs"),
-        (Interests.LiveMusic, "Live music"),
+        (Interests.LiveShows, "Live shows"),
         (Interests.Games, "Games"),
         (Interests.Gambling, "Gambling"),
         (Interests.Roleplay, "Roleplay"),

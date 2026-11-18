@@ -5,7 +5,7 @@ namespace Jaunt.Core.Tests;
 
 public class ListingFiltersTests
 {
-    private static readonly string[] Fields = ["Moonlit Jazz Night", "Smooth jazz and cocktails. Open mic from 21:00.", "Bars", "Live music"];
+    private static readonly string[] Fields = ["Moonlit Jazz Night", "Smooth jazz and cocktails. Open mic from 21:00.", "Bars", "Live shows"];
 
     private static bool Searches(string search, params string[] fields) => SearchQuery.Parse(search).Matches(fields.Length > 0 ? fields : Fields);
 
@@ -74,7 +74,7 @@ public class ListingFiltersTests
     [Fact]
     public void TheTagsMenuNamesEveryInterest() =>
         Assert.Equal(
-            ["Bars", "Cafes", "Clubs", "Live music", "Games", "Gambling", "Roleplay", "Spa", "Art", "Photography", "Tarot", "Chill"],
+            ["Bars", "Cafes", "Clubs", "Live shows", "Games", "Gambling", "Roleplay", "Spa", "Art", "Photography", "Tarot", "Chill"],
             ListingFilters.LabelsOf(ListingFilters.AllInterests));
 
     [Fact]
@@ -125,11 +125,11 @@ public class ListingFiltersTests
     [Fact]
     public void EveryTagPickedMustMatch()
     {
-        var filters = new BrowserFilters { Tags = Interests.Bars | Interests.LiveMusic };
+        var filters = new BrowserFilters { Tags = Interests.Bars | Interests.LiveShows };
 
-        Assert.True(Shows(filters, Entry(Interests.Bars | Interests.LiveMusic | Interests.Roleplay)));
+        Assert.True(Shows(filters, Entry(Interests.Bars | Interests.LiveShows | Interests.Roleplay)));
         Assert.False(Shows(filters, Entry(Interests.Bars)));
-        Assert.False(Shows(filters, Entry(Interests.LiveMusic)));
+        Assert.False(Shows(filters, Entry(Interests.LiveShows)));
         Assert.False(Shows(filters, Entry()));
     }
 
@@ -152,5 +152,5 @@ public class ListingFiltersTests
 
     [Fact]
     public void LabelsOfKeepsTheMenuOrder() =>
-        Assert.Equal(["Bars", "Live music", "Chill"], ListingFilters.LabelsOf(Interests.Chill | Interests.LiveMusic | Interests.Bars));
+        Assert.Equal(["Bars", "Live shows", "Chill"], ListingFilters.LabelsOf(Interests.Chill | Interests.LiveShows | Interests.Bars));
 }

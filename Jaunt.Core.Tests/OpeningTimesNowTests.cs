@@ -29,6 +29,9 @@ public class OpeningTimesNowTests
     [InlineData("open tonite", "today")]
     [InlineData("open today", "today")]
     [InlineData("open tomorrow", "tomorrow")]
+    [InlineData("open Tues at 8pm EST", "tue 20:00- EST")] // a weekday after open says when it opens
+    [InlineData("open Tuesday", "")]
+    [InlineData("open Fridays 9pm", "fri 21:00-")]
     [InlineData("Open Stage Open Bar Open Mic", "")]
     [InlineData("Open Recruitment, open to all", "")]
     [InlineData("the full experience starts now", "")]
