@@ -648,7 +648,7 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   20:00–23:00"); the world;
   Travel, Open page (the first link that isn't a Discord invite) and Copy link (below), each with an
   icon before its label (a compass, an external-link square and two overlapping squares); Location: each
-  address with Copy, a location given only as text, and any further links; About: an ad's normalised text, or else the
+  of the first 6 addresses with Copy and Map (below), a location given only as text, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
   less"), with "Read the rest on the website" after a description cut at the limit; Lineup: the
   performers its ads name (see "Performers in ad text"), each once across the entry's ads, separated
@@ -757,10 +757,19 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   While no character is logged in (or its home world is unknown) the window shows only "Log in to a
   character to see the venues it can travel to." Nothing else in the window mentions the region.
   Hidden venues in Settings lists every hidden listing, whatever its region.
-- **Copy** beside an address copies "World, District, W20, P28": a missing world or district is left out; an
-  apartment is "W5, Subdivision, Apartment 12" (Subdivision only when the ad says so); a room adds
-  ", Room B1". Districts use their English names. This is the shape Lifestream's address book reads.
-  A world taken from the listing is marked "(world the ad is listed on)".
+- **Addresses** under Location show as "World · District · Ward 20, Plot 28": a missing world or
+  district is left out; an apartment is "Ward 5, Subdivision, Apartment 12" (Subdivision only when the
+  ad says so); a room adds ", Room B1". Districts use their English names. A world taken from the
+  listing is marked "(world the ad is listed on)". Copy (two overlapping squares) and Map (a map pin)
+  follow on the same line, as icon-only buttons with tooltips.
+- **Copy** beside an address copies "World, District, W20, P28", with the same parts left out and
+  added as shown ("W5, Subdivision, Apartment 12", ", Room B1"). This is the shape Lifestream's
+  address book reads.
+- **Map** opens the game map flagged on the address's plot or apartment building, read from the game's
+  `HousingMapMarkerInfo` (a row per district's zone; subrows 0–59 for plots 1–60, 60 for the apartment
+  building, 61 for the subdivision's). A plot wins over an apartment, and an apartment is in the main
+  building unless the ad says subdivision. It is left out when the address names no district, or
+  neither a plot (1–60) nor an apartment, as such an address has no single place to flag.
 - **Travel** calls Lifestream's IPC: `Lifestream.IsBusy`, then `Lifestream.BuildAddressBookEntry`
   (world, district, ward, plot or apartment, is apartment, is subdivision) and
   `Lifestream.GoToHousingAddress` with the entry it returns. It is disabled, with a tooltip saying

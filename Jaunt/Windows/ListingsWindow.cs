@@ -53,6 +53,7 @@ internal sealed class ListingsWindow : Window
     private readonly Gazetteer gazetteer;
     private readonly AddressParser parser;
     private readonly Lifestream lifestream;
+    private readonly HousingMap housingMap;
     private readonly INotificationManager notifications;
     private readonly Configuration configuration;
     private readonly Action fetchSources;
@@ -203,14 +204,23 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// What the detail pane shows of <see cref="Row"/> that takes formatting or a search to work out:
-    /// the status line of its first opening, its addresses as text, the Lifestream request for the
-    /// first, which link Open page and the footer's Discord take (or -1), the further links Location
+    /// the status line of its first opening, its first <see cref="MaxAddresses"/> addresses as Location
+    /// shows them, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1), the further links Location
     /// lists, its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
     /// its lineup, and what Copy link copies.
     /// </summary>
     private sealed record DetailView(
-        Row Row, string? Status, bool Open, string[] Addresses, TravelRequest? Travel, int Page, int Discord, int[] Further,
+        Row Row, string? Status, bool Open, AddressLine[] Addresses, TravelRequest? Travel, int Page, int Discord, int[] Further,
         ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy);
+
+    /// <summary>
+    /// An address as Location shows it: the text shown, the text Copy copies (the shape Lifestream
+    /// reads), whether the world is the one the ad is listed on, and where Map opens the map, if anywhere.
+    /// </summary>
+    private sealed record AddressLine(string Shown, string Copied, bool ListedWorld, MapSpot? Spot);
+
+    /// <summary>The most addresses Location lists for one entry.</summary>
+    private const int MaxAddresses = 6;
 
     /// <summary>A performer as the lineup shows them: name or handle, and their Twitch channel if the ad links it.</summary>
     private readonly record struct LineupEntry(string Text, Uri? Twitch);
@@ -226,7 +236,7 @@ internal sealed class ListingsWindow : Window
     /// <param name="textures">Loads the kept images and the district art for drawing.</param>
     /// <param name="backdrops">The loading screens standing in for missing splash images (<see cref="PlaceholderArt.Backdrops"/>).</param>
     public ListingsWindow(
-        ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, INotificationManager notifications, Configuration configuration, Action fetchSources,
+        ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
         Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont, ImageStore images, ITextureProvider textures,
         Backdrops backdrops)
         : base("Jaunt###JauntListings")
@@ -243,6 +253,7 @@ internal sealed class ListingsWindow : Window
         this.gazetteer = gazetteer;
         parser = new AddressParser(gazetteer);
         this.lifestream = lifestream;
+        this.housingMap = housingMap;
         this.notifications = notifications;
         this.configuration = configuration;
         Size = new Vector2(900, 600);
@@ -698,6 +709,17 @@ internal sealed class ListingsWindow : Window
         return clicked;
     }
 
+    /// <summary>A square button the height of a line of text with only an icon, drawn over it like <see cref="IconButton"/>.</summary>
+    /// <param name="id">The button's ID, hidden ("##copy").</param>
+    private bool SmallIconButton(string id, FontAwesomeIcon icon)
+    {
+        var size = ImGui.GetFrameHeight();
+        var clicked = ImGui.Button(id, new Vector2(size));
+        var min = ImGui.GetItemRectMin();
+        DrawIcon(ImGui.GetWindowDrawList(), icon, min + new Vector2(size / 2), ImGui.GetFontSize() * 0.85f, ImGui.GetColorU32(ImGuiCol.Text));
+        return clicked;
+    }
+
     private void DrawDetail(DateTimeOffset now)
     {
         // With nothing listed, or nothing the filters let through, the list's own line says so and the help text would only add noise
@@ -779,7 +801,9 @@ internal sealed class ListingsWindow : Window
         // A stream the lineup links needn't be listed again under Location
         int[] further = [.. Enumerable.Range(0, links.Count).Where(i => i != page && i != discord && !lineup.Any(e => e.Twitch == links[i].Uri))];
         return new DetailView(
-            row, status, open, [.. addresses.Select(AddressText.Format)], addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
+            row, status, open,
+            [.. addresses.Take(MaxAddresses).Select(a => new AddressLine(AddressText.Display(a), AddressText.Format(a), a.WorldFrom == WorldSource.Listing, housingMap.SpotOf(a)))],
+            addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
             page, discord, further, [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
             [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup,
             CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]));
@@ -937,23 +961,36 @@ internal sealed class ListingsWindow : Window
             return;
 
         Section("Location");
-        for (var i = 0; i < row.Details.Addresses.Count; i++)
+        for (var i = 0; i < view.Addresses.Length; i++)
         {
             using var id = Scoped.Id($"a{i}");
-            var address = row.Details.Addresses[i];
-            var text = view.Addresses[i];
-            if (ImGui.SmallButton("Copy"))
-            {
-                ImGui.SetClipboardText(text);
-                Notify($"Copied {text}", NotificationType.Success, "Copied the address");
-            }
-
-            ImGui.SameLine();
-            ImGui.TextUnformatted(text);
-            if (address.WorldFrom == WorldSource.Listing)
+            var line = view.Addresses[i];
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextUnformatted(line.Shown);
+            if (line.ListedWorld)
             {
                 ImGui.SameLine();
                 ImGui.TextDisabled("(world the ad is listed on)");
+            }
+
+            ImGui.SameLine();
+            if (SmallIconButton("##copy", FontAwesomeIcon.Clone))
+            {
+                ImGui.SetClipboardText(line.Copied);
+                Notify($"Copied {line.Copied}", NotificationType.Success, "Copied the address");
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip($"Copy {line.Copied}");
+
+            // Only an address naming one plot or apartment building has a place to flag on the map
+            if (line.Spot is { } spot)
+            {
+                ImGui.SameLine();
+                if (SmallIconButton("##map", FontAwesomeIcon.MapMarkerAlt) && !housingMap.Show(spot))
+                    Notify("The game couldn't open the map there.", NotificationType.Warning, "Couldn't open the map");
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Show on the map");
             }
         }
 
