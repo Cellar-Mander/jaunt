@@ -546,8 +546,7 @@ again.
 
 `/jaunt` and the installer's Open button toggle the browser; `/jaunt config` and the cog in its title
 bar open Settings. The window has the list on the left and the selected listing's details on the
-right, under a line of search and filters. The narrow single-column layout (`2dce5769`)
-and copy link (`6e2b5199`) are separate tasks.
+right, under a line of search and filters. The narrow single-column layout (`2dce5769`) is a separate task.
 
 - **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
   cache as `InGamePartyFinder`, keyed by the PF listing ID, with its text (`description`, glyphs
@@ -643,8 +642,9 @@ and copy link (`6e2b5199`) are separate tasks.
 - **Detail pane**, top to bottom, each part only when the listing has it: the splash image band
   (see "Icons and splash images"); the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"); the world;
-  Travel and Open page (the first link that isn't a Discord invite); Location: each address with Copy,
-  a location given only as text, and any further links; About: an ad's normalised text, or else the
+  Travel, Open page (the first link that isn't a Discord invite) and Copy link (below), each with an
+  icon before its label (a location arrow, an external-link square and two overlapping squares); Location: each
+  address with Copy, a location given only as text, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
   less"), with "Read the rest on the website" after a description cut at the limit; Lineup: the
   performers its ads name (see "Performers in ad text"), each once across the entry's ads, separated
@@ -661,6 +661,19 @@ and copy link (`6e2b5199`) are separate tasks.
   in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
   and open in the browser when clicked. Who listed an ad
   ("Listed by …") is `d12eb2c4`.
+- **Copy link** (`CopyLinks`): left out when the entry has no page to copy; its tooltip shows the
+  address it will copy. It takes the first of:
+  1. The entry's own website: the first of its links that isn't a Discord invite, a stream or profile
+     (the hosts that are never a place's website, under "Marks"), Partake or FFXIV Venues. The RP
+     calendar's `xiv.fyi` links count, as they forward to the organiser's page.
+  2. The event's page: a Partake member's `https://partake.gg/events/<id>`, else a Partake link the entry gives.
+  3. The venue's page: an FFXIV Venues member's `https://ffxivvenues.com/venue/<id>`, else an FFXIV
+     Venues link the entry gives.
+
+  It never copies the address, as Copy beside it does that. An ad that is only on Party Finder has no
+  Copy link: the game rejects a `<pfinder>` link that Jaunt fills in itself, and relaying another
+  player's listing in chat is spike `84a979b7`. The page goes to the clipboard, with a notification
+  saying what was copied.
 - **Marks** (`EntryMarks`, `PlaceMarks`): three square icon buttons at the right of the detail pane's
   title, which wraps short of them: a star (Favourite), a tick (Visited) and a crossed-out eye (Hide).
   Icons are drawn a little over half the button's height, centred by their drawn shape.
