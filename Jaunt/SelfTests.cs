@@ -11,6 +11,7 @@ using Dalamud.Plugin.SelfTest;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
 using Jaunt.Listings;
+using Jaunt.Text;
 using Jaunt.Windows;
 
 namespace Jaunt;
@@ -123,7 +124,26 @@ internal sealed class SelfTests(ConfigWindow configWindow, ListingsWindow listin
         new Step("Partake: first fetch records upcoming events, then waits 8 h", PartakeFirstFetch),
         new Step("RP Event Calendar: first fetch records events, then waits 8 h", RpCalendarFirstFetch),
         new Step("The open listing browser and Settings draw without allocating", DrawsWithoutAllocating),
+        new Step("Places outside housing are read from the game's data in English", PlacesFromGameData),
     ];
+
+    // Whatever the client's language: zones and labels by their English names, an aetheryte where the
+    // map shows it, the aetheryte serving a zone without one, and no zone for a housing district's twin
+    private IEnumerable<object?> PlacesFromGameData()
+    {
+        var places = GamePlacesLoader.Load(Plugin.DataManager);
+        var hyrstmill = places.InLocation("North Shroud, Hyrstmill", "Mateus");
+        Check(hyrstmill.Count == 1 && hyrstmill[0].Spot == "Hyrstmill" && hyrstmill[0].Point is { X: > 28.3f and < 28.7f, Y: > 19.5f and < 19.9f },
+            $"North Shroud, Hyrstmill gave {string.Join("; ", hyrstmill.Select(p => p.Display()))}");
+        var aetheryte = places.InAd("Meet at the Limsa aetheryte!", null);
+        Check(aetheryte.Count == 1 && aetheryte[0].Point is { X: > 9.4f and < 9.8f, Y: > 11.0f and < 11.4f },
+            $"the Limsa aetheryte gave {string.Join("; ", aetheryte.Select(p => p.Display()))}");
+        var oldGridania = places.InLocation("Old Gridania, Apkallu Falls", "Mateus");
+        Check(oldGridania.Count == 1 && oldGridania[0].Copied() == "Mateus, tp New Gridania",
+            $"Old Gridania copied {string.Join("; ", oldGridania.Select(p => p.Copied()))}");
+        Check(places.InLocation("Mist", "Mateus").Count == 0, "Mist was read as a zone outside housing");
+        yield break;
+    }
 
     // Frames to watch each window draw for
     private const int WatchedFrames = 120;

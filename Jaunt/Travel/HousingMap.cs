@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Numerics;
+using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Jaunt.Core.Text;
 using Jaunt.Text;
 using Lumina.Excel.Sheets;
@@ -13,7 +15,7 @@ internal readonly record struct MapSpot(uint Territory, uint Map, Vector3 Positi
 /// <summary>
 /// Where each housing plot and apartment building is, read once from the game's
 /// <c>HousingMapMarkerInfo</c> (a row per district's zone, a subrow per <see cref="HousingMarker"/>),
-/// and opens the game map there with a flag on it.
+/// and opens the game map there with a flag on it; also opens a zone's map outside housing, flagged at a point when known.
 /// </summary>
 internal sealed class HousingMap(Dictionary<District, MapSpot[]> spots, IGameGui gameGui)
 {
@@ -47,4 +49,19 @@ internal sealed class HousingMap(Dictionary<District, MapSpot[]> spots, IGameGui
 
     /// <summary>Opens the game map on the spot, flagged; false if the game couldn't.</summary>
     public bool Show(MapSpot spot) => gameGui.OpenMapWithMapLink(spot.Territory, spot.Map, spot.Position);
+
+    /// <summary>
+    /// Opens a zone's map outside housing, flagged at the point when there is one, else with no flag;
+    /// false if the game couldn't open it flagged.
+    /// </summary>
+    public unsafe bool Show(GameZone zone, MapPoint? point)
+    {
+        if (point is { } p)
+            return gameGui.OpenMapWithMapLink(new MapLinkPayload(zone.Territory, zone.Map, p.X, p.Y));
+        var agent = AgentMap.Instance();
+        if (agent == null)
+            return false;
+        agent->OpenMapByMapId(zone.Map, zone.Territory);
+        return true;
+    }
 }

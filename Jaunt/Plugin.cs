@@ -85,7 +85,7 @@ public sealed class Plugin : IDalamudPlugin
             Path.Combine(PluginInterface.ConfigDirectory.FullName, "images"), PublicNetwork.Handler(), FetchedListings.UserAgent,
             (message, e) => Log.Warning(e, message));
         ListingsWindow = new ListingsWindow(
-            ListingCache, gazetteer, new Lifestream(PluginInterface, Log), HousingMap.Load(DataManager, GameGui), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
+            ListingCache, gazetteer, GamePlacesLoader.Load(DataManager), new Lifestream(PluginInterface, Log), HousingMap.Load(DataManager, GameGui), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
             titleFont, iconFont, imageStore, TextureProvider, PlaceholderArt.Backdrops(DataManager));
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());

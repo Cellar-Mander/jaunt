@@ -54,6 +54,7 @@ internal sealed class ListingsWindow : Window
     private readonly AddressParser parser;
     private readonly Lifestream lifestream;
     private readonly HousingMap housingMap;
+    private readonly GamePlaces places;
     private readonly INotificationManager notifications;
     private readonly Configuration configuration;
     private readonly Action fetchSources;
@@ -204,28 +205,30 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// What the detail pane shows of <see cref="Row"/> that takes formatting or a search to work out:
-    /// the status line of its first opening, its first <see cref="MaxAddresses"/> addresses as Location
-    /// shows them, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1), the further links Location
+    /// the status line of its first opening, its first <see cref="MaxAddresses"/> addresses and places as Location
+    /// shows them, whether its free-text location named a place, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1), the further links Location
     /// lists, its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
     /// its lineup, and what Copy link copies.
     /// </summary>
     private sealed record DetailView(
-        Row Row, string? Status, bool Open, AddressLine[] Addresses, TravelRequest? Travel, int Page, int Discord, int[] Further,
+        Row Row, string? Status, bool Open, AddressLine[] Addresses, bool LocationPlaced, TravelRequest? Travel, int Page, int Discord, int[] Further,
         ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy);
 
     /// <summary>
-    /// An address as Location shows it: the text shown, the text Copy copies (the shape Lifestream
-    /// reads), whether the world is the one the ad is listed on, and where Map opens the map, if anywhere.
+    /// An address or place outside housing as Location shows it: the text shown, the text Copy copies
+    /// (what Lifestream reads), whether the world is the one the ad is listed on, and where Map opens the
+    /// map, if anywhere: a housing address's plot or building, or a place's zone, flagged at its point when known.
     /// </summary>
-    private sealed record AddressLine(string Shown, string Copied, bool ListedWorld, MapSpot? Spot);
+    private sealed record AddressLine(string Shown, string Copied, bool ListedWorld, MapSpot? Spot, GamePlace? Place = null);
 
-    /// <summary>The most addresses Location lists for one entry.</summary>
+    /// <summary>The most addresses and places Location lists for one entry, addresses first.</summary>
     private const int MaxAddresses = 6;
 
     /// <summary>A performer as the lineup shows them: name or handle, and their Twitch channel if the ad links it.</summary>
     private readonly record struct LineupEntry(string Text, Uri? Twitch);
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
+    /// <param name="places">The zones outside housing that ads and locations name, for Location.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
     /// <param name="saveCache">Saves the listing cache, after a mark changes.</param>
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
@@ -236,7 +239,7 @@ internal sealed class ListingsWindow : Window
     /// <param name="textures">Loads the kept images and the district art for drawing.</param>
     /// <param name="backdrops">The loading screens standing in for missing splash images (<see cref="PlaceholderArt.Backdrops"/>).</param>
     public ListingsWindow(
-        ListingCache cache, Gazetteer gazetteer, Lifestream lifestream, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
+        ListingCache cache, Gazetteer gazetteer, GamePlaces places, Lifestream lifestream, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
         Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont, ImageStore images, ITextureProvider textures,
         Backdrops backdrops)
         : base("Jaunt###JauntListings")
@@ -254,6 +257,7 @@ internal sealed class ListingsWindow : Window
         parser = new AddressParser(gazetteer);
         this.lifestream = lifestream;
         this.housingMap = housingMap;
+        this.places = places;
         this.notifications = notifications;
         this.configuration = configuration;
         Size = new Vector2(900, 600);
@@ -825,14 +829,56 @@ internal sealed class ListingsWindow : Window
         LineupEntry[] lineup = [.. row.Details.Performers.Select(p => new LineupEntry(ShownText.Fold(p.Shown), p.Twitch?.Uri))];
         // A stream the lineup links needn't be listed again under Location
         int[] further = [.. Enumerable.Range(0, links.Count).Where(i => i != page && i != discord && !lineup.Any(e => e.Twitch == links[i].Uri))];
+        var (found, locationPlaced) = PlacesOf(row);
         return new DetailView(
             row, status, open,
-            [.. addresses.Take(MaxAddresses).Select(a => new AddressLine(AddressText.Display(a), AddressText.Format(a), a.WorldFrom == WorldSource.Listing, housingMap.SpotOf(a)))],
+            [
+                .. addresses.Take(MaxAddresses).Select(a => new AddressLine(AddressText.Display(a), AddressText.Format(a), a.WorldFrom == WorldSource.Listing, housingMap.SpotOf(a))),
+                .. found.Take(MaxAddresses - Math.Min(addresses.Count, MaxAddresses)).Select(p => new AddressLine(p.Display(), p.Copied(), p.ListedWorld, null, p)),
+            ],
+            locationPlaced,
             addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
             page, discord, further, [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
             [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup,
             CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]));
     }
+
+    /// <summary>
+    /// The places outside housing the entry's members name, each once, in member order: in a venue's or
+    /// event's location, or in an ad's text; and whether the location shown as text (with no address)
+    /// named any, as the places then stand in for it.
+    /// </summary>
+    private (List<GamePlace> Found, bool LocationPlaced) PlacesOf(Row row)
+    {
+        var found = new List<GamePlace>();
+        var locationPlaced = false;
+        var freeText = FreeLocation(row);
+        foreach (var member in row.Members.Count > 0 ? row.Members : [row])
+        {
+            IReadOnlyList<GamePlace> named;
+            if (member.CalendarEvent is { } calendarEvent)
+                named = places.InLocation(calendarEvent.Location, member.World);
+            else if (member.Event is { } item)
+                named = places.InLocation(item.Location, item.World);
+            else if (member.Listing.Source.IsAd())
+                named = places.InAd(PartyFinderText.Normalise(member.Listing.Description).Text, member.Listing.ListedOn);
+            else
+                continue;
+
+            if (named.Count > 0 && freeText is not null && ReferenceEquals(freeText, member.CalendarEvent?.Location ?? member.Event?.Location))
+                locationPlaced = true;
+            foreach (var place in named.Where(p => !found.Contains(p)))
+                found.Add(place);
+        }
+
+        return (found, locationPlaced);
+    }
+
+    /// <summary>A location the parser couldn't read as an address, which Location shows as text; null when there are addresses.</summary>
+    private static string? FreeLocation(Row row) =>
+        row.Details.Addresses.Count == 0
+            ? row.CalendarEvent?.Location ?? (row.Event is { Location.Length: > 0 } item ? item.Location : null)
+            : null;
 
     /// <summary>
     /// Favourite, Visited and Hide as square icon buttons at the top right, each lit while the entry
@@ -971,18 +1017,17 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// Each address with Copy, a location the parser couldn't read as text, and any further links
-    /// (all but Open page's, the footer's Discord and the lineup's streams).
+    /// Each address and place outside housing with Copy and Map, a location the parser couldn't read as
+    /// an address or a place as text, and any further links (all but Open page's, the footer's Discord and
+    /// the lineup's streams).
     /// </summary>
     private void DrawLocation(DetailView view)
     {
         var row = view.Row;
-        var freeText = row.Details.Addresses.Count == 0
-            ? row.CalendarEvent?.Location ?? (row.Event is { Location.Length: > 0 } item ? item.Location : null)
-            : null;
+        var freeText = view.LocationPlaced ? null : FreeLocation(row);
         var links = row.Details.Links;
         var further = view.Further;
-        if (row.Details.Addresses.Count == 0 && freeText is null && further.Length == 0)
+        if (view.Addresses.Length == 0 && freeText is null && further.Length == 0)
             return;
 
         Section("Location");
@@ -1008,14 +1053,14 @@ internal sealed class ListingsWindow : Window
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip($"Copy {line.Copied}");
 
-            // Only an address naming one plot or apartment building has a place to flag on the map
-            if (line.Spot is { } spot)
+            // A housing address needs one plot or apartment building to flag; a place always has its zone's map
+            if (line.Spot is not null || line.Place is not null)
             {
                 ImGui.SameLine();
-                if (SmallIconButton("##map", FontAwesomeIcon.MapMarkerAlt) && !housingMap.Show(spot))
+                if (SmallIconButton("##map", FontAwesomeIcon.MapMarkerAlt) && !ShowOnMap(line))
                     Notify("The game couldn't open the map there.", NotificationType.Warning, "Couldn't open the map");
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Show on the map");
+                    ImGui.SetTooltip(line.Place is { Point: null } ? "Show the zone's map" : "Show on the map");
             }
         }
 
@@ -1034,6 +1079,9 @@ internal sealed class ListingsWindow : Window
             ImGui.TextUnformatted(link.Text);
         }
     }
+
+    private bool ShowOnMap(AddressLine line) =>
+        line.Spot is { } spot ? housingMap.Show(spot) : line.Place is { } place && housingMap.Show(place.Zone, place.Point);
 
     /// <summary>
     /// An ad's text or a description, cut to <see cref="AboutLines"/> lines with "Read more" when longer.

@@ -384,6 +384,7 @@ again. The list derives them once per change to those fields, not every frame.
   parse. A location that names no world is on the event's server (trimmed), which counts as
   written, not as a listing world. Without a server, the address has no world.
 - **Location**: a location with no housing address ("North Shroud, Hyrstmill", "See URL") is shown
+  as the places outside housing it names (see "Places outside housing" under "Listing browser"), else
   as text, trimmed; an empty one is neither.
 - **Links**: `eventURL`, stored as sent; shown only if http or https, read like FFXIV Venues' links;
   then the Discord invites the short description links to.
@@ -650,7 +651,7 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   20:00–23:00"); the world;
   Travel, Open page (the first link that isn't a Discord invite) and Copy link (below), each with an
   icon before its label (a compass, an external-link square and two overlapping squares); Location: each
-  of the first 6 addresses with Copy and Map (below), a location given only as text, and any further links; About: an ad's normalised text, or else the
+  of the first 6 addresses and then places outside housing with Copy and Map (below), a location given only as text that names no place, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
   less"), with "Read the rest on the website" after a description cut at the limit; Lineup: the
   performers its ads name (see "Performers in ad text"), each once across the entry's ads, separated
@@ -772,6 +773,35 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   building, 61 for the subdivision's). A plot wins over an apartment, and an apartment is in the main
   building unless the ad says subdivision. It is left out when the address names no district, or
   neither a plot (1–60) nor an apartment, as such an address has no single place to flag.
+- **Places outside housing** (`GamePlaces`, read from the game's data by `GamePlacesLoader`): a town or
+  field zone (`TerritoryIntendedUse` 0 or 1) by its English name, whatever the client's language, then
+  optionally a spot its map labels (`MapMarker` place names), its aetheryte, or map coordinates. A
+  housing district's town twin ("Mist") is no zone, and a zone's later rows by the same name (quest
+  copies) are left out. Names match as in "Placeholders" (any case, "Cen." for any word it begins), a
+  leading "The" may be left out ("Pillars", "Silver Bazaar"), words split where a lower-case letter
+  meets an upper-case one ("LimsaLominsaLowerDecks"), and `Limsa`, `Gridania`, `Ul'dah` and `Ishgard`
+  stand for the zone with the city's aetheryte (Foundation for Ishgard). After the zone, past spaces,
+  `,` `:` `-` `|` `@` `/` or `(` only, come the longest label of that zone ("Central Shroud, The Bannock"),
+  or "Aetheryte" (and "Plaza") for a zone whose aetheryte is on its own map; then coordinates may follow,
+  after an optional "at": "X 9.2 Y 10.8", "x: 22, y: 8", "(21, 25)" or "10.0, 12.0". Two bare numbers
+  need a comma or brackets, a number with three digits, a clock time ("9:30") or one followed by am/pm
+  isn't one, and each must be 1–42. Written coordinates win over the label's position.
+  - In a venue's or event's location (the RP calendar's, Partake's) a zone alone counts ("Kugane, See
+    URL"); its world is the event's. Location then shows the places instead of the location's text.
+  - In an ad's text (Party Finder, xivpf, shouts), only a zone with a label, its aetheryte or
+    coordinates counts, as ads name cities for a theme ("Ishgard's finest pub") or a player's progress
+    ("Mor Dhona is my highest point"). Its world is the one the ad is listed on, marked as for
+    addresses. An ad is still listed only when it gives a housing address.
+  - Each place is listed once per entry, after the addresses, up to the 6 rows; a row reads
+    "World · Zone · Spot (9.2, 10.8)", leaving out what isn't known, with labels on one line.
+  - **Copy** copies "World, tp Zone" (or "tp Zone" without a world), which Lifestream's `/li` command
+    reads as a visit to the world and a teleport to the zone's aetheryte. A zone without one of its own
+    names the zone of the aetheryte serving it (Old Gridania → New Gridania, The Pillars → Foundation),
+    so the copy works even where Lifestream can't reach the spot itself.
+  - **Map** opens the game map flagged at the place's point, through a `MapLinkPayload` with the
+    zone's territory and map; for a zone alone it opens the zone's map with no flag
+    (`AgentMap.OpenMapByMapId`). A label's or aetheryte's point is its
+    marker's position on the 2048-pixel map texture as the game shows it: 2 × pixel / `SizeFactor` + 1.
 - **Travel** calls Lifestream's IPC: `Lifestream.IsBusy`, then `Lifestream.BuildAddressBookEntry`
   (world, district, ward, plot or apartment, is apartment, is subdivision) and
   `Lifestream.GoToHousingAddress` with the entry it returns. It is disabled, with a tooltip saying

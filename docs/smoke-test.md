@@ -190,7 +190,11 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `R
    minutes: no second calendar fetch is logged. *(self-test: no fetch a minute before the 8 h are up)*
 3. **Detail**: a selected event shows its date and times or "Open now · until …" in your time zone and
    the Settings formats, and no "Validated" line. An open-world
-   event shows its location as text with no Travel button. An event with no upcoming date isn't listed. *(self-test: the address, location, dates and validation are recorded)*4. **Credit**: in the footer, hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
+   event shows its place under Location ("Mateus · North Shroud · Hyrstmill (28.5, 19.7)") with Copy
+   and Map and no Travel button: Copy copies "Mateus, tp North Shroud", which `/li ` and a paste
+   accepts; Map opens the North Shroud map flagged at Hyrstmill. An event at "Kugane, See URL" shows
+   "Kugane" with Copy and Map, which opens the Kugane map with no flag; one at "See URL" shows the text.
+   *(self-test: zones, labels and aetherytes are read from the game's data in English)* An event with no upcoming date isn't listed. *(self-test: the address, location, dates and validation are recorded)*4. **Credit**: in the footer, hovering "FFXIV RP Event Calendar" shows `https://ffxiv-rp.org/` and a hand cursor;
    clicking it opens the site. "CC BY-SA 4.0" does the same with the licence page.
 5. **No contacts**: `cache/RpEventCalendar.json` holds no `contacts` and no Discord handles from the calendar. *(self-test)*
 
