@@ -44,10 +44,37 @@ public static class AddressText
         return text.ToString();
     }
 
-    private static void Part(StringBuilder text, string part)
+    /// <summary>
+    /// "World · District · Ward 20, Plot 28", as the detail pane shows it, leaving out a world or
+    /// district the ad doesn't give. An apartment is "Ward 5, Subdivision, Apartment 12" (Subdivision
+    /// only when the ad says so), and a room is added as ", Room B1".
+    /// </summary>
+    public static string Display(HousingAddress address)
+    {
+        var text = new StringBuilder();
+        if (address.World is { Length: > 0 } world)
+            Part(text, world, " · ");
+        if (address.District is { } district)
+            Part(text, Name(district), " · ");
+        Part(text, string.Create(CultureInfo.InvariantCulture, $"Ward {address.Ward}"), " · ");
+        if (address.Plot is { } plot)
+            Part(text, string.Create(CultureInfo.InvariantCulture, $"Plot {plot}"));
+        if (address.Apartment is { } apartment)
+        {
+            if (address.Subdivision == true)
+                Part(text, "Subdivision");
+            Part(text, string.Create(CultureInfo.InvariantCulture, $"Apartment {apartment}"));
+        }
+
+        if (address.Room is { } room)
+            Part(text, "Room " + room);
+        return text.ToString();
+    }
+
+    private static void Part(StringBuilder text, string part, string separator = ", ")
     {
         if (text.Length > 0)
-            text.Append(", ");
+            text.Append(separator);
         text.Append(part);
     }
 }

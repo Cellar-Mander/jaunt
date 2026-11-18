@@ -29,6 +29,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
+    [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
 
     private const string CommandName = "/jaunt";
 
@@ -84,7 +85,7 @@ public sealed class Plugin : IDalamudPlugin
             Path.Combine(PluginInterface.ConfigDirectory.FullName, "images"), PublicNetwork.Handler(), FetchedListings.UserAgent,
             (message, e) => Log.Warning(e, message));
         ListingsWindow = new ListingsWindow(
-            ListingCache, gazetteer, new Lifestream(PluginInterface, Log), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
+            ListingCache, gazetteer, new Lifestream(PluginInterface, Log), HousingMap.Load(DataManager, GameGui), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
             titleFont, iconFont, imageStore, TextureProvider, PlaceholderArt.Backdrops(DataManager));
         WindowSystem.AddWindow(ListingsWindow);
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());

@@ -39,4 +39,26 @@ public class AddressTextTests
     [MemberData(nameof(Addresses))]
     public void FormatsAddresses(HousingAddress address, string expected) =>
         Assert.Equal(expected, AddressText.Format(address));
+
+    public static TheoryData<HousingAddress, string> Displayed => new()
+    {
+        { new("Cerberus", WorldSource.Text, District.Mist, 12, 7), "Cerberus · Mist · Ward 12, Plot 7" },
+        { new(null, WorldSource.Listing, District.Empyreum, 5, 3), "Empyreum · Ward 5, Plot 3" },
+        { new("", WorldSource.Listing, District.Empyreum, 5, 3), "Empyreum · Ward 5, Plot 3" },
+        { new("Lich", WorldSource.Text, null, 5, 3), "Lich · Ward 5, Plot 3" },
+        { new(null, WorldSource.Listing, null, 5, 3), "Ward 5, Plot 3" },
+        { new("Lich", WorldSource.Text, District.LavenderBeds, 12, null, Apartment: 40), "Lich · The Lavender Beds · Ward 12, Apartment 40" },
+        {
+            new("Lich", WorldSource.Text, District.LavenderBeds, 12, null, Subdivision: true, Apartment: 40),
+            "Lich · The Lavender Beds · Ward 12, Subdivision, Apartment 40"
+        },
+        { new("Odin", WorldSource.Text, District.Shirogane, 8, 45, Subdivision: true), "Odin · Shirogane · Ward 8, Plot 45" },
+        { new("Odin", WorldSource.Text, District.Shirogane, 8, 45, Room: "B1"), "Odin · Shirogane · Ward 8, Plot 45, Room B1" },
+        { new("Odin", WorldSource.Text, District.Mist, 22, null), "Odin · Mist · Ward 22" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Displayed))]
+    public void DisplaysAddresses(HousingAddress address, string expected) =>
+        Assert.Equal(expected, AddressText.Display(address));
 }
