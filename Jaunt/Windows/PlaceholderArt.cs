@@ -25,7 +25,7 @@ internal static class PlaceholderArt
         Interests.Cafes => FontAwesomeIcon.MugHot,
         Interests.Spa => FontAwesomeIcon.Spa,
         Interests.Gambling => FontAwesomeIcon.Dice,
-        Interests.LiveMusic => FontAwesomeIcon.Music,
+        Interests.LiveShows => FontAwesomeIcon.Music,
         Interests.Games => FontAwesomeIcon.Trophy,
         Interests.Art => FontAwesomeIcon.Palette,
         Interests.Photography => FontAwesomeIcon.Camera,

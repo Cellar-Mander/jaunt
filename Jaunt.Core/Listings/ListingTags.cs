@@ -3,6 +3,10 @@ using Jaunt.Core.Text;
 namespace Jaunt.Core.Listings;
 
 /// <summary>What a listing offers, for filtering. A listing usually has several.</summary>
+/// <remarks>
+/// Saved filters store these by number, so never change a member's value or give a removed
+/// member's bit to a new one; renaming is safe.
+/// </remarks>
 [Flags]
 public enum Interests
 {
@@ -17,8 +21,8 @@ public enum Interests
     /// <summary>Cafes and food.</summary>
     Cafes = 1 << 2,
 
-    /// <summary>Live music and open stage.</summary>
-    LiveMusic = 1 << 3,
+    /// <summary>Live music, open stage, comedy and theatre.</summary>
+    LiveShows = 1 << 3,
 
     /// <summary>Games, contests and giveaways, other than gambling.</summary>
     Games = 1 << 4,
@@ -67,9 +71,10 @@ public static class ListingTags
         .. Each(Interests.Cafes,
             "cafe", "café", "coffee", "tea", "teahouse", "bakery", "restaurant", "food", "dining", "diner",
             "bistro", "dinner", "ramen", "maidcafe", "喫茶", "珈琲", "カフェ", "レストラン", "飲食店", "食べ物"),
-        .. Each(Interests.LiveMusic,
+        .. Each(Interests.LiveShows,
             "bard", "open stage", "open mic", "live music", "concert", "singer", "singing", "band", "karaoke",
-            "performance", "performer", "musician", "rock show", "ライブ", "演奏"),
+            "performance", "performer", "musician", "rock show", "comedy", "comedian", "stand up", "standup",
+            "improv", "theater", "theatre", "ライブ", "演奏"),
         .. Each(Interests.Games,
             "game", "triple triad", "truth or dare", "trivia", "mahjong", "bingo", "tournament", "fightclub",
             "fight club", "fight ring", "fight pit", "fight night", "fight bar", "fight den", "fighting club",
@@ -110,10 +115,10 @@ public static class ListingTags
         ["Food"] = Interests.Cafes,
         ["Restaurant"] = Interests.Cafes,
         ["Maid cafe"] = Interests.Cafes,
-        ["Bards"] = Interests.LiveMusic,
-        ["Open stage"] = Interests.LiveMusic,
-        ["Performances"] = Interests.LiveMusic,
-        ["Shows and Performances"] = Interests.LiveMusic,
+        ["Bards"] = Interests.LiveShows,
+        ["Open stage"] = Interests.LiveShows,
+        ["Performances"] = Interests.LiveShows,
+        ["Shows and Performances"] = Interests.LiveShows,
         ["Gambling"] = Interests.Gambling,
         ["Casino"] = Interests.Gambling,
         ["Deathroll"] = Interests.Gambling,
@@ -142,8 +147,8 @@ public static class ListingTags
         ["Bars & Lounges"] = Interests.Bars,
         ["Cafes & Dining"] = Interests.Cafes,
         ["Cafes, Taverns & Inns"] = Interests.Cafes | Interests.Bars,
-        ["Live Performances"] = Interests.LiveMusic,
-        ["Performance & Shows"] = Interests.LiveMusic,
+        ["Live Performances"] = Interests.LiveShows,
+        ["Performance & Shows"] = Interests.LiveShows,
         ["Gambling Available"] = Interests.Gambling,
         ["Casino & Gambling"] = Interests.Gambling,
         ["Includes giveaways"] = Interests.Games,

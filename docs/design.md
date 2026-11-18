@@ -508,8 +508,8 @@ for the browser's filters (`d68d407e`) and detail pane (`5d36be20`). Both are wo
 fields the source sent, so a change to the keyword lists applies to cached listings without fetching
 again.
 
-- **Interests**: Clubs (and DJs), Bars (and taverns), Cafes (and food), Live music (and open stage),
-  Games (contests and giveaways too), Gambling, Roleplay, Spa (and baths), Art, Photography, Tarot,
+- **Interests**: Clubs (and DJs), Bars (and taverns), Cafes (and food), Live shows (live music, open
+  stage, comedy and theatre), Games (contests and giveaways too), Gambling, Roleplay, Spa (and baths), Art, Photography, Tarot,
   and Chill (AFK, open house, 24/7). A listing has any number of them; the median venue ad has two.
 - **Keywords**: developer-maintained lists in `ListingTags`, read from an ad's text, an event's
   title or a venue's name after Party Finder glyphs are decoded (boxed letters read as letters) and
@@ -519,7 +519,9 @@ again.
   and a word ending in "s" also matches without it (`bars`, `hot springs`); "starts" is not "art"
   and "team" is not "tea". Japanese keywords (喫茶, 雑談, 読書, 見学, 珈琲, ...) match anywhere in the
   text. Gambling shorthand (`DRT`, `BJ`, `50/50`, raffle) counts as Gambling, and bingo, trivia,
-  prizes, giveaways and fighting (fight club, fight ring, brawls, wrestling, duels) as Games;
+  prizes, giveaways and fighting (fight club, fight ring, brawls, wrestling, duels) as Games,
+  and comedy, comedians, stand-up, improv and theatre as Live shows ("play", "drama", "show" and
+  "line" don't count, being common in other ads);
   "fight" alone doesn't count, as FC ads use it ("we fight together"); a Twitch link or "party" counts as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
   lists were tuned on those ads.
 - **Source tags**: FFXIV Venues' owner-chosen tags and Partake's event tags map to interests,
@@ -814,7 +816,7 @@ them; the browser draws them.
 - **Placeholders** (`Placeholders`, `PlaceholderArt`; decisions with the user, `9ef7d11c`):
   - Icon: a FontAwesome pictogram in the disabled text colour, 0.55 of the square, for the entry's
     first interest in venue-type-first order: Clubs (headphones), Bars (martini glass), Cafes (steaming
-    mug), Spa, Gambling (dice), Live music (note), Games (trophy), Art (palette), Photography (camera),
+    mug), Spa, Gambling (dice), Live shows (note), Games (trophy), Art (palette), Photography (camera),
     Tarot (moon), Roleplay (theatre masks), Chill (couch). An entry with no interests shows a house.
   - Splash (`Backdrops`): a loading screen read from the game's data (the `TerritoryType`'s
     `LoadingImage`, the 1920×1080 version), so nothing ships with the plugin. It is the screen of the
