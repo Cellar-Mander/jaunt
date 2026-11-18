@@ -40,7 +40,13 @@ public class ListingTagsTests
     [InlineData("Live: twitch.tv/somedj", Interests.Clubs)]
     [InlineData("Dark alt lounge, cocktails", Interests.Bars)]
     [InlineData("Maid cafe with fresh coffee", Interests.Cafes)]
-    [InlineData("Open Stage all night", Interests.LiveMusic)]
+    [InlineData("Open Stage all night", Interests.LiveShows)]
+    [InlineData("Giggle Fits Comedy open Tues at 8pm EST", Interests.LiveShows)]
+    [InlineData("Looking for more rotating comedians!", Interests.LiveShows)]
+    [InlineData("Stand-up night", Interests.LiveShows)]
+    [InlineData("Standup and improv", Interests.LiveShows)]
+    [InlineData("☆The Nightmare Before Starlight☆ theater♢music", Interests.LiveShows)]
+    [InlineData("Community theatre tonight", Interests.LiveShows)]
     [InlineData("Gamba, DRT and a raffle", Interests.Gambling)]
     [InlineData("Bingo and trivia, prizes to win", Interests.Games)]
     [InlineData("50/50 at midnight", Interests.Gambling)]
@@ -71,6 +77,7 @@ public class ListingTagsTests
     [InlineData("Ward 24 plot 7")] // 24 and 7 apart aren't 24/7
     [InlineData("Open the stage door")] // a phrase's words must be consecutive
     [InlineData("Open stagehands wanted")] // a phrase's words are whole words too
+    [InlineData("Come play whose line, no drama")] // play, drama and line aren't keywords
     [InlineData("")]
     public void KeywordsMatchWholeWordsOnly(string text) => Assert.Equal(Interests.None, InterestsOf(text) & ~Interests.Clubs);
 

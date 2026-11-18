@@ -158,7 +158,7 @@ public class ConfigurationRoundTripTests
             Filters = new BrowserFilters
             {
                 SfwOnly = false, Favourites = true, HideVisited = true, ShowHidden = true,
-                Tags = Interests.Bars | Interests.LiveMusic, Search = "jazz -\"open mic\"",
+                Tags = Interests.Bars | Interests.LiveShows, Search = "jazz -\"open mic\"",
             },
         };
 
@@ -168,7 +168,7 @@ public class ConfigurationRoundTripTests
         Assert.True(loaded.Favourites);
         Assert.True(loaded.HideVisited);
         Assert.True(loaded.ShowHidden);
-        Assert.Equal(Interests.Bars | Interests.LiveMusic, loaded.Tags);
+        Assert.Equal(Interests.Bars | Interests.LiveShows, loaded.Tags);
         Assert.Equal("jazz -\"open mic\"", loaded.Search);
     }
 

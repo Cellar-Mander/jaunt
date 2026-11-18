@@ -12,7 +12,7 @@ public static class Placeholders
     // What the place is comes before what happens there
     private static readonly Interests[] IconOrder =
     [
-        Interests.Clubs, Interests.Bars, Interests.Cafes, Interests.Spa, Interests.Gambling, Interests.LiveMusic,
+        Interests.Clubs, Interests.Bars, Interests.Cafes, Interests.Spa, Interests.Gambling, Interests.LiveShows,
         Interests.Games, Interests.Art, Interests.Photography, Interests.Tarot, Interests.Roleplay, Interests.Chill,
     ];
 
