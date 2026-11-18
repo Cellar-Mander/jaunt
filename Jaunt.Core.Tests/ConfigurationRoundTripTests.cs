@@ -151,6 +151,25 @@ public class ConfigurationRoundTripTests
     }
 
     [Fact]
+    public void InterestsKeepTheNumbersSavedFiltersUse()
+    {
+        // Saved filters store interests by number: a changed or reused bit would make a saved
+        // filter pick a different interest. Add new interests here with a bit no one has used.
+        (Interests Interest, int Bit)[] saved =
+        [
+            (Interests.Clubs, 1 << 0), (Interests.Bars, 1 << 1), (Interests.Cafes, 1 << 2),
+            (Interests.LiveShows, 1 << 3), (Interests.Games, 1 << 4), (Interests.Roleplay, 1 << 5),
+            (Interests.Spa, 1 << 6), (Interests.Art, 1 << 7), (Interests.Photography, 1 << 8),
+            (Interests.Tarot, 1 << 9), (Interests.Chill, 1 << 10), (Interests.Gambling, 1 << 11),
+        ];
+
+        Assert.All(saved, s => Assert.Equal(s.Bit, (int)s.Interest));
+        Assert.Equal(
+            Enum.GetValues<Interests>().Where(i => i != Interests.None).Order(),
+            saved.Select(s => s.Interest).Order());
+    }
+
+    [Fact]
     public void FiltersLoadBack()
     {
         var config = new TestConfiguration

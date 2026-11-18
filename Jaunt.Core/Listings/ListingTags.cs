@@ -3,6 +3,10 @@ using Jaunt.Core.Text;
 namespace Jaunt.Core.Listings;
 
 /// <summary>What a listing offers, for filtering. A listing usually has several.</summary>
+/// <remarks>
+/// Saved filters store these by number, so never change a member's value or give a removed
+/// member's bit to a new one; renaming is safe.
+/// </remarks>
 [Flags]
 public enum Interests
 {
