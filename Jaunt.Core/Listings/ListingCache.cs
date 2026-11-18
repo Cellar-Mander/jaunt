@@ -245,7 +245,7 @@ public sealed partial class ListingCache
             // Stryker disable once String : the message is for the developer reading the log, not behaviour
             throw new ArgumentException($"{source} is never fetched", nameof(source));
         if (RefreshPolicy.ByDataCentre(source) == string.IsNullOrEmpty(dataCentre))
-            // Stryker disable once String : the message is for the developer reading the log, not behaviour
+            // Stryker disable once String,Conditional : the message is for the developer reading the log, not behaviour
             throw new ArgumentException($"{source} is fetched {(RefreshPolicy.ByDataCentre(source) ? "by data centre" : "for every region")}", nameof(dataCentre));
         lastFetched[(source, dataCentre ?? "")] = now;
         fetchTimesChanged = true;

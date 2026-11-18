@@ -7,6 +7,13 @@ public class XivpfTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
 
+    [Fact]
+    public void SettingsLinksToTheSite()
+    {
+        // revert-check: not revert-sensitive (kills a surviving mutant: pins existing behaviour)
+        Assert.Equal("https://xivpf.com/", Xivpf.SiteUrl.AbsoluteUri);
+    }
+
     private const string Venue = "Moonlit Lounge  Mist W14 P33 — open now!\nmoonlit.carrd.co";
 
     /// <summary>One listing in the API's shape, trimmed to the fields Jaunt reads plus a few it ignores.</summary>

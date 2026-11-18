@@ -20,7 +20,11 @@ public sealed record Occurrence(DateTimeOffset? Start, DateTimeOffset? End)
 /// <param name="Occurrences">Earliest first.</param>
 public sealed record ListingSchedule(bool AlwaysOpen, bool OneOff, IReadOnlyList<Occurrence> Occurrences)
 {
-    public static readonly ListingSchedule None = new(false, false, []);
+    public static readonly ListingSchedule None = new(
+        AlwaysOpen: false,
+        // Stryker disable once Boolean : with no openings, Listed gives none either way, so None never reaches the browser
+        OneOff: false,
+        Occurrences: []);
 
     public static readonly ListingSchedule Always = new(true, false, []);
 }

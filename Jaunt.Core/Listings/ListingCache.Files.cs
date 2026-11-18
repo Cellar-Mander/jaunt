@@ -245,8 +245,9 @@ public sealed partial class ListingCache
         foreach (var (key, time) in Deserialise<SavedFetchTimes>(json)?.LastFetched ?? [])
         {
             var slash = key.IndexOf('/', StringComparison.Ordinal);
-            var dataCentre = slash < 0 ? "" : key[(slash + 1)..];
-            if (KnownSource(slash < 0 ? key : key[..slash]) is { } source && RefreshPolicy.Minimum(source) is not null
+            // Stryker disable once Equality : a key starting with "/" names no source either way, so it is dropped
+            var (name, dataCentre) = slash < 0 ? (key, "") : (key[..slash], key[(slash + 1)..]);
+            if (KnownSource(name) is { } source && RefreshPolicy.Minimum(source) is not null
                 && RefreshPolicy.ByDataCentre(source) == (dataCentre.Length > 0))
                 lastFetched[(source, dataCentre)] = time;
         }

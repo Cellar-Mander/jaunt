@@ -724,6 +724,15 @@ public class ListingCacheTests
     public void AFetchMustNameADataCentreOnlyForASourceFetchedByDataCentre(ListingSource source, string? dataCentre) =>
         Assert.Throws<ArgumentException>(() => new ListingCache().Fetched(source, Now, dataCentre));
 
+    [Theory]
+    [InlineData(ListingSource.InGamePartyFinder)]
+    [InlineData(ListingSource.Shout)]
+    public void ASourceThatIsNeverFetchedCannotRecordAFetch(ListingSource source)
+    {
+        // revert-check: not revert-sensitive (kills a mutant that had no coverage: pins existing behaviour)
+        Assert.Throws<ArgumentException>(() => new ListingCache().Fetched(source, Now));
+    }
+
     [Fact]
     public void LoadingDropsFetchTimesWhoseDataCentreDoesntMatchHowTheSourceIsFetched()
     {
