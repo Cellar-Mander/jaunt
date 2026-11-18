@@ -737,7 +737,7 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   - **Favourites** lists only entries showing the favourite mark; **Hide visited** leaves out those
     showing the visited mark.
   - **Show hidden** lists hidden entries too; otherwise they are left out (see "Hide").
-  - **Tags** opens a menu of interests to tick; the entry must have every one ticked. Each ticked
+  - **Tags**, with a downward caret after its label, opens a menu of interests to tick; the entry must have every one ticked. Each ticked
     interest also shows as a lit chip ("Bars ×") that unticks it when clicked.
   - **Search**: space-separated terms must all match, ignoring case, anywhere in the entry's
     titles as shown (every member's), its About text or its interests' labels. `-term` leaves out

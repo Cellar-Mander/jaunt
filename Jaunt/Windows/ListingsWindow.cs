@@ -361,7 +361,7 @@ internal sealed class ListingsWindow : Window
         if (Chip("Show hidden", filters.ShowHidden, "List hidden venues too"))
             (changed, filters.ShowHidden) = (true, !filters.ShowHidden);
 
-        if (Chip("Tags", false, "List only listings with every tag picked"))
+        if (MenuChip("##tagsMenu", "Tags", "List only listings with every tag picked"))
             ImGui.OpenPopup("##tags");
 
         // Indexed, as enumerating through the list's interface allocates
@@ -415,6 +415,31 @@ internal sealed class ListingsWindow : Window
             clicked = ImGui.Button(label);
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(tip);
+        return clicked;
+    }
+
+    /// <summary>An off <see cref="Chip"/> that opens a menu, with a downward caret after its label to say so.</summary>
+    /// <param name="id">The button's ID, hidden ("##tagsMenu").</param>
+    private bool MenuChip(string id, string label, string tip)
+    {
+        var style = ImGui.GetStyle();
+        var labelWidth = ImGui.CalcTextSize(label).X;
+        var caretSize = ImGui.GetFontSize() * 0.6f;
+        var width = labelWidth + style.ItemInnerSpacing.X + caretSize + (style.FramePadding.X * 2);
+        FlowNext(width);
+        bool clicked;
+        using (Scoped.Style(ImGuiStyleVar.FrameRounding, ImGui.GetFrameHeight() / 2))
+        using (Scoped.Style(ImGuiStyleVar.FrameBorderSize, Math.Max(1, ImGuiHelpers.GlobalScale)))
+        using (Scoped.Color(ImGuiCol.Button, Vector4.Zero))
+            clicked = ImGui.Button(id, new Vector2(width, ImGui.GetFrameHeight()));
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(tip);
+        var min = ImGui.GetItemRectMin();
+        var drawList = ImGui.GetWindowDrawList();
+        var colour = ImGui.GetColorU32(ImGuiCol.TextDisabled);
+        drawList.AddText(min + style.FramePadding, colour, label);
+        var caretX = min.X + style.FramePadding.X + labelWidth + style.ItemInnerSpacing.X + (caretSize / 2);
+        DrawIcon(drawList, FontAwesomeIcon.CaretDown, new Vector2(caretX, (min.Y + ImGui.GetItemRectMax().Y) / 2), caretSize, colour);
         return clicked;
     }
 
