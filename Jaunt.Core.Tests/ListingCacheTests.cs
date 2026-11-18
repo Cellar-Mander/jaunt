@@ -67,6 +67,31 @@ public class ListingCacheTests
     }
 
     [Fact]
+    public void AnAdSeenAgainAfterItStoppedCountingAsListedIsFirstSeenAgain()
+    {
+        // The same shout the next evening is a new opening, not last night's still running
+        var cache = new ListingCache();
+        var listing = cache.SeenAd(ListingSource.Shout, "Nine", "Club Nine open from 9pm", null, Now.AddHours(-20));
+
+        cache.SeenAd(ListingSource.Shout, "Nine", "Club Nine open from 9pm", null, Now);
+
+        Assert.Equal(Now, listing.FirstSeen);
+    }
+
+    [Theory]
+    [InlineData(RefreshPolicy.DefaultCooldownMinutes, 0)] // listed until 70 minutes after the 3-hours-ago sighting
+    [InlineData(180, -3)] // fetched every 3 hours, so still listed
+    public void AFetchedAdCountsAsListedUntilItsCooldownHasPassed(int cooldownMinutes, int firstSeenHours)
+    {
+        var cache = new ListingCache();
+        var listing = cache.SeenAd(ListingSource.Xivpf, "7", "Open from 9pm", null, Now.AddHours(-3), cooldownMinutes);
+
+        cache.SeenAd(ListingSource.Xivpf, "7", "Open from 9pm", null, Now, cooldownMinutes);
+
+        Assert.Equal(Now.AddHours(firstSeenHours), listing.FirstSeen);
+    }
+
+    [Fact]
     public void AnEarlierSightingOfTheSameTextMovesFirstSeenBack()
     {
         var cache = new ListingCache();
@@ -84,12 +109,12 @@ public class ListingCacheTests
     public void AnAdsFirstSightingIsSaved(ListingSource source)
     {
         var cache = new ListingCache();
-        cache.SeenAd(source, "7", "Open until 1am", "Cuchulainn", Now.AddHours(-2));
+        cache.SeenAd(source, "7", "Open until 1am", "Cuchulainn", Now.AddMinutes(-30));
         cache.SeenAd(source, "7", "Open until 1am", "Cuchulainn", Now);
 
         var back = SavedFiles.RoundTrip(cache).Find(source, "7")!;
 
-        Assert.Equal((Now.AddHours(-2), Now), (back.FirstSeen, back.LastSeen));
+        Assert.Equal((Now.AddMinutes(-30), Now), (back.FirstSeen, back.LastSeen));
     }
 
     [Fact]

@@ -112,7 +112,7 @@ internal sealed class FetchedListings : IDisposable
             {
                 var json = await http.GetStringAsync(Core.Listings.Xivpf.Url, token).ConfigureAwait(false);
                 var ads = Core.Listings.Xivpf.Parse(json);
-                return new Recording(ads.Count, (c, now) => Core.Listings.Xivpf.Record(c, ads, now, region));
+                return new Recording(ads.Count, (c, now) => Core.Listings.Xivpf.Record(c, ads, now, region, configuration.RefreshCooldownMinutes));
             },
             region, cache, configuration, framework, log, save, handler ?? NewHandler(), time ?? TimeProvider.System);
 

@@ -49,15 +49,23 @@ public sealed partial class ListingCache
     /// </summary>
     /// <param name="adText">The ad's text as the game sends it, glyphs included.</param>
     /// <param name="listedOn">The world the ad was put up on, or null if the source doesn't say.</param>
-    public CachedListing SeenAd(ListingSource source, string id, string adText, string? listedOn, DateTimeOffset now)
+    /// <param name="cooldownMinutes">
+    /// The Settings cooldown, for how long a fetched ad counts as listed after it was last seen
+    /// (<see cref="Schedules.StillListed"/>).
+    /// </param>
+    public CachedListing SeenAd(
+        ListingSource source, string id, string adText, string? listedOn, DateTimeOffset now,
+        int cooldownMinutes = RefreshPolicy.DefaultCooldownMinutes)
     {
+        // Seen again after it stopped counting as listed: put up again, as a nightly shout is
+        var relisted = Find(source, id) is { } known && !Schedules.StillListed(source, known.LastSeen, now, cooldownMinutes);
         var listing = Touch(source, id, now);
         // New text is a new title, which the marks file keeps
         if (listing.IsMarked && (listing.OneOff || !string.Equals(listing.Description, adText, StringComparison.Ordinal)))
             marksChanged = true;
         listing.OneOff = false;
-        // New text starts a new first sighting; the same text seen earlier moves it back
-        if (listing.FirstSeen is not { } first || now < first || !string.Equals(listing.Description, adText, StringComparison.Ordinal))
+        // New text or a relisting starts a new first sighting; the same text seen earlier moves it back
+        if (relisted || listing.FirstSeen is not { } first || now < first || !string.Equals(listing.Description, adText, StringComparison.Ordinal))
             listing.FirstSeen = now;
         listing.Description = adText;
         listing.ListedOn = listedOn;

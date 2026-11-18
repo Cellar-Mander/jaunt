@@ -158,7 +158,8 @@ public static class Schedules
             // The ad's language isn't known, so a European ad without a zone takes London's
             var zone = OpeningTimeResolver.Written(time.Zone) ?? unstatedZone ?? OpeningTimeResolver.Zone(null, region, language: null);
             // "Open until 12am" seen again after midnight is over, not open until the next midnight
-            var window = OpeningTimeResolver.Resolve(time, time.Start is null ? firstSeen ?? seen : seen, zone);
+            // and "open from 9pm" still listed then is the opening already under way, not the next one
+            var window = OpeningTimeResolver.Resolve(time, time.Start is null || time.Day == OpeningDay.None ? firstSeen ?? seen : seen, zone);
             if (window.Start is { } start)
             {
                 timed = true;
