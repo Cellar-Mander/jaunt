@@ -12,9 +12,9 @@ tests should hold, including edge cases and limits.
 instants. `OpeningTimesCorpusTests` checks every labelled corpus ad (`Corpus/README.md`, `times`).
 
 - **Open now**: "open now", "now open", "is open", a bare "NOW", 営業中 and similar. A bare "open"
-  doesn't count when a time, "from", "tonight" and the like follow it, or a word says what is open
-  ("Open Stage", "Open Recruitment", "open to all"). "starts now" and "now hiring" don't count.
-  A closing time with no start ("open until 1am") belongs to the now opening.
+  doesn't count when a time, "from", "tonight", a weekday and the like follow it, or a word says
+  what is open ("Open Stage", "Open Recruitment", "open to all"). "starts now" and "now hiring"
+  don't count. A closing time with no start ("open until 1am") belongs to the now opening.
 - **Always**: "24/7" and "always open". 24/7 is never a date.
 - **Times** need AM/PM, a zone, minutes or 時 after the hour; a bare number ("Gob 14-35", "W30") is
   not a time. Bare hours 1–11 read as evening ("8-12" is 20:00–00:00); a leading zero, an hour over
@@ -25,9 +25,11 @@ instants. `OpeningTimesCorpusTests` checks every labelled corpus ad (`Corpus/REA
   missing zones use the region default (`aca1be81`): NA New York, OCE Sydney, JP Tokyo, EU Berlin
   for German or French ads and London otherwise. A lower-case "st" after 1 or 21 is an ordinal.
 - **Days**: today/tonight/tomorrow apply to the whole ad, the first one written wins. A weekday
-  applies only to a time or date right after it ("FRI 17 ST"), so "Goth Friday" names an event. A
-  date beats both. a/b dates take whichever of month/day and day/month is nearer the day seen,
-  month/day on a tie; a year is never written, so the nearest year is used.
+  applies only to a time or date right after it ("FRI 17 ST", "Tues at 8pm"), so "Goth Friday"
+  names an event. A date beats both. Each time is on the last date before it, or on the first date
+  when none comes before it ("11/13 8pm ⇔ 11/14 7pm" is two nights, "8pm on 11/13" one). a/b
+  dates take whichever of month/day and day/month is nearer the day seen, month/day on a tie; a
+  year is never written, so the nearest year is used.
 - **Resolving**: an undated start is today's in the ad's zone, unless yesterday's overnight opening
   is still running. A weekday is the next one, counting today. A closing time alone is the next one
   after the ad was first seen with its text, so it stays put while the ad stays listed, unless one

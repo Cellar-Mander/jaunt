@@ -29,10 +29,11 @@ public static partial class OpeningTimes
         var twentyFourHour = tokens.Any(t => t.Kind == Kind.Cjk);
 
         var always = FindAlways(tokens, used);
-        var date = FindDate(tokens, used, seen);
+        var dates = FindDates(tokens, used, seen);
         var spans = FindSpans(text, tokens, used);
         var (adDay, weekdays) = FindDays(text, tokens, spans);
         var now = FindNow(text, tokens, spans);
+        var spanDates = DatesOfSpans(dates, spans);
 
         var result = new List<OpeningTime>();
         var endOnly = spans.Where(s => s.Start is null).ToList();
@@ -50,6 +51,7 @@ public static partial class OpeningTimes
         foreach (var span in spans.Where(s => s.Start is not null))
         {
             var hasWeekday = weekdays.TryGetValue(span, out var w);
+            DateOnly? date = spanDates.TryGetValue(span, out var d) ? d : null;
             var (day, weekday) = date is not null ? (OpeningDay.Date, (DayOfWeek?)null)
                 : hasWeekday ? (OpeningDay.Weekday, w)
                 : (adDay, null);
@@ -59,12 +61,14 @@ public static partial class OpeningTimes
 
         foreach (var span in endOnly)
         {
+            DateOnly? date = spanDates.TryGetValue(span, out var d) ? d : null;
             var day = date is not null ? OpeningDay.Date : adDay;
             result.Add(new OpeningTime(false, false, day, null, date, null, Single(span.End!.Value, twentyFourHour), span.Zone));
         }
 
-        if (result.Count == 0 && (date is not null || adDay != OpeningDay.None))
-            result.Add(new OpeningTime(false, false, date is not null ? OpeningDay.Date : adDay, null, date, null, null, null));
+        DateOnly? firstDate = dates.Count > 0 ? dates[0].Date : null;
+        if (result.Count == 0 && (firstDate is not null || adDay != OpeningDay.None))
+            result.Add(new OpeningTime(false, false, firstDate is not null ? OpeningDay.Date : adDay, null, firstDate, null, null, null));
 
         return result;
 
