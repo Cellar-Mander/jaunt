@@ -13,8 +13,6 @@ public class OpeningTimesCorpusTests
     {
         ["pf-0217"] = "\"Commissons open!\": a shop taking orders reads as open now",
         ["pf-0348"] = "\"Open for Visits\": a house to look round reads as open now, while \"Open for a limited time\" (pf-0345) is",
-        ["pf-0394"] = "\"open Tues at 8pm\": \"Tues\" isn't read as Tuesday, and \"open\" before a day reads as open now",
-        ["pf-0395"] = "\"11/13 8est ⇔ 11/14 7est\": both times are read on the first date",
     };
 
     private sealed record Ad(string Text, DateOnly Seen, string[] Expected);

@@ -44,6 +44,11 @@ public class OpeningTimesDayTests
     [InlineData("Ma 3 8pm", "20:00-")]
     [InlineData("11/5/2026 8pm", "20:00-")] // a third part is not read
     [InlineData("11/5:30", "")]
+    [InlineData("11/13 8est ⇔ 11/14 7est", "2026-11-13 20:00- EST ; 2026-11-14 19:00- EST")] // each time takes the date before it
+    [InlineData("11/13 8pm, 11/14 7pm, 11/15 6pm", "2026-11-13 20:00- ; 2026-11-14 19:00- ; 2026-11-15 18:00-")]
+    [InlineData("8pm EST 11/13", "2026-11-13 20:00- EST")] // or the first date, when none comes before it
+    [InlineData("Nov 13 8pm and Nov 14, until 11pm", "2026-11-13 20:00- ; 2026-11-14 -23:00")]
+    [InlineData("11/13 ⇔ 11/14", "2026-11-13")] // dates with no time give the first date
     public void Dates(string text, string expected) => Assert.Equal(expected, P(text));
 
     [Theory]
@@ -61,6 +66,10 @@ public class OpeningTimesDayTests
     [InlineData("Sat. 8-10p est", "sat 20:00-22:00 EST")]
     [InlineData("MONDAYS 7:30PM ET", "mon 19:30- ET")]
     [InlineData("tues, 8pm", "tue 20:00-")]
+    [InlineData("Tues at 8pm EST", "tue 20:00- EST")] // "at" between a weekday and its time
+    [InlineData("Tue 8pm", "tue 20:00-")]
+    [InlineData("Tuesday at 8pm", "tue 20:00-")]
+    [InlineData("Fri @ at 8pm", "fri 20:00-")]
     [InlineData("Goth Friday w DJs 11-3 EST", "23:00-03:00 EST")] // not next to the time: an event name
     [InlineData("Friday night vibes", "")] // a weekday with no time says nothing
     [InlineData("TONIGHT | DJs | 8PM - 12AM ET", "today 20:00-00:00 ET")] // tonight applies to the whole ad

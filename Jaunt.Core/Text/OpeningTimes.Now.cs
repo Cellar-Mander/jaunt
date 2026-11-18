@@ -18,7 +18,7 @@ public static partial class OpeningTimes
 
     /// <summary>
     /// "open now", "now open", "is open", "NOW", 営業中. A bare "open" counts unless a time, "from",
-    /// "tonight" and the like say when it opens, or a word after it says what is open ("Open Stage",
+    /// "tonight", a weekday and the like say when it opens, or a word after it says what is open ("Open Stage",
     /// "Open Recruitment", "open to all"). "starts now" and "now hiring" don't count.
     /// </summary>
     private static bool FindNow(string text, List<Token> tokens, List<Span> spans)
@@ -46,7 +46,9 @@ public static partial class OpeningTimes
             if (!IsWord(tokens[i], "open"))
                 continue;
 
-            var whenFollows = next is { Kind: Kind.Word } && next.Value.Text.ToLowerInvariant() is "from" or "tonight" or "tonite" or "today" or "tomorrow";
+            var whenFollows = next is { Kind: Kind.Word }
+                && (next.Value.Text.ToLowerInvariant() is "from" or "tonight" or "tonite" or "today" or "tomorrow"
+                    || WeekdayOf(next.Value.Text.ToLowerInvariant()) is not null);
             if (whenFollows)
                 continue;
 
