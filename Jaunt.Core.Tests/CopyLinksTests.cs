@@ -41,11 +41,24 @@ public class CopyLinksTests
         Assert.Equal(new CopyLink(CopyLinkKind.EventPage, new Uri("https://partake.gg/events/1234")), copy);
     }
 
-    [Fact]
-    public void AnEventPageAnAdLinksCounts() =>
+    [Theory]
+    [InlineData("https://prtk.gg/77")]
+    [InlineData("https://partake.gg/events/77")]
+    [InlineData("https://www.partake.gg/events/77")]
+    public void AnEventPageAnAdLinksCounts(string uri) =>
         Assert.Equal(
-            new CopyLink(CopyLinkKind.EventPage, new Uri("https://prtk.gg/77")),
-            CopyLinks.Choose(Links("https://prtk.gg/77"), Members((ListingSource.FfxivVenues, "v1"))));
+            new CopyLink(CopyLinkKind.EventPage, new Uri(uri)),
+            CopyLinks.Choose(Links(uri), Members((ListingSource.FfxivVenues, "v1"))));
+
+    [Fact]
+    public void AHostEndingInAListingSitesNameIsntTheSite() =>
+        Assert.Equal(
+            new CopyLink(CopyLinkKind.Website, new Uri("https://notffxivvenues.com/")),
+            CopyLinks.Choose(Links("https://notffxivvenues.com/"), []));
+
+    [Fact]
+    public void OnlyWebLinksAreCopied() =>
+        Assert.Equal(new CopyLink(CopyLinkKind.None), CopyLinks.Choose(Links("ftp://ffxivvenues.com/venue/x", "ftp://partake.gg/e"), []));
 
     [Fact]
     public void AnFfxivVenuesMembersPageIsTheVenuePage()
