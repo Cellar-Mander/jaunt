@@ -58,14 +58,17 @@ public static class Xivpf
     /// The worlds the character can travel to; an ad put up on another world, or on none xivpf names, is
     /// left out. Null keeps every ad, as when loading the cache.
     /// </param>
-    public static void Record(ListingCache cache, IEnumerable<Ad> ads, DateTimeOffset now, TravelRegion? region = null)
+    /// <param name="cooldownMinutes">The Settings cooldown, for <see cref="ListingCache.SeenAd"/>.</param>
+    public static void Record(
+        ListingCache cache, IEnumerable<Ad> ads, DateTimeOffset now, TravelRegion? region = null,
+        int cooldownMinutes = RefreshPolicy.DefaultCooldownMinutes)
     {
         foreach (var ad in ads)
         {
             if (region is not null && !region.IncludesWorld(ad.ListedOn))
                 continue;
 
-            cache.SeenAd(ListingSource.Xivpf, ad.Id, ad.Description, ad.ListedOn, now);
+            cache.SeenAd(ListingSource.Xivpf, ad.Id, ad.Description, ad.ListedOn, now, cooldownMinutes);
             if (cache.Find(ListingSource.InGamePartyFinder, ad.Id) is { } inGame
                 && string.Equals(inGame.Description, ad.Description, StringComparison.Ordinal))
                 cache.SeenElsewhere(inGame, now);

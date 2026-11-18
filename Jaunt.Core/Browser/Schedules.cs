@@ -20,7 +20,11 @@ public sealed record Occurrence(DateTimeOffset? Start, DateTimeOffset? End)
 /// <param name="Occurrences">Earliest first.</param>
 public sealed record ListingSchedule(bool AlwaysOpen, bool OneOff, IReadOnlyList<Occurrence> Occurrences)
 {
-    public static readonly ListingSchedule None = new(false, false, []);
+    public static readonly ListingSchedule None = new(
+        AlwaysOpen: false,
+        // Stryker disable once Boolean : with no openings, Listed gives none either way, so None never reaches the browser
+        OneOff: false,
+        Occurrences: []);
 
     public static readonly ListingSchedule Always = new(true, false, []);
 }
@@ -158,7 +162,8 @@ public static class Schedules
             // The ad's language isn't known, so a European ad without a zone takes London's
             var zone = OpeningTimeResolver.Written(time.Zone) ?? unstatedZone ?? OpeningTimeResolver.Zone(null, region, language: null);
             // "Open until 12am" seen again after midnight is over, not open until the next midnight
-            var window = OpeningTimeResolver.Resolve(time, time.Start is null ? firstSeen ?? seen : seen, zone);
+            // and "open from 9pm" still listed then is the opening already under way, not the next one
+            var window = OpeningTimeResolver.Resolve(time, time.Start is null || time.Day == OpeningDay.None ? firstSeen ?? seen : seen, zone);
             if (window.Start is { } start)
             {
                 timed = true;

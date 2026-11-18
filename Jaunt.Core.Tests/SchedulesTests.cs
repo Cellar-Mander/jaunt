@@ -256,6 +256,19 @@ public class SchedulesTests
     }
 
     [Fact]
+    public void AStartAloneStaysPutWhileTheAdStaysListedPastMidnight()
+    {
+        // "open from 9pm EST" first seen at 21:30 EST and still listed at 00:30 EST: tonight's is under way, not tomorrow's
+        var firstSeen = new DateTimeOffset(2026, 11, 15, 2, 30, 0, TimeSpan.Zero);
+        var now = new DateTimeOffset(2026, 11, 15, 5, 30, 0, TimeSpan.Zero);
+        var times = Schedules.ParseAd("Club Nine open from 9pm EST", now);
+
+        var schedule = Schedules.ForAd(times, now, PartyFinderRegion.NorthAmerica, listed: true, now, firstSeen: firstSeen);
+
+        Assert.Equal([new Occurrence(new DateTimeOffset(2026, 11, 15, 2, 0, 0, TimeSpan.Zero), null)], schedule.Occurrences);
+    }
+
+    [Fact]
     public void AnAdOpenNowNoLongerListedIsNotOpen() =>
         Assert.Empty(Schedules.ForAd("Open now until 23:00 ST", Now, PartyFinderRegion.Europe, listed: false, Now).Occurrences);
 
