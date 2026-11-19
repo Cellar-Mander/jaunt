@@ -19,6 +19,7 @@ using Jaunt.Core.Display;
 using Jaunt.Core.Images;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
+using Jaunt.Listings;
 using Jaunt.Travel;
 
 namespace Jaunt.Windows;
@@ -53,6 +54,7 @@ internal sealed class ListingsWindow : Window
     private readonly Gazetteer gazetteer;
     private readonly AddressParser parser;
     private readonly Lifestream lifestream;
+    private readonly GamePartyFinder partyFinder;
     private readonly HousingMap housingMap;
     private readonly GamePlaces places;
     private readonly INotificationManager notifications;
@@ -208,11 +210,11 @@ internal sealed class ListingsWindow : Window
     /// the status line of its first opening, its first <see cref="MaxAddresses"/> addresses and places as Location
     /// shows them, whether its free-text location named a place, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1), the further links Location
     /// lists, its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
-    /// its lineup, and what Copy link copies.
+    /// its lineup, what Copy link copies, and the Party Finder ad the Party Finder button opens, with why it can't if so.
     /// </summary>
     private sealed record DetailView(
         Row Row, string? Status, bool Open, AddressLine[] Addresses, bool LocationPlaced, TravelRequest? Travel, int Page, int Discord, int[] Further,
-        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy);
+        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy, PartyFinderAd? Ad, string? AdWhyNot);
 
     /// <summary>
     /// An address or place outside housing as Location shows it: the text shown, the text Copy copies
@@ -229,6 +231,7 @@ internal sealed class ListingsWindow : Window
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="places">The zones outside housing that ads and locations name, for Location.</param>
+    /// <param name="partyFinder">Opens Party Finder ads in the game, for the Party Finder button.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
     /// <param name="saveCache">Saves the listing cache, after a mark changes.</param>
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
@@ -239,7 +242,7 @@ internal sealed class ListingsWindow : Window
     /// <param name="textures">Loads the kept images and the district art for drawing.</param>
     /// <param name="backdrops">The loading screens standing in for missing splash images (<see cref="PlaceholderArt.Backdrops"/>).</param>
     public ListingsWindow(
-        ListingCache cache, Gazetteer gazetteer, GamePlaces places, Lifestream lifestream, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
+        ListingCache cache, Gazetteer gazetteer, GamePlaces places, Lifestream lifestream, GamePartyFinder partyFinder, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
         Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont, ImageStore images, ITextureProvider textures,
         Backdrops backdrops)
         : base("Jaunt###JauntListings")
@@ -256,6 +259,7 @@ internal sealed class ListingsWindow : Window
         this.gazetteer = gazetteer;
         parser = new AddressParser(gazetteer);
         this.lifestream = lifestream;
+        this.partyFinder = partyFinder;
         this.housingMap = housingMap;
         this.places = places;
         this.notifications = notifications;
@@ -830,6 +834,8 @@ internal sealed class ListingsWindow : Window
         // A stream the lineup links needn't be listed again under Location
         int[] further = [.. Enumerable.Range(0, links.Count).Where(i => i != page && i != discord && !lineup.Any(e => e.Twitch == links[i].Uri))];
         var (found, locationPlaced) = PlacesOf(row);
+        var ad = PartyFinderAds.Choose(
+            (row.Members.Count > 0 ? row.Members : [row]).Select(m => m.Listing), now, configuration.RefreshCooldownMinutes, gazetteer, partyFinder.CurrentDataCentre);
         return new DetailView(
             row, status, open,
             [
@@ -840,7 +846,29 @@ internal sealed class ListingsWindow : Window
             addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
             page, discord, further, [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
             [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup,
-            CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]));
+            CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]), ad, AdWhyNot(ad, now, locale));
+    }
+
+    /// <summary>Why the Party Finder button can't open the ad, as its tooltip; null when it can or there is none.</summary>
+    private string? AdWhyNot(PartyFinderAd? ad, DateTimeOffset now, CultureInfo locale)
+    {
+        switch (ad)
+        {
+            case { State: PartyFinderState.NotListed } gone:
+                {
+                    var seen = TimeZoneInfo.ConvertTime(gone.LastSeen, TimeZoneInfo.Local).DateTime;
+                    var time = DisplayFormats.FormatTime(seen, configuration.TimeFormat, locale);
+                    var when = seen.Date == TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local).Date
+                        ? time
+                        : $"{DisplayFormats.FormatDate(seen, configuration.DateFormat, locale)} {time}";
+                    return $"Last seen in the Party Finder at {when}, so it's probably no longer listed.";
+                }
+
+            case { State: PartyFinderState.OtherDataCentre } elsewhere:
+                return $"Listed on {elsewhere.DataCentre}. The game's Party Finder shows only the data centre you're on.";
+            default:
+                return null;
+        }
     }
 
     /// <summary>
@@ -967,10 +995,11 @@ internal sealed class ListingsWindow : Window
         }
     }
 
-    /// <summary>Travel to the first address, and open the first link that isn't a Discord invite.</summary>
+    /// <summary>Travel to the first address, open the Party Finder ad, and open the first link that isn't a Discord invite.</summary>
     private void DrawActions(DetailView view)
     {
         var row = view.Row;
+        var drawn = false;
         var address = row.Details.Addresses.Count > 0 ? row.Details.Addresses[0] : null;
         if (address is not null)
         {
@@ -987,23 +1016,40 @@ internal sealed class ListingsWindow : Window
 
             if (whyNot is not null && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
                 ImGui.SetTooltip(whyNot);
+            drawn = true;
+        }
+
+        if (view.Ad is { } ad)
+        {
+            if (drawn)
+                ImGui.SameLine();
+            using (Scoped.Disabled(view.AdWhyNot is not null))
+            {
+                if (IconButton("##partyFinder", FontAwesomeIcon.Users, "Party Finder") && !partyFinder.Open(ad.ListingId))
+                    Notify("The game couldn't open the Party Finder just now. Try again in a moment.", NotificationType.Warning, "Couldn't open the ad");
+            }
+
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(view.AdWhyNot ?? "Open this ad in the game's Party Finder, to join or message the host");
+            drawn = true;
         }
 
         if (view.Page is var page and >= 0)
         {
-            if (address is not null)
+            if (drawn)
                 ImGui.SameLine();
             var link = row.Details.Links[page];
             if (IconButton("##openPage", FontAwesomeIcon.ExternalLinkAlt, "Open page"))
                 Util.OpenLink(LinkAddress(link.Uri));
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip(LinkAddress(link.Uri));
+            drawn = true;
         }
 
         // Copy link: the entry's own website, else an event or venue page, its address in the tooltip
         if (view.Copy.Uri is { } uri)
         {
-            if (address is not null || view.Page >= 0)
+            if (drawn)
                 ImGui.SameLine();
             if (IconButton("##copyLink", FontAwesomeIcon.Clone, "Copy link"))
             {

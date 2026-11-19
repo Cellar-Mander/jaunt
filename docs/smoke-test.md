@@ -215,6 +215,11 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `F
    Map after it. Copy copies its world, district, ward and plot; Map opens the game map with a flag on
    that plot (and, on an apartment, on the apartment building); Travel works with Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark". *(self-test: the Bismarck spelling)*
 5. **Links**: Open page, and Open beside a further link under Location, open the browser at the URI in the tooltip.
+   On a Party Finder ad seen in the last hour, from the game or xivpf, Party Finder opens the ad's
+   details in the game's Party Finder, with Join Party and the host's name. On one last seen over an
+   hour ago (an hour and a half for xivpf) it is disabled, its tooltip giving when it was last seen;
+   on an xivpf ad listed on another data centre in the region, its tooltip names that data centre. A
+   venue, Partake or calendar event with no ad has no Party Finder button.
    Copy link on a venue with a website copies that website; on one without, it copies
    `https://ffxivvenues.com/venue/<id>`, which opens the venue's page.
 6. **Scrolling**: scroll quickly through the whole list: rows don't jump or overlap, and the scrollbar
