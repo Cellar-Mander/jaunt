@@ -657,18 +657,18 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   20:00–23:00"); the world;
   Travel, Open page (the first link that isn't a Discord invite) and Copy link (below), each with an
   icon before its label (a compass, an external-link square and two overlapping squares); Location: each
-  of the first 6 addresses and then places outside housing with Copy and Map (below), a location given only as text that names no place, and any further links; About: an ad's normalised text, or else the
+  of the first 6 addresses and then places outside housing with Copy and Map (below), and a location given only as text that names no place, never links (Location is only for in-game places and addresses); About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
   less"), with "Read the rest on the website" after a description cut at the limit; Lineup: the
   performers its ads name (see "Performers in ad text"), each once across the entry's ads, separated
   by dots and wrapping as needed, a name or handle linking to the performer's Twitch channel when an
-  ad gives it, which Location then leaves out; Age / rating: each age or rating its listings give, once each (Partake's `ageRating` as "Mature", the RP
+  ad gives it; Age / rating: each age or rating its listings give, once each (Partake's `ageRating` as "Mature", the RP
   calendar's rating or `[M]`-style tag, else an age in the text such as "18+" or "21+", the highest
   if several; FFXIV Venues gives none), then SFW or NSFW as the safety filter counts the entry
   ("18+ · SFW", or just "SFW"); Tags: its interests as outlined chips, not clickable, left out when
   it has none; then a footer line: "Discord" linking to the
   first Discord invite among the links (`discord.gg/…`, or `discord.com/invite/…` and
-  `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
+  `discordapp.com/invite/…`), then its sources, comma separated
   ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source
   but Party Finder linking to its site, Party Finder instead opening the ad in the game while it can (below), and the calendar's licence link after them. Links in the footer, as
   in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
@@ -826,7 +826,7 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   "Party Finder" before "xivpf" while it can open it ("Sources: Party Finder, xivpf"), and not
   otherwise. If the game won't open it, a notification says so; if the listing is gone after all,
   the game says so itself.
-- **Open page** opens the first link's URI (any further links are listed under Location, each with Open) in the browser. `WebLinks` only ever returns http or https URIs,
+- **Open page** opens the first link's URI in the browser. `WebLinks` only ever returns http or https URIs,
   so another player's ad can't make it open anything else; the button's tooltip shows the full URI.
 
 ### Icons and splash images
