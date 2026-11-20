@@ -19,6 +19,7 @@ using Jaunt.Core.Display;
 using Jaunt.Core.Images;
 using Jaunt.Core.Listings;
 using Jaunt.Core.Text;
+using Jaunt.Listings;
 using Jaunt.Travel;
 
 namespace Jaunt.Windows;
@@ -53,6 +54,7 @@ internal sealed class ListingsWindow : Window
     private readonly Gazetteer gazetteer;
     private readonly AddressParser parser;
     private readonly Lifestream lifestream;
+    private readonly GamePartyFinder partyFinder;
     private readonly HousingMap housingMap;
     private readonly GamePlaces places;
     private readonly INotificationManager notifications;
@@ -208,11 +210,11 @@ internal sealed class ListingsWindow : Window
     /// the status line of its first opening, its first <see cref="MaxAddresses"/> addresses and places as Location
     /// shows them, whether its free-text location named a place, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1), the further links Location
     /// lists, its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
-    /// its lineup, and what Copy link copies.
+    /// its lineup, what Copy link copies, and the Party Finder ad the footer's Party Finder opens, if it can.
     /// </summary>
     private sealed record DetailView(
         Row Row, string? Status, bool Open, AddressLine[] Addresses, bool LocationPlaced, TravelRequest? Travel, int Page, int Discord, int[] Further,
-        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy);
+        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy, ulong? PartyFinderAd);
 
     /// <summary>
     /// An address or place outside housing as Location shows it: the text shown, the text Copy copies
@@ -229,6 +231,7 @@ internal sealed class ListingsWindow : Window
 
     /// <param name="gazetteer">Worlds, for the address parser and to correct venues' and events' worlds when shown.</param>
     /// <param name="places">The zones outside housing that ads and locations name, for Location.</param>
+    /// <param name="partyFinder">Opens Party Finder ads in the game, from the footer's Party Finder.</param>
     /// <param name="fetchSources">Fetches each fetched source whose cooldown has passed; called on opening.</param>
     /// <param name="saveCache">Saves the listing cache, after a mark changes.</param>
     /// <param name="region">The worlds the logged-in character can travel to, or null while none is; only listings on them are shown.</param>
@@ -239,7 +242,7 @@ internal sealed class ListingsWindow : Window
     /// <param name="textures">Loads the kept images and the district art for drawing.</param>
     /// <param name="backdrops">The loading screens standing in for missing splash images (<see cref="PlaceholderArt.Backdrops"/>).</param>
     public ListingsWindow(
-        ListingCache cache, Gazetteer gazetteer, GamePlaces places, Lifestream lifestream, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
+        ListingCache cache, Gazetteer gazetteer, GamePlaces places, Lifestream lifestream, GamePartyFinder partyFinder, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
         Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont, ImageStore images, ITextureProvider textures,
         Backdrops backdrops)
         : base("Jaunt###JauntListings")
@@ -256,6 +259,7 @@ internal sealed class ListingsWindow : Window
         this.gazetteer = gazetteer;
         parser = new AddressParser(gazetteer);
         this.lifestream = lifestream;
+        this.partyFinder = partyFinder;
         this.housingMap = housingMap;
         this.places = places;
         this.notifications = notifications;
@@ -830,6 +834,13 @@ internal sealed class ListingsWindow : Window
         // A stream the lineup links needn't be listed again under Location
         int[] further = [.. Enumerable.Range(0, links.Count).Where(i => i != page && i != discord && !lineup.Any(e => e.Twitch == links[i].Uri))];
         var (found, locationPlaced) = PlacesOf(row);
+        var members = row.Members.Count > 0 ? row.Members : [row];
+        var ad = PartyFinderAds.Openable(
+            members.Select(m => m.Listing), now, configuration.RefreshCooldownMinutes, gazetteer, partyFinder.CurrentDataCentre);
+        var sources = members.Select(m => m.Listing.Source).Distinct().ToList();
+        // An ad xivpf collected is in the game's Party Finder too, which the footer opens from there while it can
+        if (ad is not null && !sources.Contains(ListingSource.InGamePartyFinder))
+            sources.Insert(Math.Max(0, sources.IndexOf(ListingSource.Xivpf)), ListingSource.InGamePartyFinder);
         return new DetailView(
             row, status, open,
             [
@@ -838,9 +849,9 @@ internal sealed class ListingsWindow : Window
             ],
             locationPlaced,
             addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
-            page, discord, further, [.. row.Members.Select(m => m.Listing.Source).Distinct()], RatingOf(row),
+            page, discord, further, [.. sources], RatingOf(row),
             [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup,
-            CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]));
+            CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]), ad);
     }
 
     /// <summary>
@@ -1175,7 +1186,7 @@ internal sealed class ListingsWindow : Window
     /// The Discord invite, then where the listing came from, with the credits its source needs.
     /// "Listed by" (the ad's poster) goes first once d12eb2c4 keeps it.
     /// </summary>
-    private static void DrawFooter(DetailView view)
+    private void DrawFooter(DetailView view)
     {
         var row = view.Row;
         ImGui.Spacing();
@@ -1188,7 +1199,8 @@ internal sealed class ListingsWindow : Window
             ImGui.SameLine();
         }
 
-        // Every source on one line, each linking to its site (the in-game Party Finder has none), with the calendar's licence after
+        // Every source on one line, each linking to its site, with the calendar's licence after. The in-game
+        // Party Finder has none, so it opens the ad there instead, while the game can
         var sources = view.Sources;
         ImGui.TextDisabled("Sources:");
         for (var i = 0; i < sources.Length; i++)
@@ -1196,7 +1208,14 @@ internal sealed class ListingsWindow : Window
             ImGui.SameLine(0, 0);
             ImGui.TextDisabled(i == 0 ? " " : ", ");
             ImGui.SameLine(0, 0);
-            if (SiteUrl(sources[i]) is { } site)
+            if (sources[i] == ListingSource.InGamePartyFinder && view.PartyFinderAd is { } ad)
+            {
+                if (LinkText(SourceName(sources[i])))
+                    ImGui.SetTooltip("Open this ad in the game's Party Finder");
+                if (ImGui.IsItemClicked() && !partyFinder.Open(ad))
+                    Notify("The game couldn't open the Party Finder just now. Try again in a moment.", NotificationType.Warning, "Couldn't open the ad");
+            }
+            else if (SiteUrl(sources[i]) is { } site)
                 DrawLinkText(SourceName(sources[i]), site);
             else
                 ImGui.TextDisabled(SourceName(sources[i]));
@@ -1247,18 +1266,23 @@ internal sealed class ListingsWindow : Window
     /// </summary>
     internal static void DrawLinkText(string text, Uri uri)
     {
+        if (LinkText(text))
+            ImGui.SetTooltip(LinkAddress(uri));
+        if (ImGui.IsItemClicked())
+            Util.OpenLink(LinkAddress(uri));
+    }
+
+    /// <summary>Text that looks like a link (link colour, underlined), with a hand cursor on hover; returns whether it is hovered.</summary>
+    private static bool LinkText(string text)
+    {
         ImGui.TextColored(ImGuiColors.TankBlue, text);
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
         ImGui.GetWindowDrawList().AddLine(new Vector2(min.X, max.Y), max, ImGui.GetColorU32(ImGuiColors.TankBlue), Math.Max(1, ImGuiHelpers.GlobalScale));
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            ImGui.SetTooltip(LinkAddress(uri));
-        }
-
-        if (ImGui.IsItemClicked())
-            Util.OpenLink(LinkAddress(uri));
+        if (!ImGui.IsItemHovered())
+            return false;
+        ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+        return true;
     }
 
     /// <summary>A link's address to show or open; the first read of each allocates, so counts as a fill.</summary>
