@@ -7,6 +7,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Jaunt.Core.Browser;
 using Jaunt.Core.Images;
 using Jaunt.Core.Listings;
 using Jaunt.Listings;
@@ -30,8 +31,12 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IGameGui GameGui { get; private set; } = null!;
+    [PluginService] internal static IClientState ClientState { get; private set; } = null!;
 
     private const string CommandName = "/jaunt";
+
+    // Often enough to catch a short visit, and the list is rebuilt at most this often while away from the browser
+    private static readonly TimeSpan VisitCheckInterval = TimeSpan.FromSeconds(5);
 
     public Configuration Configuration { get; init; }
 
@@ -48,6 +53,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly HeldFont titleFont;
     private readonly HeldFont iconFont;
     private readonly ImageStore imageStore;
+    private readonly PlayerAddress playerAddress;
+    private readonly AutoVisits autoVisits = new();
+    private DateTimeOffset nextVisitCheck;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
@@ -88,6 +96,8 @@ public sealed class Plugin : IDalamudPlugin
             ListingCache, gazetteer, GamePlacesLoader.Load(DataManager), new Lifestream(PluginInterface, Log), new GamePartyFinder(PlayerState), HousingMap.Load(DataManager, GameGui), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
             titleFont, iconFont, imageStore, TextureProvider, PlaceholderArt.Backdrops(DataManager));
         WindowSystem.AddWindow(ListingsWindow);
+        playerAddress = new PlayerAddress(PlayerState, ClientState, Log);
+        Framework.Update += CheckVisits;
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -104,6 +114,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         // Unhook from Dalamud first, so no command or draw call reaches a disposed component
         CommandManager.RemoveHandler(CommandName);
+        Framework.Update -= CheckVisits;
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
@@ -121,6 +132,17 @@ public sealed class Plugin : IDalamudPlugin
         titleFontHandle.Dispose();
         imageStore.Dispose();
         listingCacheStore.Dispose();
+    }
+
+    /// <summary>Every few seconds, marks visited what is open where the player is, when Settings → Listings says to.</summary>
+    private void CheckVisits(IFramework framework)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (now < nextVisitCheck)
+            return;
+        nextVisitCheck = now + VisitCheckInterval;
+        if (Configuration.AutoMarkVisited && autoVisits.At(playerAddress.Get()))
+            ListingsWindow.CheckVisits(autoVisits, now);
     }
 
     internal void SaveListingCache() => listingCacheStore.Save(ListingCache);

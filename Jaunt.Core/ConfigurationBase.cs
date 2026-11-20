@@ -32,6 +32,9 @@ public abstract class ConfigurationBase
     /// <summary>Settings → Display.</summary>
     public DateFormat DateFormat { get; set; } = DateFormat.System;
 
+    /// <summary>Settings → Listings: mark an entry visited when the player is at its plot or apartment while it is open (<see cref="AutoVisits"/>).</summary>
+    public bool AutoMarkVisited { get; set; } = true;
+
     /// <summary>The source of the listing last selected in the browser, or null when none is.</summary>
     public ListingSource? SelectedSource { get; set; }
 
