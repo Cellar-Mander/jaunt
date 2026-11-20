@@ -213,6 +213,7 @@ public class SchedulesTests
     [Fact]
     public void VenueEntriesWithAGapStaySeparate()
     {
+        // revert-check: not revert-sensitive (guards against joining too much, which the old code never did)
         var schedule = Schedules.ForVenue(Venue(Entry(Now.AddHours(1), Now.AddHours(3)), Entry(Now.AddHours(3).AddMinutes(1), Now.AddHours(5))), Now);
         Assert.Equal([At(1, 3), new Occurrence(Now.AddHours(3).AddMinutes(1), Now.AddHours(5))], schedule.Occurrences.Take(2));
         Assert.Equal(4, schedule.Occurrences.Count);
