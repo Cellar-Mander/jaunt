@@ -39,5 +39,34 @@ public static class Shouts
     /// <param name="heardOn">The world the shout was heard on; the listing is listed on it.</param>
     /// <returns>The listing, or null when the shout isn't an advert.</returns>
     public static CachedListing? Record(ListingCache cache, AddressParser parser, string id, string text, string? heardOn, DateTimeOffset now) =>
-        IsAdvert(parser, text, heardOn) ? cache.SeenAd(ListingSource.Shout, id, text, heardOn, now) : null;
+        IsAdvert(parser, text, heardOn) ? cache.SeenAd(ListingSource.Shout, id, WithoutAdTag(text), heardOn, now) : null;
+
+    private const string AdTag = "VENUEAD";
+
+    /// <summary>
+    /// The shout without the "VENUEAD" tag some shouters start each part with so players can filter
+    /// venue adverts out of chat: "VENUEAD:", "VENUEAD :" or "[VENUEAD]" at the start of a line, with
+    /// the spaces after it. Every recorded shout is an advert, so the tag tells the reader nothing.
+    /// </summary>
+    internal static string WithoutAdTag(string text)
+    {
+        if (!text.Contains(AdTag, StringComparison.Ordinal))
+            return text;
+        return string.Join('\n', text.Split('\n').Select(StripTag));
+    }
+
+    private static string StripTag(string line)
+    {
+        var rest = line.AsSpan().TrimStart();
+        if (rest.StartsWith("[" + AdTag + "]", StringComparison.Ordinal))
+            rest = rest[(AdTag.Length + 2)..];
+        else if (rest.StartsWith(AdTag, StringComparison.Ordinal) && (rest.Length == AdTag.Length || !char.IsLetterOrDigit(rest[AdTag.Length])))
+            rest = rest[AdTag.Length..];
+        else
+            return line;
+        rest = rest.TrimStart();
+        if (rest.StartsWith(':'))
+            rest = rest[1..].TrimStart();
+        return rest.ToString();
+    }
 }

@@ -353,6 +353,10 @@ no cooldown; Clear and expiry treat it as a Party Finder ad (see "Listing cache"
 - **Read as an ad**: the text, glyphs included, is read by the same parsers as a Party Finder ad, for
   title, addresses, times, links, tags and performers. It counts as listed for 1 hour after it was
   last heard.
+- **Ad tag**: the "VENUEAD" tag some shouters start a part with so players can filter venue adverts
+  out of chat ("VENUEAD:", "VENUEAD :" or "[VENUEAD]" at the start of a line) is left out of the
+  recorded text, so it shows in neither the title nor the About. It is matched in capitals as a whole
+  word only.
 - **Matching**: a shout merges with other listings like an ad (see "Duplicates" under "Listing
   browser"): at the same address with overlapping openings, or with exactly the same text as an ad.
   It gives a merged entry its About and Lineup first.
