@@ -148,6 +148,7 @@ public class ShoutsTests
     [InlineData("Moonlit Lounge VENUEAD: Mist W14 P33")]
     [InlineData("VENUEADS Mist W14 P33")]
     [InlineData("VENUEAD2 Mist W14 P33")]
+    [InlineData("[VENUEADS] Mist W14 P33")]
     [InlineData("venuead: Mist W14 P33")]
     public void TextThatOnlyLooksLikeTheTagIsKept(string shout)
     {
