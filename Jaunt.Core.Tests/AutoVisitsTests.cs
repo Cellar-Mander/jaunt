@@ -161,6 +161,21 @@ public class AutoVisitsTests
     }
 
     [Fact]
+    public void AMergedEntryMarkedNotVisitedStaysThatWay()
+    {
+        var ad = cache.SeenAd(ListingSource.InGamePartyFinder, "a", "Tavern Empyreum W16 P20", "Siren", Now);
+        var entry = Entry(Tavern, Venue(), ad);
+        visits.At(Tavern);
+        PlaceMark? place = null;
+        Assert.True(Check(entry, OpenNow, ref place));
+
+        EntryMarks.Toggle(cache, entry, ref place, EntryMark.Visited);
+
+        // Both members were handled, which must still count as handled, not cancel out
+        Assert.False(Check(entry, OpenNow, ref place));
+    }
+
+    [Fact]
     public void ARebuiltEntryWithANewTitleMemberIsStillHandled()
     {
         var venue = Venue();
@@ -227,6 +242,24 @@ public class AutoVisitsTests
         Assert.Null(AutoVisits.OnPlot(null, District.Empyreum, 0, 0));
         Assert.Null(AutoVisits.OnPlot("Siren", null, 0, 0));
         Assert.Null(AutoVisits.Inside("Siren", null, 0, false, 0, 0, 0, false));
+    }
+
+    [Theory]
+    [InlineData(15, 19, 16, 20)]
+    [InlineData(0, 0, 1, 1)]
+    public void InsideAHouseIsTheGamesIndexesPlusOne(int wardIndex, int plotIndex, int ward, int plot)
+    {
+        Assert.Equal(
+            new AddressKey("SIREN", District.Empyreum, ward, plot, null, false),
+            AutoVisits.Inside("Siren", District.Empyreum, wardIndex, false, 0, plotIndex, 0, false));
+    }
+
+    [Theory]
+    [InlineData(-1, 4)]
+    [InlineData(3, -1)]
+    public void InsideWithANegativeIndexIsNowhere(int wardIndex, int plotIndex)
+    {
+        Assert.Null(AutoVisits.Inside("Siren", District.Empyreum, wardIndex, false, 0, plotIndex, 0, false));
     }
 
     [Fact]
