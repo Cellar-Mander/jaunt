@@ -649,8 +649,8 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
 - **Detail pane**, top to bottom, each part only when the listing has it: the splash image band
   (see "Icons and splash images"); the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"); the world;
-  Travel, Party Finder (below), Open page (the first link that isn't a Discord invite) and Copy link (below), each with an
-  icon before its label (a compass, two people, an external-link square and two overlapping squares); Location: each
+  Travel, Open page (the first link that isn't a Discord invite) and Copy link (below), each with an
+  icon before its label (a compass, an external-link square and two overlapping squares); Location: each
   of the first 6 addresses and then places outside housing with Copy and Map (below), a location given only as text that names no place, and any further links; About: an ad's normalised text, or else the
   description (see "Descriptions"), cut with "…" to 6 lines with "Read more" (then "Show
   less"), with "Read the rest on the website" after a description cut at the limit; Lineup: the
@@ -664,7 +664,7 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   first Discord invite among the links (`discord.gg/…`, or `discord.com/invite/…` and
   `discordapp.com/invite/…`), which Location then leaves out, then its sources, comma separated
   ("Discord · Sources: FFXIV Venues, xivpf"; the in-game Party Finder is "Party Finder"), each source
-  but Party Finder linking to its site, and the calendar's licence link after them. Links in the footer, as
+  but Party Finder linking to its site, Party Finder instead opening the ad in the game while it can (below), and the calendar's licence link after them. Links in the footer, as
   in Settings, are in a link colour and underlined, show their address and a hand cursor on hover,
   and open in the browser when clicked. Who listed an ad
   ("Listed by …") is `d12eb2c4`.
@@ -808,16 +808,17 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   why, when Lifestream isn't loaded or the address lacks a world, district, or both plot and
   apartment. A plot wins over an apartment; a room is not sent. If Lifestream is busy or fails, a
   notification says so and suggests copying the address (risk `de04e687`).
-- **Party Finder** (`PartyFinderAds`) opens an in-game or xivpf ad in the game's Party Finder
+- **Party Finder in the footer** (`PartyFinderAds`) is a link, with "Open this ad in the game's Party
+  Finder" as its tooltip, that opens the entry's in-game or xivpf ad in the game's Party Finder
   (`AgentLookingForGroup.OpenListing` with its listing ID, which xivpf shares with the game, so it
   works for ads the game never sent), from which the player can join, message the host or relay it.
-  It is left out when no member of the entry is such an ad. Of several, it opens the one listed
-  longest (`Schedules.ListedUntil`). It is disabled, with a tooltip saying why, when that ad is no
-  longer listed ("Last seen in the Party Finder at 19:40, so it's probably no longer listed.", the
-  date before the time on an earlier day), or when it is listed on a world of another data centre
-  than the one the character is on (`IPlayerState.CurrentWorld`), as the game's Party Finder shows
-  only that one; an unknown world or data centre counts as any. If the game won't open it, a
-  notification says so; if the listing is gone after all, the game says so itself.
+  Of several ads, it opens the one listed longest (`Schedules.ListedUntil`). It is plain text, as
+  before, when that ad is no longer listed, or is listed on a world of another data centre than the
+  one the character is on (`IPlayerState.CurrentWorld`), as the game's Party Finder shows only that
+  one; an unknown world or data centre counts as any. An entry with only an xivpf ad gets
+  "Party Finder" before "xivpf" while it can open it ("Sources: Party Finder, xivpf"), and not
+  otherwise. If the game won't open it, a notification says so; if the listing is gone after all,
+  the game says so itself.
 - **Open page** opens the first link's URI (any further links are listed under Location, each with Open) in the browser. `WebLinks` only ever returns http or https URIs,
   so another player's ad can't make it open anything else; the button's tooltip shows the full URI.
 

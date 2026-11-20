@@ -4,34 +4,17 @@ using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Browser;
 
-/// <summary>Whether the game's Party Finder can open an ad, or why not.</summary>
-public enum PartyFinderState
-{
-    /// <summary>Still listed, on the data centre the character is on or one this can't tell.</summary>
-    Openable,
-
-    /// <summary>Not seen for longer than an ad stays listed (<see cref="Schedules.StillListed"/>).</summary>
-    NotListed,
-
-    /// <summary>Listed on another data centre, whose ads the game's Party Finder doesn't show.</summary>
-    OtherDataCentre,
-}
-
-/// <summary>
-/// The Party Finder ad an entry's Party Finder button opens: its listing ID, which the game and xivpf
-/// share, whether it can be opened, when it was last seen and the data centre it is listed on, if known.
-/// </summary>
-public readonly record struct PartyFinderAd(ulong ListingId, PartyFinderState State, DateTimeOffset LastSeen, string? DataCentre);
-
 public static class PartyFinderAds
 {
     /// <summary>
-    /// The in-game or xivpf Party Finder ad among an entry's listings to open: the one listed longest
-    /// (<see cref="Schedules.ListedUntil"/>), the first on a tie. Null when none is such an ad with a
-    /// numeric ID.
+    /// The listing ID, which the game and xivpf share, of the in-game or xivpf Party Finder ad among an
+    /// entry's listings that the game's Party Finder can open: the one listed longest
+    /// (<see cref="Schedules.ListedUntil"/>, the first on a tie), if it is still listed and not on a world of
+    /// another data centre than <paramref name="currentDataCentre"/>, whose ads the game doesn't show.
+    /// Null otherwise, or when none is such an ad with a numeric ID. An unknown world counts as any data centre.
     /// </summary>
     /// <param name="currentDataCentre">The data centre the character is on, or null when unknown, which counts as any.</param>
-    public static PartyFinderAd? Choose(
+    public static ulong? Openable(
         IEnumerable<CachedListing> listings, DateTimeOffset now, int cooldownMinutes, Gazetteer gazetteer, string? currentDataCentre)
     {
         CachedListing? best = null;
@@ -51,15 +34,13 @@ public static class PartyFinderAds
             }
         }
 
-        if (best is null)
+        if (best is null || now >= bestUntil)
             return null;
 
         var dataCentre = gazetteer.FindWorld(best.ListedOn?.Trim())?.DataCenter;
-        var state = now >= bestUntil ? PartyFinderState.NotListed
-            : dataCentre is not null && currentDataCentre is not null && !string.Equals(dataCentre, currentDataCentre.Trim(), StringComparison.OrdinalIgnoreCase)
-                ? PartyFinderState.OtherDataCentre
-                : PartyFinderState.Openable;
-        return new PartyFinderAd(bestId, state, best.LastSeen, dataCentre);
+        var elsewhere = dataCentre is not null && currentDataCentre is not null
+            && !string.Equals(dataCentre, currentDataCentre.Trim(), StringComparison.OrdinalIgnoreCase);
+        return elsewhere ? null : bestId;
     }
 
     /// <summary>A Party Finder ad's listing ID; null for other sources, or an ID that isn't a number.</summary>
