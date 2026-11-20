@@ -214,7 +214,7 @@ Checks the fetch, the cooldown and the list; the reading rules are covered by `F
 4. **Address**: on a selected venue, Location shows "World · District · Ward N, Plot N" with Copy and
    Map after it. Copy copies its world, district, ward and plot; Map opens the game map with a flag on
    that plot (and, on an apartment, on the apartment building); Travel works with Lifestream installed. A venue on Bismarck shows "Bismarck", not "Bismark". *(self-test: the Bismarck spelling)*
-5. **Links**: Open page, and Open beside a further link under Location, open the browser at the URI in the tooltip.
+5. **Links**: Open page opens the browser at the URI in its tooltip. Location lists no websites or other links.
    On a Party Finder ad seen in the last hour, from the game or xivpf, "Party Finder" in the footer's
    sources is a link that opens the ad's details in the game's Party Finder, with Join Party and the
    host's name; an xivpf-only ad shows "Sources: Party Finder, xivpf". On an in-game ad last seen

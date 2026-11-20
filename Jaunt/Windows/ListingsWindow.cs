@@ -208,12 +208,12 @@ internal sealed class ListingsWindow : Window
     /// <summary>
     /// What the detail pane shows of <see cref="Row"/> that takes formatting or a search to work out:
     /// the status line of its first opening, its first <see cref="MaxAddresses"/> addresses and places as Location
-    /// shows them, whether its free-text location named a place, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1), the further links Location
-    /// lists, its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
+    /// shows them, whether its free-text location named a place, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1),
+    /// its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
     /// its lineup, what Copy link copies, and the Party Finder ad the footer's Party Finder opens, if it can.
     /// </summary>
     private sealed record DetailView(
-        Row Row, string? Status, bool Open, AddressLine[] Addresses, bool LocationPlaced, TravelRequest? Travel, int Page, int Discord, int[] Further,
+        Row Row, string? Status, bool Open, AddressLine[] Addresses, bool LocationPlaced, TravelRequest? Travel, int Page, int Discord,
         ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy, ulong? PartyFinderAd);
 
     /// <summary>
@@ -831,8 +831,6 @@ internal sealed class ListingsWindow : Window
         var page = PageIndex(links);
         var discord = DiscordIndex(links);
         LineupEntry[] lineup = [.. row.Details.Performers.Select(p => new LineupEntry(ShownText.Fold(p.Shown), p.Twitch?.Uri))];
-        // A stream the lineup links needn't be listed again under Location
-        int[] further = [.. Enumerable.Range(0, links.Count).Where(i => i != page && i != discord && !lineup.Any(e => e.Twitch == links[i].Uri))];
         var (found, locationPlaced) = PlacesOf(row);
         var members = row.Members.Count > 0 ? row.Members : [row];
         var ad = PartyFinderAds.Openable(
@@ -849,7 +847,7 @@ internal sealed class ListingsWindow : Window
             ],
             locationPlaced,
             addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
-            page, discord, further, [.. sources], RatingOf(row),
+            page, discord, [.. sources], RatingOf(row),
             [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup,
             CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]), ad);
     }
@@ -1028,17 +1026,14 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// Each address and place outside housing with Copy and Map, a location the parser couldn't read as
-    /// an address or a place as text, and any further links (all but Open page's, the footer's Discord and
-    /// the lineup's streams).
+    /// Each address and place outside housing with Copy and Map, and a location the parser couldn't read as
+    /// an address or a place as text. Never links: Location is only for where in the game the listing is.
     /// </summary>
     private void DrawLocation(DetailView view)
     {
         var row = view.Row;
         var freeText = view.LocationPlaced ? null : FreeLocation(row);
-        var links = row.Details.Links;
-        var further = view.Further;
-        if (view.Addresses.Length == 0 && freeText is null && further.Length == 0)
+        if (view.Addresses.Length == 0 && freeText is null)
             return;
 
         Section("Location");
@@ -1077,18 +1072,6 @@ internal sealed class ListingsWindow : Window
 
         if (freeText is not null)
             ImGui.TextWrapped(ShownText.Fold(freeText));
-
-        foreach (var i in further)
-        {
-            using var id = Scoped.Id($"l{i}");
-            var link = links[i];
-            if (ImGui.SmallButton("Open"))
-                Util.OpenLink(LinkAddress(link.Uri));
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(LinkAddress(link.Uri));
-            ImGui.SameLine();
-            ImGui.TextUnformatted(link.Text);
-        }
     }
 
     private bool ShowOnMap(AddressLine line) =>
