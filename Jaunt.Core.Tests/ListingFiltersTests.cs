@@ -80,6 +80,32 @@ public class ListingFiltersTests
     [Fact]
     public void AQuoteInsideAWordIsPartOfIt() => Assert.Equal(["it's\"ok"], SearchQuery.Parse("it's\"ok").Include);
 
+    private static bool SearchesFolded(string search, string field) => SearchQuery.Parse(search).Matches([SearchQuery.Fold(field)]);
+
+    [Theory]
+    [InlineData("okami", "Ōkami Lounge")]
+    [InlineData("OKAMI", "ōkami lounge")]
+    [InlineData("ōkami", "Okami Lounge")]
+    [InlineData("cafe", "Café Lumière")]
+    [InlineData("\"cafe lumiere\"", "Café Lumière")]
+    [InlineData("CAFÉ", "the cafe")]
+    [InlineData("cafe", "Café decomposed")]
+    [InlineData("hauptstrasse", "Hauptstraße")]
+    [InlineData("bjork", "Bjørk's Bar")]
+    [InlineData("aether", "Æther Spa")]
+    [InlineData("lodz", "Łódź")]
+    [InlineData("が", "がらす")]
+    [InlineData("が", "がらす")]
+    public void SearchIgnoresLatinAccents(string search, string field) => Assert.True(SearchesFolded(search, field));
+
+    [Theory]
+    [InlineData("-cafe", "Café Lumière")]
+    [InlineData("-ōkami", "Okami Lounge")]
+    [InlineData("か", "がらす")]
+    [InlineData("하", "한")]
+    [InlineData("cafe", "Caff")]
+    public void FoldingKeepsOtherLettersApart(string search, string field) => Assert.False(SearchesFolded(search, field));
+
     [Fact]
     public void ByDefaultOnlyNsfwAndHiddenAreLeftOut()
     {

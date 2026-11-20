@@ -171,7 +171,7 @@ internal sealed class ListingsWindow : Window
         /// <summary>Its members' interests and NSFW combined; set when the list is rebuilt.</summary>
         public Tagging Tagging { get; init; }
 
-        /// <summary>What search looks in: its titles as shown, About and interest labels; set when the list is rebuilt.</summary>
+        /// <summary>What search looks in: its titles as shown, About and interest labels, <see cref="SearchQuery.Fold"/>ed; set when the list is rebuilt.</summary>
         public IReadOnlyList<string> SearchFields { get; init; } = [];
     }
 
@@ -1586,13 +1586,13 @@ internal sealed class ListingsWindow : Window
         var fields = new List<string>(row.Members.Count + 2);
         foreach (var member in row.Members)
         {
-            var title = ShownText.Title(member.Title);
+            var title = SearchQuery.Fold(ShownText.Title(member.Title));
             if (!fields.Contains(title))
                 fields.Add(title);
         }
 
         if (row.About is { Length: > 0 } about)
-            fields.Add(about);
+            fields.Add(SearchQuery.Fold(about));
         fields.AddRange(ListingFilters.LabelsOf(tagging.Interests));
         return row with { Tagging = tagging, SearchFields = fields };
     }

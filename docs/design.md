@@ -748,7 +748,8 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
   - **Show hidden** lists hidden entries too; otherwise they are left out (see "Hide").
   - **Tags**, with a downward caret after its label, opens a menu of interests to tick; the entry must have every one ticked. Each ticked
     interest also shows as a lit chip ("Bars ×") that unticks it when clicked.
-  - **Search**: space-separated terms must all match, ignoring case, anywhere in the entry's
+  - **Search**: space-separated terms must all match, ignoring case and Latin accents ("okami"
+    finds "Ōkami", "cafe" finds "Café", "bjork" finds "Bjørk"), anywhere in the entry's
     titles as shown (every member's), its About text or its interests' labels. `-term` leaves out
     entries containing it; `"two words"` matches the phrase, and `-"two words"` leaves it out. A
     phrase must be within one of those texts. An unclosed quote runs to the end of the box; a lone
@@ -933,7 +934,8 @@ Caps on user-configurable lists and text, and how input from other players or th
 - Filtering is one pass over the entries, with search as a case-insensitive substring check per term
   and text (a few titles, About of at most 1,501 characters, a few labels). It runs on each rebuild
   and each filter or search change, without working out schedules, merges or marks again. The search
-  text is parsed once per change.
+  text is parsed once per change. Accents are folded out of the texts once per rebuild (ASCII texts
+  are passed through untouched) and out of the terms when they are parsed, never per check.
 - Each shout heard is parsed for an address once, on the game thread, as an ad is; shouts are at
   most a few hundred characters. Shout listings are one per shouter, so a shouter repeating an advert
   adds none.

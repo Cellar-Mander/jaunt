@@ -1,3 +1,4 @@
+using System.Text;
 using Jaunt.Core.Listings;
 
 namespace Jaunt.Core.Browser;
@@ -26,7 +27,7 @@ public sealed class BrowserFilters
 
 /// <summary>One entry as the filters see it.</summary>
 /// <param name="Tagging">The entry's interests and NSFW, its members' combined (<see cref="ListingTags.Combine"/>).</param>
-/// <param name="SearchFields">The texts search looks in: its titles, ad text or description, and interest labels.</param>
+/// <param name="SearchFields">The texts search looks in: its titles, ad text or description, and interest labels, each passed through <see cref="SearchQuery.Fold"/>.</param>
 public readonly record struct FilterEntry(Tagging Tagging, bool Favourite, bool Visited, bool Hidden, IReadOnlyList<string> SearchFields);
 
 /// <summary>Decides which entries the browser lists. See "Filters and search" under "Listing browser" in <c>docs/design.md</c>.</summary>
@@ -77,7 +78,8 @@ public static class ListingFilters
 /// <summary>
 /// The search box's text, parsed: space-separated terms must all match, <c>-term</c> excludes,
 /// <c>"two words"</c> is a phrase and <c>-"two words"</c> excludes it. An unclosed quote runs to the
-/// end; a lone <c>-</c> or empty quotes are ignored. Terms match anywhere in a field, ignoring case.
+/// end; a lone <c>-</c> or empty quotes are ignored. Terms match anywhere in a field, ignoring case
+/// and Latin accents (<see cref="Fold"/>).
 /// </summary>
 public sealed class SearchQuery
 {
@@ -130,13 +132,52 @@ public sealed class SearchQuery
             }
 
             if (term.Length > 0)
-                (negated ? exclude : include).Add(term);
+                (negated ? exclude : include).Add(Fold(term));
         }
 
         return new SearchQuery(include, exclude);
     }
 
-    /// <summary>Whether every included term is in some field and no excluded one is in any.</summary>
+    /// <summary>
+    /// The text with Latin accents taken off, so "Café Ōkami" reads as "Cafe Okami" and a keyboard without
+    /// them can still find it: combining diacritics (U+0300–U+036F) are dropped after decomposing, and
+    /// ø, ł, đ, ħ, æ, œ and ß, which don't decompose, are spelt out. Other scripts are left alone (kana keep
+    /// their dakuten), and the result is recomposed. Case is kept; matching ignores it.
+    /// </summary>
+    public static string Fold(string text)
+    {
+        if (Ascii.IsValid(text))
+            return text;
+
+        var decomposed = text.Normalize(NormalizationForm.FormD);
+        var folded = new StringBuilder(decomposed.Length);
+        foreach (var c in decomposed)
+        {
+            switch (c)
+            {
+                case >= '̀' and <= 'ͯ':
+                    break;
+                case 'ø': folded.Append('o'); break;
+                case 'Ø': folded.Append('O'); break;
+                case 'ł': folded.Append('l'); break;
+                case 'Ł': folded.Append('L'); break;
+                case 'đ': folded.Append('d'); break;
+                case 'Đ': folded.Append('D'); break;
+                case 'ħ': folded.Append('h'); break;
+                case 'Ħ': folded.Append('H'); break;
+                case 'æ': folded.Append("ae"); break;
+                case 'Æ': folded.Append("AE"); break;
+                case 'œ': folded.Append("oe"); break;
+                case 'Œ': folded.Append("OE"); break;
+                case 'ß': folded.Append("ss"); break;
+                default: folded.Append(c); break;
+            }
+        }
+
+        return folded.ToString().Normalize(NormalizationForm.FormC);
+    }
+
+    /// <summary>Whether every included term is in some field and no excluded one is in any. The fields must already be <see cref="Fold"/>ed.</summary>
     public bool Matches(IReadOnlyList<string> fields)
     {
         foreach (var term in Include)
