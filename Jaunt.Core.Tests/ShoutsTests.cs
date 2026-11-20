@@ -126,6 +126,32 @@ public class ShoutsTests
         Assert.Equal([shout, ad], Assert.Single(merged).Members);
     }
 
+    // Shapes from captured shouts, plus a joined advert tagging each part
+    [Theory]
+    [InlineData("VENUEAD: " + Advert, Advert)]
+    [InlineData("VENUEAD :  " + Advert, Advert)]
+    [InlineData("[VENUEAD] " + Advert, Advert)]
+    [InlineData("  VENUEAD:" + Advert, Advert)]
+    [InlineData("VENUEAD: Moonlit Lounge Mist W14 P33\nVENUEAD: DJ Saber till 1am", "Moonlit Lounge Mist W14 P33\nDJ Saber till 1am")]
+    public void TheVenueAdTagIsLeftOutOfTheRecordedText(string shout, string recorded)
+    {
+        var cache = new ListingCache();
+
+        var listing = Shouts.Record(cache, TestGazetteer.Parser, "a", shout, "Cuchulainn", Now)!;
+
+        Assert.Equal(recorded, listing.Description);
+        Assert.Equal(ListingDetails.Title(recorded), listing.Title);
+    }
+
+    // Only a tag starting a line, and only the whole word
+    [Theory]
+    [InlineData("Moonlit Lounge VENUEAD: Mist W14 P33")]
+    [InlineData("VENUEADS Mist W14 P33")]
+    [InlineData("VENUEAD2 Mist W14 P33")]
+    [InlineData("venuead: Mist W14 P33")]
+    public void TextThatOnlyLooksLikeTheTagIsKept(string shout) =>
+        Assert.Equal(shout, Shouts.Record(new ListingCache(), TestGazetteer.Parser, "a", shout, "Cuchulainn", Now)!.Description);
+
     private static MergeCandidate<CachedListing> Candidate(CachedListing listing)
     {
         var details = ListingDetails.Parse(TestGazetteer.Parser, listing.Description, listing.ListedOn);
