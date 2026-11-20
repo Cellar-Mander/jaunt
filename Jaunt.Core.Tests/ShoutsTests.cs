@@ -149,8 +149,11 @@ public class ShoutsTests
     [InlineData("VENUEADS Mist W14 P33")]
     [InlineData("VENUEAD2 Mist W14 P33")]
     [InlineData("venuead: Mist W14 P33")]
-    public void TextThatOnlyLooksLikeTheTagIsKept(string shout) =>
+    public void TextThatOnlyLooksLikeTheTagIsKept(string shout)
+    {
+        // revert-check: not revert-sensitive (guards against stripping too much; the old code strips nothing)
         Assert.Equal(shout, Shouts.Record(new ListingCache(), TestGazetteer.Parser, "a", shout, "Cuchulainn", Now)!.Description);
+    }
 
     private static MergeCandidate<CachedListing> Candidate(CachedListing listing)
     {
