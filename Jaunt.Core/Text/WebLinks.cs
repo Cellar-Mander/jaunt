@@ -69,6 +69,30 @@ public static class WebLinks
     }
 
     /// <summary>
+    /// The page a Google redirect link (<c>google.com/url?q=…</c>, as Google Calendar rewrites links in
+    /// event descriptions) forwards to, or the link itself when it is anything else or forwards to no
+    /// http or https page.
+    /// </summary>
+    public static Uri Unwrap(Uri uri)
+    {
+        if (!IsWeb(uri) || uri.AbsolutePath != "/url")
+            return uri;
+        var host = uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host;
+        if (!host.Equals("google.com", StringComparison.OrdinalIgnoreCase))
+            return uri;
+
+        // Calendar descriptions are HTML, so the & before the next parameter can arrive as "&amp"
+        foreach (var parameter in uri.Query.TrimStart('?').Split('&'))
+        {
+            if (parameter.StartsWith("q=", StringComparison.Ordinal)
+                && Uri.TryCreate(Uri.UnescapeDataString(parameter[2..]), UriKind.Absolute, out var target) && IsWeb(target))
+                return target;
+        }
+
+        return uri;
+    }
+
+    /// <summary>
     /// A link's address as its tooltip shows it and as it opens, for per-frame code. .NET builds
     /// <see cref="Uri.AbsoluteUri"/> on first read, which allocates, so <paramref name="filled"/> says
     /// whether this call worked it out (as <c>AllocationWatch.Filled()</c> counts); later calls for

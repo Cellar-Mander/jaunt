@@ -210,6 +210,8 @@ public static class FfxivVenues
             var uri = Uri.TryCreate(text.Trim(), UriKind.Absolute, out var parsed) && WebLinks.IsWeb(parsed)
                 ? parsed
                 : WebLinks.Find(text) is [var first, ..] ? first.Uri : null;
+            if (uri is not null)
+                uri = WebLinks.Unwrap(uri);
             if (uri is not null && !links.Contains(uri))
                 links.Add(uri);
         }

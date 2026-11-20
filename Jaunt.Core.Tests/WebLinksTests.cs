@@ -147,4 +147,21 @@ public class WebLinksTests
     [InlineData("ftp://discord.gg/abc", false)] // Jaunt opens only http and https
     public void TellsDiscordInvitesApart(string uri, bool expected) =>
         Assert.Equal(expected, WebLinks.IsDiscordInvite(new Uri(uri)));
+
+    [Theory]
+    // As the RP calendar sends them (Google Calendar's redirect, with the next & HTML-escaped)
+    [InlineData("https://www.google.com/url?q=https://xiv.fyi/6ZbV&amp", "https://xiv.fyi/6ZbV")]
+    [InlineData("https://www.google.com/url?q=https://xiv.fyi/10841wlr-&amp", "https://xiv.fyi/10841wlr-")]
+    [InlineData("https://google.com/url?sa=D&q=https%3A%2F%2Fvenue.carrd.co%2F%3Fa%3D1&ust=1", "https://venue.carrd.co/?a=1")]
+    [InlineData("http://www.google.com/url?q=http://venue.example.com/", "http://venue.example.com/")]
+    [InlineData("https://www.google.com/url?q=javascript:alert(1)", "https://www.google.com/url?q=javascript:alert(1)")]
+    [InlineData("https://www.google.com/url?q=venue", "https://www.google.com/url?q=venue")]
+    [InlineData("https://www.google.com/url?url=https://venue.carrd.co/", "https://www.google.com/url?url=https://venue.carrd.co/")]
+    [InlineData("https://www.google.com/url?u=https://venue.carrd.co/", "https://www.google.com/url?u=https://venue.carrd.co/")] // only q names the page
+    [InlineData("https://www.google.com/search?q=https://venue.carrd.co/", "https://www.google.com/search?q=https://venue.carrd.co/")]
+    [InlineData("https://notgoogle.com/url?q=https://venue.carrd.co/", "https://notgoogle.com/url?q=https://venue.carrd.co/")]
+    [InlineData("https://google.com.example.com/url?q=https://venue.carrd.co/", "https://google.com.example.com/url?q=https://venue.carrd.co/")]
+    [InlineData("https://venue.carrd.co/url?q=https://elsewhere.com/", "https://venue.carrd.co/url?q=https://elsewhere.com/")]
+    public void UnwrapsGoogleRedirects(string uri, string expected) =>
+        Assert.Equal(new Uri(expected), WebLinks.Unwrap(new Uri(uri)));
 }

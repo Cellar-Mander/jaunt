@@ -275,6 +275,12 @@ public class RpEventCalendarTests
     [Fact]
     public void ShowsThePageLink() => Assert.Equal([new Uri("https://xiv.fyi/ZE2J")], Shown(RowJson()).Links);
 
+    [Fact]
+    public void ShowsThePageAGoogleRedirectForwardsTo() =>
+        Assert.Equal(
+            [new Uri("https://xiv.fyi/6ZbV")],
+            Shown(RowJson(url: "\"https://www.google.com/url?q=https://xiv.fyi/6ZbV&amp\"")).Links);
+
     [Theory]
     [InlineData("\"javascript:alert(1)\"")]
     [InlineData("\"\"")]

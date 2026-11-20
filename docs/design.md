@@ -284,7 +284,9 @@ each request is recorded before it is sent, so a failed one counts too. Download
   has no address and isn't in the browser.
 - **Links**: the website then the Discord, then the Discord invites the description links to, http
   or https only. One without a scheme is read like a link in ad text (`discord.gg/abc` opens as
-  https); any other scheme is dropped, including in a hand-edited cache. The same link twice is kept once.
+  https); any other scheme is dropped, including in a hand-edited cache. A Google redirect
+  (`google.com/url?q=…`, as Google Calendar rewrites the RP calendar's links) is shown as the http or
+  https page it forwards to. The same link twice is kept once.
 - **Description**: the `description` paragraphs that aren't blank, joined with a blank line, then
   cleaned. 1,340 of 1,365 venues had one in the spike capture.
 - **Open 24/7**: every day of the week (days 0–6) has an opening that repeats every week (interval
