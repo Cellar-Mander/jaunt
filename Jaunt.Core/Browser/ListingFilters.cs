@@ -70,6 +70,14 @@ public static class ListingFilters
         return query.Matches(entry.SearchFields);
     }
 
+    /// <summary>How many filters are on: each toggle, and each tag ticked. Search isn't counted.</summary>
+    public static int OnCount(BrowserFilters filters) =>
+        (filters.SfwOnly ? 1 : 0) + (filters.Favourites ? 1 : 0) + (filters.HideVisited ? 1 : 0) + (filters.ShowHidden ? 1 : 0)
+        + System.Numerics.BitOperations.PopCount((uint)(filters.Tags & AllInterests));
+
+    /// <summary>The most <see cref="OnCount"/> can be.</summary>
+    public static readonly int MaxOnCount = 4 + Labels.Count;
+
     /// <summary>The labels of the interests set, in <see cref="Labels"/> order.</summary>
     public static IEnumerable<string> LabelsOf(Interests interests) =>
         Labels.Where(l => (interests & l.Interest) != 0).Select(l => l.Label);

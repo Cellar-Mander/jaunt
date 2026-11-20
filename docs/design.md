@@ -559,7 +559,15 @@ again.
 
 `/jaunt` and the installer's Open button toggle the browser; `/jaunt config` and the cog in its title
 bar open Settings. The window has the list on the left and the selected listing's details on the
-right, under a line of search and filters. The narrow single-column layout (`2dce5769`) is a separate task.
+right, under a line of search and filters.
+
+- **Single column**: when the window's content is narrower than 45 font heights (`ImGui.GetFontSize()`,
+  so a raised font scale switches at a wider window), the list fills the window, under the search box
+  and a "Filters · n" button (n filters on, counting each toggle and tag ticked; plain "Filters" for
+  none) that opens a menu of every filter as a checkbox, then the count of entries listed. Clicking a
+  row shows its details in place of the list, under a Back to listings button. The window reopens on
+  the list, and goes back to it when the selected listing is no longer shown. The window can be made
+  as narrow as 320 pixels.
 
 - **Ingest**: every Party Finder ad in the None category the game sends is recorded in the listing
   cache as `InGamePartyFinder`, keyed by the PF listing ID, with its text (`description`, glyphs

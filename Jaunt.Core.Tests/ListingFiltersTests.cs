@@ -179,4 +179,31 @@ public class ListingFiltersTests
     [Fact]
     public void LabelsOfKeepsTheMenuOrder() =>
         Assert.Equal(["Bars", "Live shows", "Chill"], ListingFilters.LabelsOf(Interests.Chill | Interests.LiveShows | Interests.Bars));
+
+    [Fact]
+    public void OnCountIsZeroWithEveryFilterOff() => Assert.Equal(0, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, Search = "jazz" }));
+
+    [Fact]
+    public void OnCountCountsEachToggle()
+    {
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters()));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, Favourites = true }));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, HideVisited = true }));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, ShowHidden = true }));
+        Assert.Equal(4, ListingFilters.OnCount(new BrowserFilters { Favourites = true, HideVisited = true, ShowHidden = true }));
+    }
+
+    [Fact]
+    public void OnCountCountsEachTagButNotUnknownBits()
+    {
+        Assert.Equal(3, ListingFilters.OnCount(new BrowserFilters { Tags = Interests.Bars | Interests.Clubs }));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { Tags = (Interests)(1 << 30) }));
+    }
+
+    [Fact]
+    public void MaxOnCountIsEveryFilterOn() =>
+        Assert.Equal(ListingFilters.MaxOnCount, ListingFilters.OnCount(new BrowserFilters
+        {
+            Favourites = true, HideVisited = true, ShowHidden = true, Tags = ListingFilters.AllInterests,
+        }));
 }

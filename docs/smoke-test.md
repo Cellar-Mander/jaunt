@@ -84,21 +84,25 @@ before this version have no openings until FFXIV Venues is fetched again: clear 
 times as in FFXIV Venues 1 first.
 
 1. **Layout**: `/jaunt` opens a window with the list on the left and a detail pane on the right. The
-   title bar has a cog that opens Settings. Resize the window to its smallest: both panes stay usable.
-   At Steam Deck size (1280×800) with a raised font scale (`/xlsettings` → Look & Feel → Global Font
-   Scale), rows and the detail pane aren't clipped.
-2. **Groups**: dividers read "Open now", then "Today" with the weekday dimmed (if anything opens
+   title bar has a cog that opens Settings. At Steam Deck size (1280×800) with a raised font scale
+   (`/xlsettings` → Look & Feel → Global Font Scale), rows and the detail pane aren't clipped.
+2. **Single column**: narrow the window until the detail pane goes: the list fills the window under
+   the search box and "Filters · n" (n matching the filters on; tick one in its menu and the count and
+   list follow). Raise the font scale and the switch happens at a wider window. Click a row: its
+   details replace the list, with Back to listings above them; Back returns to the list where it was
+   scrolled. Resize to the smallest: the list and details stay usable.
+3. **Groups**: dividers read "Open now", then "Today" with the weekday dimmed (if anything opens
    later today), "Tomorrow" and the weekday, then dates in the Settings format with the weekday
    dimmed. 24/7 venues are at the end of "Open now". A venue open now also shows under its next
    opening's day; one not open shows once.
-3. **Rows**: each has a rounded square icon level with the first line (a pictogram of its first tag until its image loads, and for one with none), a status line (green "Open now · until …" or the times), the
+4. **Rows**: each has a rounded square icon level with the first line (a pictogram of its first tag until its image loads, and for one with none), a status line (green "Open now · until …" or the times), the
    title in a larger font and the world. Above the list, at the right, "N listings" counts the
    entries (a venue under both "Open now" and its next day counts once). Narrow the window: long titles end in "…" rather than running under the
    detail pane.
-4. **Local time**: change Settings → Display between 12- and 24-hour and the date formats; rows,
+5. **Local time**: change Settings → Display between 12- and 24-hour and the date formats; rows,
    dividers and the detail follow at once. A venue's opening matches its FFXIV Venues page in your
    time zone.
-5. **Detail**: select a Party Finder ad, a venue, a Partake event and a calendar event. Each shows a
+6. **Detail**: select a Party Finder ad, a venue, a Partake event and a calendar event. Each shows a
    band with its splash image (its district's art, dimmed, for one with none), its title in a larger font, status, world, Travel and Open page where it has an address or link, Location,
    and a footer naming its source ("Sources: FFXIV Venues"), each source but Party Finder linking to its
    site, in blue and underlined. A venue with a Discord invite shows "Discord" (also blue and underlined) first in the footer, opening the invite, and
@@ -108,13 +112,13 @@ times as in FFXIV Venues 1 first.
    An ad naming DJs ("DJs: KK, Moon Cat, and Sleepy") shows them under Lineup, separated by dots; a name or handle whose
    Twitch channel the ad links is blue and underlined and opens it, and that link isn't listed again under Location. An ad
    naming no performer, or only a birthday ("HAPPY BIRTHDAY OPHE"), has no Lineup.
-6. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
+7. **Selection is remembered**: select a listing, close and reopen `/jaunt`: it is still selected.
    Disable and re-enable Jaunt: still selected. Press Settings → Clear cached listings, so it drops
    out of the data: the detail pane shows "Select a listing on the left to see its details."
-7. **Empty states**: with nothing selected, the detail pane shows the help text. With nothing listed
+8. **Empty states**: with nothing selected, the detail pane shows the help text. With nothing listed
    (log in a character in a region with no cached listings, with the network blocked), the list shows
    a joke line such as "No one here but us chickens." and the detail pane is blank.
-8. **Duplicates**: with the Party Finder's None category open for a while, no venue shows twice at
+9. **Duplicates**: with the Party Finder's None category open for a while, no venue shows twice at
    the same time: a re-posted ad (same text, new listing), a venue's several ads, and an ad for an
    FFXIV Venues venue that is open then each show as one row. The merged row takes the FFXIV Venues
    name, Location lists every link from its listings once, About shows one ad's text, and the footer
@@ -123,9 +127,9 @@ times as in FFXIV Venues 1 first.
    venue's next opening still shows under its own day. FFXIV Venues venues cached before this version
    have no openings to merge with: clear the `FfxivVenues/…` times as in FFXIV Venues 1 first. *(self-test: none; the matching rules
    are covered by `DuplicatesTests`)*
-9. **Zone from a venue**: an ad that gives a time with no zone, for an FFXIV Venues venue, shows at the
+10. **Zone from a venue**: an ad that gives a time with no zone, for an FFXIV Venues venue, shows at the
    venue's opening time in your time zone, not hours away from it.
-10. **Icons and splash images**: with `images/` in the plugin's config folder deleted, open `/jaunt`.
+11. **Icons and splash images**: with `images/` in the plugin's config folder deleted, open `/jaunt`.
     Rows in view get icons within a few seconds: a venue with a Discord invite shows its server icon,
     and one without shows its website's icon or a square from its FFXIV Venues banner. Select an FFXIV
     Venues venue: its banner fills the band, cropped to it, not stretched. Select a Partake event: its
@@ -134,7 +138,7 @@ times as in FFXIV Venues 1 first.
     Jaunt: the images still show at once, from `images/`. Under
     Wine (XIVLauncher.Core), FFXIV Venues banners show, as they are WebP. *(self-test: none; fetching,
     fallbacks and keeping are covered by `ImageStoreTests`)*
-11. **Placeholders**: find a row with no icon (most Party Finder ads): it shows a grey pictogram of its
+12. **Placeholders**: find a row with no icon (most Party Finder ads): it shows a grey pictogram of its
     first tag in venue-type-first order, a mug for a cafe, a martini glass for a bar, headphones for a
     club, and a house for one with no tags. Select it: an ad with a Mist address shows Limsa Lominsa's
     loading screen, dimmed, cropped to the band with no dark fade at its bottom; one in the Lavender
