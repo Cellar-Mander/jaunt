@@ -78,7 +78,7 @@ public static class Schedules
     /// An FFXIV Venues venue. Each schedule entry's occurrence as the API resolved it is carried forward
     /// by its interval (every N weeks) until it is current, so a venue fetched days ago still shows its
     /// right openings; an entry repeating by week of the month, which can't be stepped by a fixed
-    /// period, keeps only the resolved occurrence. Stepping is in whole weeks of UTC, so after a
+    /// period, keeps only the resolved occurrence. Entries that overlap or meet are one opening. Stepping is in whole weeks of UTC, so after a
     /// daylight saving change an opening is an hour out until the venue is fetched again.
     /// </summary>
     public static ListingSchedule ForVenue(FfxivVenues.Fields? fields, DateTimeOffset now)
@@ -117,7 +117,31 @@ public static class Schedules
         }
 
         occurrences.Sort((a, b) => Nullable.Compare(a.Start, b.Start));
-        return new ListingSchedule(false, false, occurrences);
+        return new ListingSchedule(false, false, Joined(occurrences));
+    }
+
+    /// <summary>
+    /// Venue occurrences sorted by start, with any that overlap or run back to back joined into one, so
+    /// a venue whose schedule entries overlap (Thursday until 05:30, Friday from 00:30) is listed once.
+    /// Every venue occurrence has a start and an end.
+    /// </summary>
+    private static List<Occurrence> Joined(List<Occurrence> sorted)
+    {
+        var joined = new List<Occurrence>(sorted.Count);
+        foreach (var occurrence in sorted)
+        {
+            if (joined.Count > 0 && joined[^1] is var last && occurrence.Start <= last.End)
+            {
+                if (occurrence.End > last.End)
+                    joined[^1] = last with { End = occurrence.End };
+            }
+            else
+            {
+                joined.Add(occurrence);
+            }
+        }
+
+        return joined;
     }
 
     /// <summary>
