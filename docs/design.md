@@ -577,7 +577,9 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
     UTC for an entry repeating every N weeks (interval type 0) until it hasn't ended, and gives that
     occurrence and the one N weeks later. An entry repeating by week of the month keeps only its
     resolution, until it ends. An entry without a resolution (a venue cached before it was kept)
-    gives none until the next fetch. Recurring. Schedule overrides are ignored.
+    gives none until the next fetch. Occurrences that overlap or meet (an owner's Thursday entry
+    running past midnight into Friday's) are one opening, from the earlier start to the later end.
+    Recurring. Schedule overrides are ignored.
   - Partake: its start and end. One-off.
   - FFXIV RP Event Calendar: its occurrences; one-off when the calendar says it doesn't recur.
   - Party Finder ads: the times read from the text (see "Opening times in Party Finder ads"), in the

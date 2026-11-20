@@ -179,6 +179,47 @@ public class SchedulesTests
     }
 
     [Fact]
+    public void OverlappingVenueEntriesAreOneOpening()
+    {
+        // The Vaguely Bathhouse: Thursday 22:30 to Friday 05:30 EST and Friday 00:30 to 06:30 EST,
+        // seen at Friday 05:17 EST while both are open
+        var est = TimeSpan.FromHours(-5);
+        var thursday = Entry(new DateTimeOffset(2026, 11, 19, 22, 30, 0, est), new DateTimeOffset(2026, 11, 20, 5, 30, 0, est));
+        var friday = Entry(new DateTimeOffset(2026, 11, 20, 0, 30, 0, est), new DateTimeOffset(2026, 11, 20, 6, 30, 0, est));
+        var now = new DateTimeOffset(2026, 11, 20, 5, 17, 0, est);
+
+        var schedule = Schedules.ForVenue(Venue(thursday, friday), now);
+
+        var opening = new Occurrence(new DateTimeOffset(2026, 11, 19, 22, 30, 0, est), new DateTimeOffset(2026, 11, 20, 6, 30, 0, est));
+        var nextWeek = new Occurrence(opening.Start!.Value.AddDays(7), opening.End!.Value.AddDays(7));
+        Assert.Equal([opening, nextWeek], schedule.Occurrences);
+        Assert.Equal([opening, nextWeek], Schedules.Listed(schedule, now));
+    }
+
+    [Fact]
+    public void AVenueEntryInsideAnotherIsPartOfIt()
+    {
+        var schedule = Schedules.ForVenue(Venue(Entry(Now.AddHours(1), Now.AddHours(6)), Entry(Now.AddHours(2), Now.AddHours(3))), Now);
+        Assert.Equal([At(1, 6), new Occurrence(Now.AddDays(7).AddHours(1), Now.AddDays(7).AddHours(6))], schedule.Occurrences);
+    }
+
+    [Fact]
+    public void BackToBackVenueEntriesAreOneOpening()
+    {
+        var schedule = Schedules.ForVenue(Venue(Entry(Now.AddHours(3), Now.AddHours(5)), Entry(Now.AddHours(1), Now.AddHours(3))), Now);
+        Assert.Equal([At(1, 5), new Occurrence(Now.AddDays(7).AddHours(1), Now.AddDays(7).AddHours(5))], schedule.Occurrences);
+    }
+
+    [Fact]
+    public void VenueEntriesWithAGapStaySeparate()
+    {
+        // revert-check: not revert-sensitive (guards against joining too much, which the old code never did)
+        var schedule = Schedules.ForVenue(Venue(Entry(Now.AddHours(1), Now.AddHours(3)), Entry(Now.AddHours(3).AddMinutes(1), Now.AddHours(5))), Now);
+        Assert.Equal([At(1, 3), new Occurrence(Now.AddHours(3).AddMinutes(1), Now.AddHours(5))], schedule.Occurrences.Take(2));
+        Assert.Equal(4, schedule.Occurrences.Count);
+    }
+
+    [Fact]
     public void AVenueWithoutResolutionsOrWithAnInvertedOneHasNoOpenings()
     {
         var unresolved = new FfxivVenues.Opening(0, new FfxivVenues.Time(20, 0, false), new FfxivVenues.Time(23, 0, false), new FfxivVenues.Interval(0, 1));
