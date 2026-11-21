@@ -94,6 +94,20 @@ public class ListingTagsTests
     }
 
     [Theory]
+    [InlineData("Club Noir open tonight", Interests.Clubs)]
+    [InlineData("The Bubblegum Club", Interests.Clubs)]
+    [InlineData("Two clubs, one night", Interests.Clubs)]
+    [InlineData("18+ The Wildwood Club now open! | Fae bathhouse and social club for all.", Interests.Spa)] // the bare "club" is the social club
+    [InlineData("Immersive RP, Bar + Host Club Open NOW!", Interests.Roleplay | Interests.Bars)]
+    [InlineData("Eden Hall Hostess Club", Interests.None)]
+    [InlineData("A gentleman's club", Interests.None)]
+    [InlineData("Gentlemens Club", Interests.None)]
+    [InlineData("Book clubs on Sunday", Interests.None)]
+    [InlineData("Fight club tonight", Interests.Games)]
+    [InlineData("Social club with a DJ", Interests.Clubs)] // other club words still count
+    public void ClubMeansANightclubUnlessTheTextSaysAnotherKind(string text, Interests expected) => Assert.Equal(expected, InterestsOf(text));
+
+    [Theory]
     [InlineData("Come party with us", true)]
     [InlineData("Come with us", false)]
     public void PartyCountsAsAClubNight(string text, bool club) => Assert.Equal(club, InterestsOf(text).HasFlag(Interests.Clubs));
