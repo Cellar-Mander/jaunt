@@ -106,6 +106,25 @@ public class ListingFiltersTests
     [InlineData("cafe", "Caff")]
     public void FoldingKeepsOtherLettersApart(string search, string field) => Assert.False(SearchesFolded(search, field));
 
+    // Each letter that doesn't decompose, in both cases, and the last combining mark in the dropped range (U+036F)
+    [Theory]
+    [InlineData("bjork", "BJØRK")]
+    [InlineData("lodz", "łódź")]
+    [InlineData("LODZ", "ŁÓDŹ")]
+    [InlineData("dakovo", "đakovo")]
+    [InlineData("dakovo", "Đakovo")]
+    [InlineData("hal", "ħal")]
+    [InlineData("hal", "Ħal")]
+    [InlineData("aether", "æther")]
+    [InlineData("coeur", "cœur")]
+    [InlineData("oeuvre", "Œuvre")]
+    [InlineData("ab", "a\u036Fb")]
+    public void FoldSpellsOutEveryLetterThatDoesntDecompose(string search, string field)
+    {
+        // revert-check: not revert-sensitive (kills mutants that survived or had no coverage: pins existing behaviour)
+        Assert.True(SearchesFolded(search, field));
+    }
+
     [Fact]
     public void ByDefaultOnlyNsfwAndHiddenAreLeftOut()
     {
