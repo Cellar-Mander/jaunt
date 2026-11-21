@@ -253,6 +253,8 @@ On load:
   move them. Marked recurring listings are kept however old. Marked one-offs expire the same way as
   unmarked listings, since they can't reliably be matched to a later listing; the window doesn't
   mention this. Clear still keeps marked one-offs.
+- **Mark visited automatically** (Listings, on by default) switches "Visited automatically" under
+  "Marks" in "Listing browser".
 - **Hidden venues** lists hidden places by title, case-insensitively, each once with its address
   dimmed, then hidden listings by title; each has an Un-hide button. Titles are drawn as in "Text the
   font can't draw".
@@ -727,6 +729,13 @@ right, under a line of search and filters. The narrow single-column layout (`2dc
     row's highlight, inset from the top and right by the same gap; the status line is cut short of them.
   - **Clearing**: clicking a lit button clears that mark from the place and every listing, so a mark
     set before the entry merged with another still comes off.
+  - **Visited automatically** (`AutoVisits`; Settings → Listings, on by default): every 5 seconds the
+    plugin reads where the player is from the game's housing manager: the plot they stand on, the
+    house they are inside (any room counts as its plot) or the apartment they are in (not the lobby).
+    An entry with that plot or apartment among its addresses and an opening in progress is marked
+    visited as its button would, whether or not the browser is open. Entries naming only the ward, and
+    places outside housing, never count. Each entry is marked at most once per stay at an address, so
+    one marked not visited while the player is still there stays unmarked; leaving starts a new stay.
   - **Hide**: listings are merged before hidden ones are left out, and an entry whose place or any
     listing is hidden isn't listed, so hiding a venue also hides the ads listed as it. Hide takes the
     entry out of the list at once and says where to un-hide it (Settings → Hidden venues), unless

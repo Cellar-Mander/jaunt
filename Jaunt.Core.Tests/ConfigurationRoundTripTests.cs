@@ -84,6 +84,17 @@ public class ConfigurationRoundTripTests
     }
 
     [Fact]
+    public void AutoMarkVisitedIsOnByDefaultAndOffLoadsBack()
+    {
+        var json = JsonConvert.SerializeObject(new TestConfiguration(), DalamudSettings)
+            .Replace("\"AutoMarkVisited\":true,", "", StringComparison.Ordinal);
+        Assert.DoesNotContain("AutoMarkVisited", json, StringComparison.Ordinal);
+
+        Assert.True(Load(json).AutoMarkVisited);
+        Assert.False(SaveAndLoad(new TestConfiguration { AutoMarkVisited = false }).AutoMarkVisited);
+    }
+
+    [Fact]
     public void ConfigSavedBeforeTheseSettingsLoadsDefaults()
     {
         var json = JsonConvert.SerializeObject(new TestConfiguration(), DalamudSettings)
