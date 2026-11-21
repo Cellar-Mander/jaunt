@@ -535,7 +535,10 @@ again.
   prizes, giveaways and fighting (fight club, fight ring, brawls, wrestling, duels) as Games,
   and comedy, comedians, stand-up, improv and theatre as Live shows ("play", "drama", "show" and
   "line" don't count, being common in other ads);
-  "fight" alone doesn't count, as FC ads use it ("we fight together"); a Twitch link or "party" counts as Clubs. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
+  "fight" alone doesn't count, as FC ads use it ("we fight together"); a Twitch link or "party" counts as Clubs.
+  "Club" counts as Clubs only when the text names no other kind of club (social, host, hostess,
+  gentleman's, strip, book, fight, supper or members club): "The Wildwood Club ... bathhouse and
+  social club" is a social club, so its bare "club" doesn't count either; "nightclub" always counts. On the labelled corpus's 274 venue ads, 254 get at least one interest; the
   lists were tuned on those ads.
 - **Source tags**: FFXIV Venues' owner-chosen tags and Partake's event tags map to interests,
   ignoring case and surrounding spaces ("Bath house" → Spa, "Live DJs" → Clubs, "Cafes, Taverns &

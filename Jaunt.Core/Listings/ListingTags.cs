@@ -63,7 +63,7 @@ public static class ListingTags
     internal static readonly (string Keyword, Interests Interests)[] Keywords =
     [
         .. Each(Interests.Clubs,
-            "club", "nightclub", "dj", "dance", "dancing", "dancer", "rave", "edm", "techno", "house music",
+            "nightclub", "dj", "dance", "dancing", "dancer", "rave", "edm", "techno", "house music",
             "twitch tv", "disco", "party", "emo night", "emonight", "クラブ", "ダンス"),
         .. Each(Interests.Bars,
             "bar", "tavern", "pub", "saloon", "lounge", "inn", "drink", "cocktail", "brewery", "speakeasy", "booze",
@@ -97,6 +97,15 @@ public static class ListingTags
             "afk", "24/7", "chill", "chillout", "hangout", "hang out", "open house", "relax", "relaxing", "cozy",
             "cosy", "quiet", "library", "雑談", "読書", "見学", "まったり", "放置"),
     ];
+
+    // "Club" counts as Clubs only when no "club" in the text follows one of these words, which name
+    // other kinds of club: "The Wildwood Club ... social club" is a social club. A lone "s" between
+    // them is an apostrophe's ("gentleman's club").
+    private static readonly HashSet<string> OtherClubKinds = new(StringComparer.Ordinal)
+    {
+        "social", "host", "hostess", "gentleman", "gentlemen", "gentlemens", "strip", "book", "fight", "fighting",
+        "supper", "members",
+    };
 
     // The tags FFXIV Venues owners and Partake hosts choose from, matched ignoring case
     internal static readonly Dictionary<string, Interests> SourceTagInterests = new(StringComparer.OrdinalIgnoreCase)
@@ -306,7 +315,7 @@ public static class ListingTags
         var text = PartyFinderText.Normalise(raw).Text.ToLowerInvariant();
         var words = Split(text);
         var interests = Interests.None;
-        bool sfw = false, nsfw = false;
+        bool sfw = false, nsfw = false, club = false, otherClub = false;
         var age = 0;
         for (var i = 0; i < words.Count; i++)
         {
@@ -322,6 +331,15 @@ public static class ListingTags
             else if (word.StartsWith("18+", StringComparison.Ordinal))
                 age = Math.Max(age, 18);
 
+            if (word is "club" or "clubs")
+            {
+                var before = i > 0 && words[i - 1] == "s" ? i - 2 : i - 1;
+                if (before >= 0 && OtherClubKinds.Contains(words[before]))
+                    otherClub = true;
+                else
+                    club = true;
+            }
+
             interests |= Lookup(word);
             if (Phrases.TryGetValue(word, out var phrases))
             {
@@ -332,6 +350,9 @@ public static class ListingTags
                 }
             }
         }
+
+        if (club && !otherClub)
+            interests |= Interests.Clubs;
 
         // Each of these means 18
         foreach (var phrase in AgePhrases)
