@@ -10,6 +10,7 @@ public enum SettingsSection
     Data,
     Display,
     Listings,
+    Calendar,
 }
 
 /// <summary>
@@ -31,6 +32,9 @@ public abstract class ConfigurationBase
 
     /// <summary>Settings → Display.</summary>
     public DateFormat DateFormat { get; set; } = DateFormat.System;
+
+    /// <summary>Settings → Calendar: how Add to calendar adds an opening when clicked (<see cref="CalendarExport"/>).</summary>
+    public CalendarFormat CalendarFormat { get; set; } = CalendarFormat.Ics;
 
     /// <summary>Settings → Listings: mark an entry visited when the player is at its plot or apartment while it is open (<see cref="AutoVisits"/>).</summary>
     public bool AutoMarkVisited { get; set; } = true;
@@ -55,6 +59,8 @@ public abstract class ConfigurationBase
             TimeFormat = TimeFormat.System;
         if (!Enum.IsDefined(DateFormat))
             DateFormat = DateFormat.System;
+        if (!Enum.IsDefined(CalendarFormat))
+            CalendarFormat = CalendarFormat.Ics;
         Filters ??= new BrowserFilters();
         Filters.Search ??= "";
         Filters.Tags &= ListingFilters.AllInterests;

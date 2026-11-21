@@ -94,7 +94,8 @@ public sealed class Plugin : IDalamudPlugin
             (message, e) => Log.Warning(e, message));
         ListingsWindow = new ListingsWindow(
             ListingCache, gazetteer, GamePlacesLoader.Load(DataManager), new Lifestream(PluginInterface, Log), new GamePartyFinder(PlayerState), HousingMap.Load(DataManager, GameGui), NotificationManager, Configuration, FetchSources, SaveListingCache, region.Get, () => ConfigWindow.IsOpen = true,
-            titleFont, iconFont, imageStore, TextureProvider, PlaceholderArt.Backdrops(DataManager));
+            titleFont, iconFont, imageStore, TextureProvider, PlaceholderArt.Backdrops(DataManager),
+            new CalendarOpener(Path.Combine(PluginInterface.ConfigDirectory.FullName, "calendar"), NotificationManager, Log));
         WindowSystem.AddWindow(ListingsWindow);
         playerAddress = new PlayerAddress(PlayerState, ClientState, Log);
         Framework.Update += CheckVisits;

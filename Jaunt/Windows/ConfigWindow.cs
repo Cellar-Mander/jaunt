@@ -10,14 +10,14 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Jaunt.Core;
+using Jaunt.Core.Browser;
 using Jaunt.Core.Display;
 using Jaunt.Core.Listings;
 
 namespace Jaunt.Windows;
 
 /// <summary>
-/// Settings, in collapsible groups: Data, Display, then Listings. The Calendar group (between Display and
-/// Listings) comes with the feature it configures.
+/// Settings, in collapsible groups: Data, Display, Calendar, then Listings.
 /// </summary>
 public sealed class ConfigWindow : Window, IDisposable
 {
@@ -99,6 +99,8 @@ public sealed class ConfigWindow : Window, IDisposable
             DrawData();
         if (DrawSectionHeader(SettingsSection.Display, "Display###Display"))
             DrawDisplay();
+        if (DrawSectionHeader(SettingsSection.Calendar, "Calendar###Calendar"))
+            DrawCalendar();
         if (DrawSectionHeader(SettingsSection.Listings, "Listings###Listings"))
             DrawListings();
     }
@@ -287,6 +289,21 @@ public sealed class ConfigWindow : Window, IDisposable
         }
 
         ImGui.TextDisabled(nowText);
+    }
+
+    private void DrawCalendar()
+    {
+        var format = configuration.CalendarFormat;
+        if (Combo("Add to calendar with", CalendarOpener.Formats, ref format))
+        {
+            configuration.CalendarFormat = format;
+            configuration.Save();
+        }
+
+        HelpMarker(
+            "What the calendar button by a listing's Favourite button does when clicked; right-click it for the others.\n" +
+            "Calendar app opens a .ics file with your system's calendar app. If none opens it, Jaunt opens Google Calendar instead.\n" +
+            "The event is the listing's next opening with a stated start; with no closing time it is a moment at the start.");
     }
 
     private void DrawListings()
