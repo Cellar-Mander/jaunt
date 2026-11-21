@@ -150,6 +150,7 @@ public static class CalendarExport
     {
         if (text is null)
             return null;
+        // Stryker disable once Linq : the capacity only sizes the buffer; what is appended is the same
         var cleaned = new StringBuilder(Math.Min(text.Length, max));
         for (var i = 0; i < text.Length && cleaned.Length < max; i++)
         {

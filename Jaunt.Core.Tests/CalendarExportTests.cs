@@ -29,7 +29,9 @@ public class CalendarExportTests
     {
         var ics = CalendarExport.Ics(Event(), Now);
 
-        Assert.StartsWith("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:", ics, StringComparison.Ordinal);
+        Assert.StartsWith(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Jaunt//Jaunt//EN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\nBEGIN:VEVENT\r\nUID:",
+            ics, StringComparison.Ordinal);
         Assert.EndsWith("END:VEVENT\r\nEND:VCALENDAR\r\n", ics, StringComparison.Ordinal);
         Assert.DoesNotContain('\n', ics.Replace("\r\n", "", StringComparison.Ordinal));
         Assert.Equal("20261123T020000Z", Property(ics, "DTSTART"));
@@ -48,6 +50,8 @@ public class CalendarExportTests
 
         Assert.Equal(@"Wine\; Song\, and \\ more", Property(ics, "SUMMARY"));
         Assert.Equal(@"Line one\nLine two\nLine three\nend", Property(ics, "DESCRIPTION"));
+        // A CR as the last character has no LF after it to look at
+        Assert.Equal(@"Last\nline", Property(CalendarExport.Ics(Event(description: "Last\rline\r"), Now), "DESCRIPTION"));
     }
 
     [Fact]
@@ -73,6 +77,15 @@ public class CalendarExportTests
     }
 
     [Fact]
+    public void ALoneHighSurrogateAtTheEndOfALineIsWrittenAsIs()
+    {
+        // Only the UID isn't cut, which would drop it; there is no character after it to pair with
+        var ics = CalendarExport.Ics(Event() with { Uid = "uid\uD83D" }, Now);
+
+        Assert.Equal("uid\uD83D", Property(ics, "UID"));
+    }
+
+    [Fact]
     public void ALineOfExactly75OctetsIsNotFolded()
     {
         // "SUMMARY:" is 8 octets
@@ -89,9 +102,11 @@ public class CalendarExportTests
     {
         var noEnd = Event() with { End = null };
         var backwards = Event() with { End = Start.AddHours(-1) };
+        var same = Event() with { End = Start };
 
         Assert.DoesNotContain(Unfolded(CalendarExport.Ics(noEnd, Now)), l => l.StartsWith("DTEND", StringComparison.Ordinal));
         Assert.DoesNotContain(Unfolded(CalendarExport.Ics(backwards, Now)), l => l.StartsWith("DTEND", StringComparison.Ordinal));
+        Assert.DoesNotContain(Unfolded(CalendarExport.Ics(same, Now)), l => l.StartsWith("DTEND", StringComparison.Ordinal));
         Assert.Contains("dates=20261123T020000Z%2F20261123T020000Z", CalendarExport.GoogleLink(noEnd).AbsoluteUri, StringComparison.Ordinal);
         Assert.Contains("enddt=2026-11-23T02%3A00%3A00Z", CalendarExport.OutlookLink(backwards).AbsoluteUri, StringComparison.Ordinal);
     }
@@ -104,6 +119,7 @@ public class CalendarExportTests
 
         Assert.Equal("(untitled)", Property(ics, "SUMMARY"));
         Assert.DoesNotContain(Unfolded(ics), l => l.StartsWith("LOCATION", StringComparison.Ordinal) || l.StartsWith("DESCRIPTION", StringComparison.Ordinal) || l.StartsWith("URL", StringComparison.Ordinal));
+        Assert.DoesNotContain(Unfolded(CalendarExport.Ics(bare with { Description = null }, Now)), l => l.StartsWith("DESCRIPTION", StringComparison.Ordinal));
         var google = CalendarExport.GoogleLink(bare).AbsoluteUri;
         Assert.DoesNotContain("location=", google, StringComparison.Ordinal);
         Assert.DoesNotContain("details=", google, StringComparison.Ordinal);
@@ -118,6 +134,7 @@ public class CalendarExportTests
         Assert.Equal("https://lotus.example/menu?a=1,2", Property(ics, "URL"));
         Assert.Equal(@"https://lotus.example/menu?a=1\,2\n\nDrinks and dancing", Property(ics, "DESCRIPTION"));
         Assert.Equal("https://lotus.example/menu?a=1\\,2", Property(CalendarExport.Ics(withUrl with { Description = null }, Now), "DESCRIPTION"));
+        Assert.Equal("https://lotus.example/menu?a=1\\,2", Property(CalendarExport.Ics(withUrl with { Description = "" }, Now), "DESCRIPTION"));
     }
 
     [Theory]
