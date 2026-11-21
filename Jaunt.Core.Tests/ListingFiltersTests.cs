@@ -106,6 +106,25 @@ public class ListingFiltersTests
     [InlineData("cafe", "Caff")]
     public void FoldingKeepsOtherLettersApart(string search, string field) => Assert.False(SearchesFolded(search, field));
 
+    // Each letter that doesn't decompose, in both cases, and the last combining mark in the dropped range (U+036F)
+    [Theory]
+    [InlineData("bjork", "BJØRK")]
+    [InlineData("lodz", "łódź")]
+    [InlineData("LODZ", "ŁÓDŹ")]
+    [InlineData("dakovo", "đakovo")]
+    [InlineData("dakovo", "Đakovo")]
+    [InlineData("hal", "ħal")]
+    [InlineData("hal", "Ħal")]
+    [InlineData("aether", "æther")]
+    [InlineData("coeur", "cœur")]
+    [InlineData("oeuvre", "Œuvre")]
+    [InlineData("ab", "a\u036Fb")]
+    public void FoldSpellsOutEveryLetterThatDoesntDecompose(string search, string field)
+    {
+        // revert-check: not revert-sensitive (kills mutants that survived or had no coverage: pins existing behaviour)
+        Assert.True(SearchesFolded(search, field));
+    }
+
     [Fact]
     public void ByDefaultOnlyNsfwAndHiddenAreLeftOut()
     {
@@ -179,4 +198,31 @@ public class ListingFiltersTests
     [Fact]
     public void LabelsOfKeepsTheMenuOrder() =>
         Assert.Equal(["Bars", "Live shows", "Chill"], ListingFilters.LabelsOf(Interests.Chill | Interests.LiveShows | Interests.Bars));
+
+    [Fact]
+    public void OnCountIsZeroWithEveryFilterOff() => Assert.Equal(0, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, Search = "jazz" }));
+
+    [Fact]
+    public void OnCountCountsEachToggle()
+    {
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters()));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, Favourites = true }));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, HideVisited = true }));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { SfwOnly = false, ShowHidden = true }));
+        Assert.Equal(4, ListingFilters.OnCount(new BrowserFilters { Favourites = true, HideVisited = true, ShowHidden = true }));
+    }
+
+    [Fact]
+    public void OnCountCountsEachTagButNotUnknownBits()
+    {
+        Assert.Equal(3, ListingFilters.OnCount(new BrowserFilters { Tags = Interests.Bars | Interests.Clubs }));
+        Assert.Equal(1, ListingFilters.OnCount(new BrowserFilters { Tags = (Interests)(1 << 30) }));
+    }
+
+    [Fact]
+    public void MaxOnCountIsEveryFilterOn() =>
+        Assert.Equal(ListingFilters.MaxOnCount, ListingFilters.OnCount(new BrowserFilters
+        {
+            Favourites = true, HideVisited = true, ShowHidden = true, Tags = ListingFilters.AllInterests,
+        }));
 }

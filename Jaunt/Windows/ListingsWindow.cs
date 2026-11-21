@@ -26,7 +26,7 @@ namespace Jaunt.Windows;
 
 /// <summary>
 /// The listing browser: the day-grouped list of listings on the left and the selected listing's
-/// details on the right. Lists in-game and xivpf Party Finder ads with an address, FFXIV Venues venues
+/// details on the right, or one column showing either when the window is narrow. Lists in-game and xivpf Party Finder ads with an address, FFXIV Venues venues
 /// with an address, Partake events and FFXIV RP Event Calendar events with an address or location, on
 /// worlds the character can travel to, at the openings <see cref="Schedules.Listed"/> picks. Listings at
 /// one address with overlapping openings, and ads with identical text, show as one entry
@@ -97,6 +97,9 @@ internal sealed class ListingsWindow : Window
     private int emptyLine = -1;
     private bool aboutExpanded;
 
+    // In the single-column layout, whether the selected listing's details show in place of the list
+    private bool showingDetail;
+
     // Texts cut to a width, worked out once per text and width rather than every frame
     private readonly Dictionary<(string Text, int Width, int FontSize), string> fitted = [];
     private readonly Dictionary<(string Text, int Width), string> aboutCuts = [];
@@ -133,6 +136,13 @@ internal sealed class ListingsWindow : Window
     // The removable chip for each tag picked, as ListingFilters.Labels lists them
     private static readonly string[] TagChipLabels = [.. ListingFilters.Labels.Select(l => $"{l.Label} ×")];
     private static readonly string[] TagChipTips = [.. ListingFilters.Labels.Select(l => $"Stop requiring {l.Label}")];
+
+    // The single-column layout's Filters button for each count of filters on, so drawing it doesn't allocate
+    private static readonly string[] FilterButtonLabels =
+        [.. Enumerable.Range(0, ListingFilters.MaxOnCount + 1).Select(n => (n == 0 ? "Filters" : $"Filters · {n}") + "##filtersMenu")];
+
+    // Below this many font heights of width the list and details share one column; in font heights, so a raised font scale switches at a wider window
+    private const float TwoColumnFontHeights = 45;
 
     /// <summary>What <see cref="Draw"/> allocates, for the self-test; see "Per-frame code" in CONTRIBUTING.md.</summary>
     internal AllocationWatch DrawAllocations { get; } = new();
@@ -266,8 +276,7 @@ internal sealed class ListingsWindow : Window
         this.configuration = configuration;
         Size = new Vector2(900, 600);
         SizeCondition = ImGuiCond.FirstUseEver;
-        // Fits a Steam Deck (1280×800) at a raised font scale; the single-column layout for narrower windows is 2dce5769
-        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(560, 320), MaximumSize = new Vector2(2400, 1600) };
+        SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(320, 320), MaximumSize = new Vector2(2400, 1600) };
         TitleBarButtons.Add(new TitleBarButton
         {
             Icon = FontAwesomeIcon.Cog,
@@ -282,6 +291,7 @@ internal sealed class ListingsWindow : Window
         fetchSources();
         nextRebuild = DateTimeOffset.MinValue;
         aboutExpanded = false;
+        showingDetail = false;
     }
 
     public override void OnClose()
@@ -320,6 +330,12 @@ internal sealed class ListingsWindow : Window
             return;
         }
 
+        if (ImGui.GetContentRegionAvail().X < TwoColumnFontHeights * ImGui.GetFontSize())
+        {
+            DrawSingleColumn(now);
+            return;
+        }
+
         DrawFilters(now);
 
         var listWidth = Math.Clamp(ImGui.GetContentRegionAvail().X * 0.4f, 240 * ImGuiHelpers.GlobalScale, 420 * ImGuiHelpers.GlobalScale);
@@ -338,16 +354,100 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// The search box and filter chips, wrapping onto more lines when the window is narrow, with the
-    /// count of entries listed at the right. A change applies at once and is saved; search text is
-    /// saved once the box loses focus.
+    /// The narrow window's layout: the list under the search box and a Filters button, or the selected
+    /// listing's details under a Back to listings button once one is picked.
     /// </summary>
-    private void DrawFilters(DateTimeOffset now)
+    private void DrawSingleColumn(DateTimeOffset now)
+    {
+        if (showingDetail && groups.Count > 0 && SelectedKey is { } key && rowsByKey.ContainsKey(key))
+        {
+            if (IconButton("##back", FontAwesomeIcon.ChevronLeft, "Back to listings"))
+                showingDetail = false;
+            using var detailChild = ImRaii.Child("##detail", Vector2.Zero, true);
+            if (detailChild.Success)
+                DrawDetail(now);
+            return;
+        }
+
+        // With nothing to show, such as the listing no longer being listed, it goes back to the list for good
+        showingDetail = false;
+        DrawFilterButton(now);
+        ImGui.TextDisabled(countText);
+        using var list = ImRaii.Child("##list", Vector2.Zero, true);
+        if (list.Success)
+            DrawList(now);
+    }
+
+    /// <summary>The search box, then a "Filters · n" button at the end of the line, opening a menu of every filter.</summary>
+    private void DrawFilterButton(DateTimeOffset now)
     {
         var filters = configuration.Filters;
-        var changed = false;
+        var style = ImGui.GetStyle();
+        var label = FilterButtonLabels[ListingFilters.OnCount(filters)];
+        var buttonWidth = ImGui.CalcTextSize(label, true).X + (style.FramePadding.X * 2);
+        ImGui.SetNextItemWidth(Math.Max(1, ImGui.GetContentRegionAvail().X - buttonWidth - style.ItemSpacing.X));
+        DrawSearch(now);
+        ImGui.SameLine();
+        if (ImGui.Button(label))
+            ImGui.OpenPopup("##filters");
 
-        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        var changed = false;
+        using (var popup = ImRaii.Popup("##filters"))
+        {
+            if (popup.Success)
+            {
+                var on = filters.SfwOnly;
+                if (FilterCheckbox("SFW only", ref on, "Leave out listings marked NSFW or adults only"))
+                    (changed, filters.SfwOnly) = (true, on);
+                on = filters.Favourites;
+                if (FilterCheckbox("Favourites", ref on, "List only favourites"))
+                    (changed, filters.Favourites) = (true, on);
+                on = filters.HideVisited;
+                if (FilterCheckbox("Hide visited", ref on, "Leave out places and events marked visited"))
+                    (changed, filters.HideVisited) = (true, on);
+                on = filters.ShowHidden;
+                if (FilterCheckbox("Show hidden", ref on, "List hidden venues too"))
+                    (changed, filters.ShowHidden) = (true, on);
+                ImGui.Separator();
+                ImGui.TextDisabled("Tags");
+                changed |= DrawTagCheckboxes(filters);
+            }
+        }
+
+        if (changed)
+        {
+            configuration.Save();
+            ApplyFilters(now);
+        }
+    }
+
+    private static bool FilterCheckbox(string label, ref bool on, string tip)
+    {
+        var clicked = ImGui.Checkbox(label, ref on);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(tip);
+        return clicked;
+    }
+
+    /// <summary>A checkbox per interest, ticked when the filters require it; returns whether one changed.</summary>
+    private static bool DrawTagCheckboxes(BrowserFilters filters)
+    {
+        var changed = false;
+        for (var i = 0; i < ListingFilters.Labels.Count; i++)
+        {
+            var (interest, label) = ListingFilters.Labels[i];
+            var on = (filters.Tags & interest) != 0;
+            if (ImGui.Checkbox(label, ref on))
+                (changed, filters.Tags) = (true, filters.Tags ^ interest);
+        }
+
+        return changed;
+    }
+
+    /// <summary>The search box at the next item's width; a change applies at once and is saved once the box loses focus.</summary>
+    private void DrawSearch(DateTimeOffset now)
+    {
+        var filters = configuration.Filters;
         var search = filters.Search;
         if (ImGui.InputTextWithHint("##search", "Search", ref search, 200))
         {
@@ -359,6 +459,20 @@ internal sealed class ListingsWindow : Window
             configuration.Save();
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("Every word must match a name, text or tag.\n-word leaves out listings with it.\n\"two words\" matches the phrase.");
+    }
+
+    /// <summary>
+    /// The search box and filter chips, wrapping onto more lines when the window is narrow, with the
+    /// count of entries listed at the right. A change applies at once and is saved; search text is
+    /// saved once the box loses focus.
+    /// </summary>
+    private void DrawFilters(DateTimeOffset now)
+    {
+        var filters = configuration.Filters;
+        var changed = false;
+
+        ImGui.SetNextItemWidth(200 * ImGuiHelpers.GlobalScale);
+        DrawSearch(now);
 
         if (Chip("SFW only", filters.SfwOnly, "Leave out listings marked NSFW or adults only"))
             (changed, filters.SfwOnly) = (true, !filters.SfwOnly);
@@ -392,15 +506,7 @@ internal sealed class ListingsWindow : Window
         using (var popup = ImRaii.Popup("##tags"))
         {
             if (popup.Success)
-            {
-                for (var i = 0; i < ListingFilters.Labels.Count; i++)
-                {
-                    var (interest, label) = ListingFilters.Labels[i];
-                    var on = (filters.Tags & interest) != 0;
-                    if (ImGui.Checkbox(label, ref on))
-                        (changed, filters.Tags) = (true, filters.Tags ^ interest);
-                }
-            }
+                changed |= DrawTagCheckboxes(filters);
         }
 
         if (changed)
@@ -520,7 +626,11 @@ internal sealed class ListingsWindow : Window
         using var id = Scoped.Id($"{(int)row.Listing.Source}:{row.Listing.Id}:{entry.When.Start?.UtcTicks ?? 0}");
         var isSelected = selected is { } key && rowsByKey.TryGetValue(key, out var selectedRow) && ReferenceEquals(selectedRow, row);
         if (ImGui.Selectable("##row", isSelected, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
+        {
             Select(row);
+            showingDetail = true;
+        }
+
         // The highlighted area, which reaches half the item spacing past the row on each side
         var highlight = (Min: ImGui.GetItemRectMin(), Max: ImGui.GetItemRectMax());
         var after = ImGui.GetCursorScreenPos();
