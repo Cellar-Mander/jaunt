@@ -59,6 +59,7 @@ internal sealed class ListingsWindow : Window
     private readonly GamePlaces places;
     private readonly INotificationManager notifications;
     private readonly Configuration configuration;
+    private readonly CalendarOpener calendar;
     private readonly Action fetchSources;
     private readonly Action saveCache;
     private readonly Func<TravelRegion?> region;
@@ -220,11 +221,13 @@ internal sealed class ListingsWindow : Window
     /// the status line of its first opening, its first <see cref="MaxAddresses"/> addresses and places as Location
     /// shows them, whether its free-text location named a place, the Lifestream request for the first, which link Open page and the footer's Discord take (or -1),
     /// its sources, its age or rating with SFW or NSFW ("18+ · SFW"), its interests' labels,
-    /// its lineup, what Copy link copies, and the Party Finder ad the footer's Party Finder opens, if it can.
+    /// its lineup, what Copy link copies, the Party Finder ad the footer's Party Finder opens, if it can, and the
+    /// opening Add to calendar adds with its start as the tooltip shows it, if any.
     /// </summary>
     private sealed record DetailView(
         Row Row, string? Status, bool Open, AddressLine[] Addresses, bool LocationPlaced, TravelRequest? Travel, int Page, int Discord,
-        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy, ulong? PartyFinderAd);
+        ListingSource[] Sources, string Rating, string[] Tags, LineupEntry[] Lineup, CopyLink Copy, ulong? PartyFinderAd,
+        CalendarEvent? Calendar, string CalendarWhen);
 
     /// <summary>
     /// An address or place outside housing as Location shows it: the text shown, the text Copy copies
@@ -251,12 +254,14 @@ internal sealed class ListingsWindow : Window
     /// <param name="images">Fetches and keeps icons and splash images; owned by the caller.</param>
     /// <param name="textures">Loads the kept images and the district art for drawing.</param>
     /// <param name="backdrops">The loading screens standing in for missing splash images (<see cref="PlaceholderArt.Backdrops"/>).</param>
+    /// <param name="calendar">Adds an opening to the user's calendar, from the detail pane's calendar button.</param>
     public ListingsWindow(
         ListingCache cache, Gazetteer gazetteer, GamePlaces places, Lifestream lifestream, GamePartyFinder partyFinder, HousingMap housingMap, INotificationManager notifications, Configuration configuration, Action fetchSources,
         Action saveCache, Func<TravelRegion?> region, Action openSettings, HeldFont titleFont, HeldFont iconFont, ImageStore images, ITextureProvider textures,
-        Backdrops backdrops)
+        Backdrops backdrops, CalendarOpener calendar)
         : base("Jaunt###JauntListings")
     {
+        this.calendar = calendar;
         this.titleFont = titleFont;
         this.iconFont = iconFont;
         this.images = images;
@@ -891,7 +896,7 @@ internal sealed class ListingsWindow : Window
 
         // The mark buttons sit at the right of the title, which wraps short of them
         var titleTop = ImGui.GetCursorPos();
-        var buttonsWidth = DrawMarkButtons(row);
+        var buttonsWidth = DrawMarkButtons(view);
         ImGui.SetCursorPos(titleTop);
         using (titleFont.Push())
         {
@@ -946,20 +951,35 @@ internal sealed class ListingsWindow : Window
         var ad = PartyFinderAds.Openable(
             members.Select(m => m.Listing), now, configuration.RefreshCooldownMinutes, gazetteer, partyFinder.CurrentDataCentre);
         var sources = members.Select(m => m.Listing.Source).Distinct().ToList();
+        var exported = CalendarExport.Exportable(row.Listed, row.Schedule.AlwaysOpen);
         // An ad xivpf collected is in the game's Party Finder too, which the footer opens from there while it can
         if (ad is not null && !sources.Contains(ListingSource.InGamePartyFinder))
             sources.Insert(Math.Max(0, sources.IndexOf(ListingSource.Xivpf)), ListingSource.InGamePartyFinder);
+        AddressLine[] lines =
+        [
+            .. addresses.Take(MaxAddresses).Select(a => new AddressLine(AddressText.Display(a), AddressText.Format(a), a.WorldFrom == WorldSource.Listing, housingMap.SpotOf(a))),
+            .. found.Take(MaxAddresses - Math.Min(addresses.Count, MaxAddresses)).Select(p => new AddressLine(p.Display(), p.Copied(), p.ListedWorld, null, p)),
+        ];
+        CalendarEvent? calendarEvent = null;
+        var calendarWhen = "";
+        if (exported?.Start is { } start)
+        {
+            var local = TimeZoneInfo.ConvertTime(start, TimeZoneInfo.Local).DateTime;
+            calendarWhen = $"{DisplayFormats.FormatDate(local, configuration.DateFormat, locale)} {DisplayFormats.FormatTime(local, configuration.TimeFormat, locale)}";
+            calendarEvent = new CalendarEvent(
+                CalendarExport.UidFor(row.Listing.Source.ToString(), row.Listing.Id, start), row.Title, start, exported.End,
+                lines.Length > 0 ? lines[0].Shown : FreeLocation(row), row.About, page >= 0 ? links[page].Uri : null);
+        }
+
         return new DetailView(
             row, status, open,
-            [
-                .. addresses.Take(MaxAddresses).Select(a => new AddressLine(AddressText.Display(a), AddressText.Format(a), a.WorldFrom == WorldSource.Listing, housingMap.SpotOf(a))),
-                .. found.Take(MaxAddresses - Math.Min(addresses.Count, MaxAddresses)).Select(p => new AddressLine(p.Display(), p.Copied(), p.ListedWorld, null, p)),
-            ],
+            lines,
             locationPlaced,
             addresses.Count > 0 ? TravelRequest.From(addresses[0]) : null,
             page, discord, [.. sources], RatingOf(row),
             [.. ListingFilters.LabelsOf(row.Tagging.Interests)], lineup,
-            CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]), ad);
+            CopyLinks.Choose(links, [.. row.Members.Select(m => (m.Listing.Source, m.Listing.Id))]), ad,
+            calendarEvent, calendarWhen);
     }
 
     /// <summary>
@@ -1000,15 +1020,18 @@ internal sealed class ListingsWindow : Window
             : null;
 
     /// <summary>
-    /// Favourite, Visited and Hide as square icon buttons at the top right, each lit while the entry
-    /// shows its mark; returns their width. Hide takes the entry out of the list at once.
+    /// Add to calendar, then Favourite, Visited and Hide as square icon buttons at the top right, each mark lit
+    /// while the entry shows it; returns their width. Hide takes the entry out of the list at once.
     /// </summary>
-    private float DrawMarkButtons(Row row)
+    private float DrawMarkButtons(DetailView view)
     {
+        var row = view.Row;
         var size = new Vector2(ImGui.GetFrameHeight());
         var spacing = ImGui.GetStyle().ItemSpacing.X;
-        var width = (size.X * 3) + (spacing * 2);
+        var width = (size.X * 4) + (spacing * 3);
         ImGui.SetCursorPosX(ImGui.GetContentRegionMax().X - width);
+        DrawCalendarButton(view, size);
+        ImGui.SameLine();
         var changed = MarkButton(row, EntryMark.Favourite, FontAwesomeIcon.Star, ImGuiColors.DalamudYellow, size, "Remove from favourites");
         ImGui.SameLine();
         changed |= MarkButton(row, EntryMark.Visited, FontAwesomeIcon.Check, ImGuiColors.HealerGreen, size, "Mark not visited");
@@ -1056,6 +1079,44 @@ internal sealed class ListingsWindow : Window
         // Other entries at the same place show the change too, and Hide visited takes it out of the list
         nextRebuild = DateTimeOffset.MinValue;
         saveCache();
+    }
+
+    /// <summary>
+    /// Adds the entry's next opening with a start to the calendar in the format chosen in Settings; right-click
+    /// for the others. Disabled, saying why, when no listed opening says when it starts.
+    /// </summary>
+    private void DrawCalendarButton(DetailView view, Vector2 size)
+    {
+        const string menuId = "##calendarMenu";
+        var calendarEvent = view.Calendar;
+        bool clicked;
+        using (Scoped.Disabled(calendarEvent is null))
+            clicked = ImGui.Button("##calendar", size);
+        var centre = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        DrawIcon(ImGui.GetWindowDrawList(), FontAwesomeIcon.Calendar, centre, size.Y * 0.55f, ImGui.GetColorU32(calendarEvent is null ? ImGuiCol.TextDisabled : ImGuiCol.Text));
+        if (calendarEvent is null)
+        {
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(view.Row.Schedule.AlwaysOpen ? "Open around the clock, so there's no opening to add to a calendar" : "No listed opening says when it starts, so there's nothing to add to a calendar");
+            return;
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip($"Add the opening at {view.CalendarWhen} to {CalendarOpener.Label(configuration.CalendarFormat)}\nRight-click for other calendars");
+        if (clicked)
+            calendar.Add(calendarEvent, configuration.CalendarFormat);
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+            ImGui.OpenPopup(menuId);
+
+        using var popup = ImRaii.Popup(menuId);
+        if (!popup)
+            return;
+        ImGui.TextDisabled("Add to");
+        foreach (var (format, label) in CalendarOpener.Formats)
+        {
+            if (ImGui.Selectable(label))
+                calendar.Add(calendarEvent, format);
+        }
     }
 
     /// <summary>One mark's button: its icon in <paramref name="on"/> while the entry shows the mark; returns whether it was clicked.</summary>

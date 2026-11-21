@@ -28,7 +28,7 @@ Checks only what the Core tests can't reach: Dalamud wiring, ImGui behaviour, sa
 cache file. The rules themselves (cooldown range and per-source minimums, date and time formats,
 expiry) are covered by `Jaunt.Core.Tests`.
 
-1. **Layout**: Data, Display and Listings are collapsible headers, in that order. Each (?) shows a
+1. **Layout**: Data, Display, Calendar and Listings are collapsible headers, in that order. Each (?) shows a
    tooltip on hover. At a larger font scale (`/xlsettings` → Look & Feel → Global Font Scale),
    nothing is clipped.
 2. **Cooldown controls**: − [number] +, with the label above. − and + step 5 minutes, or 60 with
@@ -156,6 +156,14 @@ times as in FFXIV Venues 1 first.
       subdivision); in the building's lobby it says "none".
     - With the setting off, nothing is marked.
     *(self-test: none; the matching is covered by `AutoVisitsTests`, the game's housing indexes only here)*
+13. **Add to calendar**: the calendar button sits left of Favourite. Select a venue or event with a
+    stated start: its tooltip names that start and the format from Settings → Calendar. Then check:
+    - Calendar app (`.ics`): clicking opens the system's calendar app with the event at the right local
+      time, title, location and page link. Under Wine, note whether anything opens; if nothing does,
+      Google Calendar opens instead with a warning notification.
+    - Right-click → Google Calendar and Outlook.com each open the new-event page filled in the same way.
+    - A 24/7 venue, and an ad saying only "open now", show the button disabled with a tooltip saying why.
+    *(self-test: none; the file and links are covered by `CalendarExportTests`, the system handler only here)*
 
 ## xivpf
 

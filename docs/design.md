@@ -157,7 +157,7 @@ The rules come from spike `fe1b7d02`, which also scored them on 534 later ads fr
 ### Settings
 
 `ConfigurationBase` holds the settings; `Normalize` runs after every load. The window groups them
-in collapsible sections: Data, Display, Calendar (with the calendar feature), then Listings, all
+in collapsible sections: Data, Display, Calendar, then Listings, all
 expanded until collapsed; which are expanded is saved too. Each change saves at once.
 
 - **Refresh cooldown** (`RefreshPolicy`), default 10 minutes, kept within 10 minutes to 24 hours.
@@ -196,6 +196,9 @@ expanded until collapsed; which are expanded is saved too. Each change saves at 
   is ISO when the locale writes the year first, month-day when it writes the month before the day,
   and day-month otherwise. Days are not zero-padded.
 - An unknown time or date format in a hand-edited config becomes System.
+- **Add to calendar with**: Calendar app (`.ics`, the default), Google Calendar or Outlook.com; what
+  the detail pane's calendar button does when clicked (see "Add to calendar"). An unknown value in a
+  hand-edited config becomes Calendar app.
 
 ### Listing cache
 
@@ -702,6 +705,28 @@ right, under a line of search and filters.
   Copy link: the game rejects a `<pfinder>` link that Jaunt fills in itself, and relaying another
   player's listing in chat is spike `84a979b7`. The page goes to the clipboard, with a notification
   saying what was copied.
+- **Add to calendar** (`CalendarExport`): a square calendar button left of the marks. It adds the
+  first listed opening with a stated start; a 24/7 listing or one whose listed openings give only "open
+  now" or a closing time has none, so the button is disabled and its tooltip says why. Clicking uses the
+  format chosen in Settings; right-clicking lists all three. The tooltip names the opening's start in
+  the display formats and the format a click uses.
+  - The event's title is the entry's title (else "(untitled)"), its location the first address or
+    place Location shows, else the free-text location, its description the page Open page opens, a
+    blank line, then About. With no closing time the event is a moment at its start: the `.ics` has no
+    DTEND and the links end at the start. Its UID is a hash of source and ID plus the start, so the same
+    opening keeps its UID.
+  - Listing text is untrusted: title and location are cut to 200 characters and the description to
+    2,000 (600 in a link), control characters but line feeds and tabs are dropped, and only http and
+    https page links are kept.
+  - `.ics` (RFC 5545): one VEVENT with UTC times, CRLF line ends, TEXT escaping and lines folded at
+    75 octets of UTF-8, never inside a character. It is written to the plugin's `calendar` folder as
+    `jaunt-<hash>.ics` and opened with the system's handler; files over a day old are removed on the
+    next export. Wine has no handler for `.ics` (ShellExecute fails with "Invalid handle"), so under
+    Wine it goes to `winebrowser` as a `file:` URL, which passes it to the host's `xdg-open` (or
+    `open`). If nothing opens it, Google Calendar's page opens instead with a notification saying so.
+  - Google Calendar (`calendar.google.com/calendar/render?action=TEMPLATE`) and Outlook.com
+    (`outlook.live.com/calendar/0/action/compose`) open in the browser with the event filled in.
+  - Only one opening is added, never a repeating series.
 - **Marks** (`EntryMarks`, `PlaceMarks`): three square icon buttons at the right of the detail pane's
   title, which wraps short of them: a star (Favourite), a tick (Visited) and a crossed-out eye (Hide).
   Icons are drawn a little over half the button's height, centred by their drawn shape.

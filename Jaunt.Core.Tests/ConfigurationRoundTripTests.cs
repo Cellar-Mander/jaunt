@@ -43,6 +43,7 @@ public class ConfigurationRoundTripTests
             RefreshCooldownMinutes = 45,
             TimeFormat = TimeFormat.TwentyFourHour,
             DateFormat = DateFormat.Iso,
+            CalendarFormat = CalendarFormat.Outlook,
         };
 
         var loaded = SaveAndLoad(config);
@@ -50,6 +51,7 @@ public class ConfigurationRoundTripTests
         Assert.Equal(45, loaded.RefreshCooldownMinutes);
         Assert.Equal(TimeFormat.TwentyFourHour, loaded.TimeFormat);
         Assert.Equal(DateFormat.Iso, loaded.DateFormat);
+        Assert.Equal(CalendarFormat.Outlook, loaded.CalendarFormat);
     }
 
     [Fact]
@@ -81,6 +83,7 @@ public class ConfigurationRoundTripTests
         Assert.Equal(10, config.RefreshCooldownMinutes);
         Assert.Equal(TimeFormat.System, config.TimeFormat);
         Assert.Equal(DateFormat.System, config.DateFormat);
+        Assert.Equal(CalendarFormat.Ics, config.CalendarFormat);
     }
 
     [Fact]
@@ -120,12 +123,13 @@ public class ConfigurationRoundTripTests
     [Fact]
     public void HandEditedUnknownFormatsFallBackToSystem()
     {
-        var config = new TestConfiguration { TimeFormat = (TimeFormat)7, DateFormat = (DateFormat)(-1) };
+        var config = new TestConfiguration { TimeFormat = (TimeFormat)7, DateFormat = (DateFormat)(-1), CalendarFormat = (CalendarFormat)3 };
 
         var loaded = SaveAndLoad(config);
 
         Assert.Equal(TimeFormat.System, loaded.TimeFormat);
         Assert.Equal(DateFormat.System, loaded.DateFormat);
+        Assert.Equal(CalendarFormat.Ics, loaded.CalendarFormat);
     }
 
     [Fact]
@@ -134,7 +138,7 @@ public class ConfigurationRoundTripTests
         var config = new TestConfiguration();
         config.Normalize();
 
-        Assert.Equal([SettingsSection.Data, SettingsSection.Display, SettingsSection.Listings], config.ExpandedSections!.Order());
+        Assert.Equal([SettingsSection.Data, SettingsSection.Display, SettingsSection.Listings, SettingsSection.Calendar], config.ExpandedSections!.Order());
     }
 
     [Fact]
