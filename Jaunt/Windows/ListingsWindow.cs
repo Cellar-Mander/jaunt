@@ -1029,6 +1029,35 @@ internal sealed class ListingsWindow : Window
         return width;
     }
 
+    /// <summary>
+    /// Marks visited each entry open now at the player's address (<see cref="AutoVisits.Check"/>),
+    /// rebuilding the list first if it is due, which it is whenever the window is closed long enough.
+    /// </summary>
+    internal void CheckVisits(AutoVisits visits, DateTimeOffset now)
+    {
+        if (now >= nextRebuild)
+        {
+            Rebuild(now);
+            nextRebuild = now + RebuildInterval;
+        }
+
+        var marked = false;
+        foreach (var row in unfiltered)
+        {
+            var place = row.Place;
+            if (!visits.Check(cache, row.Marks, ref place, row.Listed, now))
+                continue;
+            row.Place = place;
+            marked = true;
+        }
+
+        if (!marked)
+            return;
+        // Other entries at the same place show the change too, and Hide visited takes it out of the list
+        nextRebuild = DateTimeOffset.MinValue;
+        saveCache();
+    }
+
     /// <summary>One mark's button: its icon in <paramref name="on"/> while the entry shows the mark; returns whether it was clicked.</summary>
     /// <param name="clearTip">The tooltip while marked; while unmarked it says what the mark goes on (<see cref="SetTip"/>).</param>
     private bool MarkButton(Row row, EntryMark mark, FontAwesomeIcon icon, Vector4 on, Vector2 size, string clearTip)

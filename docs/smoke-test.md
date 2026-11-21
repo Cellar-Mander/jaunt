@@ -146,6 +146,16 @@ times as in FFXIV Venues 1 first.
     event in the open world ("Central Shroud, The Bannock") shows its zone's loading screen. One whose
     location is only "See URL", and an ad with no address, shows the world map. *(self-test: none; the choice is covered by
     `PlaceholdersTests`)*
+12. **Visited automatically**: with Settings → Listings → Mark visited automatically on (the default)
+    and `/xllog` showing debug messages, go to a listed venue's plot while it is open. Within about 5
+    seconds its tick lights, whether or not `/jaunt` is open, and the log's "Housing location" line
+    names its address ("SIREN Empyreum W16 P20"). Go inside: still that address. Then check:
+    - Mark it not visited while there: it stays unmarked until you leave and come back.
+    - A venue listed but not open now, or at the plot next door, is not marked.
+    - In an apartment listed as a venue, the line names the apartment ("A12", with "sub" in the
+      subdivision); in the building's lobby it says "none".
+    - With the setting off, nothing is marked.
+    *(self-test: none; the matching is covered by `AutoVisitsTests`, the game's housing indexes only here)*
 
 ## xivpf
 

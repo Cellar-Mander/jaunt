@@ -17,7 +17,7 @@ namespace Jaunt.Windows;
 
 /// <summary>
 /// Settings, in collapsible groups: Data, Display, then Listings. The Calendar group (between Display and
-/// Listings) and Listings' auto-mark visited switch come with the features they configure.
+/// Listings) comes with the feature it configures.
 /// </summary>
 public sealed class ConfigWindow : Window, IDisposable
 {
@@ -291,6 +291,18 @@ public sealed class ConfigWindow : Window, IDisposable
 
     private void DrawListings()
     {
+        var autoVisited = configuration.AutoMarkVisited;
+        if (ImGui.Checkbox("Mark visited automatically", ref autoVisited))
+        {
+            configuration.AutoMarkVisited = autoVisited;
+            configuration.Save();
+        }
+
+        HelpMarker(
+            "Marks a venue or event visited when you are on its plot, inside its house or in its apartment while it is open.\n" +
+            "Addresses naming only the ward, and places outside housing, don't count.");
+
+        ImGui.Spacing();
         ImGui.TextUnformatted("Hidden venues");
 
         // The browser's Hide button and fetches change these, so they are listed again each second
