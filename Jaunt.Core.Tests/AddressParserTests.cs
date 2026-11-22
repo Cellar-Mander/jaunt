@@ -103,6 +103,27 @@ public class AddressParserTests
     public void JapaneseWardsAndPlots(string text, string expected) => Assert.Equal(expected, P(text, "Anima"));
 
     [Theory]
+    [InlineData("ー")] // at the start
+    [InlineData("Mist 5ー")] // at the end
+    [InlineData("Mist 5 ー12")] // no digit before
+    [InlineData("Mist 5ーP12")] // no digit after
+    public void ALongVowelMarkIsADashOnlyBetweenDigits(string text)
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        Assert.Equal("-", P(text));
+    }
+
+    [Fact]
+    public void JapaneseNamesAreKeptWholeInTheGazetteer()
+    {
+        // revert-check: not revert-sensitive (kills a surviving mutant: pins existing behaviour)
+        // A new gazetteer, since the shared one is built before a mutant is switched on
+        var parser = new AddressParser(new Gazetteer([new GameWorld("Lich", "Light", "EU")], [new(District.Shirogane, "シロガネ")]));
+
+        Assert.Equal(District.Shirogane, Assert.Single(parser.Parse("シロガネ5-12", "Lich")).District);
+    }
+
+    [Theory]
     [InlineData("メテオベリエンピ2区52号室", "Belias Empyreum 2._ apt52")] // a room number after a ward is an apartment
     [InlineData("Ifrit エンピ6-51 4号室", "Ifrit Empyreum 6.51 room4")] // after a plot it is a room
     [InlineData("Gaia/Ifrit/6-51(若草) & 4号室", "Ifrit null 6.51 room4")]
@@ -189,5 +210,114 @@ public class AddressParserTests
         Assert.Equal("-", P(""));
         Assert.Equal("-", P("Med House in Empyreum. LF new members"));
         Assert.Equal("-", P("DJ's Saber-Shiro-Rans 9P-1A CST w/ prizes"));
+    }
+
+    [Theory]
+    [InlineData("Plot 30, 1st Ward Mist", "Lich? Mist 1.30")]
+    [InlineData("Plot 30, 2nd Ward Mist", "Lich? Mist 2.30")]
+    [InlineData("Plot 30, 3rd Ward Mist", "Lich? Mist 3.30")]
+    [InlineData("5th Ward Plot 3 Mist", "Lich? Mist 5.3")] // an ordinal as the ad's first token
+    [InlineData("Mist 第5, 12", "Lich? Mist 5.12")] // 第 marks the ward, so any gap before the plot will do
+    [InlineData("ミスト5-12番地 qq rr Sagi", "Sagittarius Mist 5.12")] // 番地 is read, so the world is two words on
+    public void WardForms(string text, string expected)
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        Assert.Equal(expected, P(text));
+    }
+
+    [Theory]
+    [InlineData("Mist W5 P12 Topmast Room 3", "Lich? Mist 5.12 apt3")] // a room in an apartment building is an apartment
+    [InlineData("Mist W5 P12 Room A", "Lich? Mist 5.12")] // a room needs a number
+    [InlineData("Mist W5 P12 Room 0", "Lich? Mist 5.12 room0")]
+    [InlineData("Mist W5 P12 0号室", "Lich? Mist 5.12 room0")]
+    [InlineData("W5 P12 Room 3 Mist", "Lich? Mist 5.12 room3")]
+    [InlineData("W5 P12 3号室 Mist", "Lich? Mist 5.12 room3")]
+    [InlineData("Mist W5 P12 3号室 Sub", "Lich? Mist 5.12 sub room3")]
+    [InlineData("Mist W5 Apt 1-24 qq rr Sagi", "Sagittarius Mist 5._ apt24")]
+    [InlineData("W5 Apt 28 Mist", "Lich? Mist 5._ apt28")]
+    [InlineData("W5 Apt 28号室 qq rr Mist", "Lich? Mist 5._ apt28")]
+    [InlineData("Mist W5 P12 Apt 28号室", "Lich? Mist 5.12 apt28")]
+    [InlineData("Mist W5 Apt qq", "Lich? Mist 5._")] // an apartment needs a number
+    [InlineData("Mist W5 P12 Sub Sub Sub Sub Sub Sub Sub Sub Main", "Lich? Mist 5.12 sub")] // eight tokens of tail, no more
+    [InlineData("Mist W5 P29/30 qq rr Sagi", "Sagittarius Mist 5.29 ; Sagittarius Mist 5.30")]
+    [InlineData("Mist W2/30 qq rr Sagi", "Sagittarius Mist 2.30")]
+    public void WhatFollowsThePlot(string text, string expected)
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        Assert.Equal(expected, P(text));
+    }
+
+    [Theory]
+    [InlineData("Mist W5 P12 (Sub)(B1)", "Lich? Mist 5.12 sub roomB1")]
+    [InlineData("Mist W5 P12 (Main)", "Lich? Mist 5.12 main")]
+    [InlineData("Mist W5 P12 (AB12)", "Lich? Mist 5.12 roomAB12")] // four characters, the longest room code
+    [InlineData("Mist W5 P12 (Sub1)", "Lich? Mist 5.12 roomSub1")] // a room code, not a subdivision
+    [InlineData("Mist W5 P12 (B1 2)", "Lich? Mist 5.12")] // a room code's parts touch
+    [InlineData("Mist W5 P12 (1é)", "Lich? Mist 5.12")] // and are ASCII letters and digits
+    [InlineData("Mist W5 (B1)", "Lich? Mist 5._")] // a room needs a plot
+    [InlineData("Mist W5 P12 (abc) (Sub", "Lich? Mist 5.12")] // an unclosed bracket is not read
+    [InlineData("Mist W5 P12 (Sub qq qq qq qq qq qq qq qq qq)", "Lich? Mist 5.12 sub")] // ten tokens, the most a bracket holds
+    public void Brackets(string text, string expected)
+    {
+        // revert-check: not revert-sensitive (kills surviving and uncovered mutants: pins existing behaviour)
+        Assert.Equal(expected, P(text));
+    }
+
+    [Theory]
+    [InlineData("Sagi W5 P12 Mist", "Sagittarius Mist 5.12")] // world before, district after
+    [InlineData("W5 P12 Mist qq rr Sagi", "Sagittarius Mist 5.12")]
+    [InlineData("W5 P12 Sagi qq rr Mist", "Sagittarius Mist 5.12")]
+    [InlineData("W5 P12 Sagi Mist", "Sagittarius Mist 5.12")]
+    [InlineData("Sagi qq qq qq qq Mist 5-12", "Lich? Mist 5.12")] // past a district, the world is at most three words back
+    [InlineData("Sagi Mist W5 P12 ; Goblet W3 P4 qq qq qq qq Zalera", "Sagittarius Mist 5.12 ; Sagittarius Goblet 3.4")] // the last world given beats a full name elsewhere
+    [InlineData("Lavender, Beds W5 P12", "Lich? null 5.12")] // a name's words are not split by punctuation
+    [InlineData("Lavender.Beds W5 P12", "Lich? LavenderBeds 5.12")] // except a dot
+    [InlineData("Mistɐ W5 P12", "Lich? Mist 5.12")] // U+0250 is past the Latin letters, so it doesn't join the word
+    public void DistrictAndWorldAround(string text, string expected)
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        Assert.Equal(expected, P(text));
+    }
+
+    [Theory]
+    [InlineData("at Sagi 6-11pm", "-")]
+    [InlineData("at Sagi 6-51号室", "-")] // nor a room number
+    [InlineData("Mist 5-12 (ST)", "Lich? Mist 5.12")] // a time word only after a space or nothing
+    public void TimesAfterNumbers(string text, string expected)
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        Assert.Equal(expected, P(text));
+    }
+
+    [Fact]
+    public void TheListingWorldIsNamedAsTheGameWritesIt()
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        Assert.Equal("Lich? Mist 5.12", P("Mist W5 P12", "lich"));
+    }
+
+    [Fact]
+    public void ANameDoesNotReachIntoTheAddressBefore()
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        // A district whose first word ends the address before it: the second address reads only "Hills"
+        var parser = new AddressParser(new Gazetteer([new GameWorld("Lich", "Light", "EU")], [new(District.Shirogane, "Ward Hills")]));
+
+        var addresses = parser.Parse("Plot 30, 5th Ward Hills W3 P4", "Lich");
+
+        Assert.Equal([null, null], addresses.Select(a => a.District));
+    }
+
+    [Theory]
+    [InlineData("Lich", "TWIN")] // the listing's region
+    [InlineData(null, "Twin")] // no listing world: the first
+    public void ANameTwoWorldsShareResolvesInTheListingsRegion(string? listedOn, string expected)
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        // Two worlds that share a name, told apart here by case
+        var parser = new AddressParser(new Gazetteer(
+            [new GameWorld("Twin", "Primal", "NA"), new GameWorld("TWIN", "Light", "EU"), new GameWorld("Lich", "Light", "EU")], []));
+
+        Assert.Equal(expected, Assert.Single(parser.Parse("Twin/6-51", listedOn)).World);
     }
 }

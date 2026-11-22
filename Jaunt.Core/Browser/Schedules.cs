@@ -26,7 +26,11 @@ public sealed record ListingSchedule(bool AlwaysOpen, bool OneOff, IReadOnlyList
         OneOff: false,
         Occurrences: []);
 
-    public static readonly ListingSchedule Always = new(true, false, []);
+    public static readonly ListingSchedule Always = new(
+        AlwaysOpen: true,
+        // Stryker disable once Boolean : every reader checks AlwaysOpen before OneOff (Listed, and the merge in Duplicates), so Always's OneOff is never read
+        OneOff: false,
+        Occurrences: []);
 }
 
 /// <summary>
@@ -132,6 +136,7 @@ public static class Schedules
         {
             if (joined.Count > 0 && joined[^1] is var last && occurrence.Start <= last.End)
             {
+                // Stryker disable once Equality : on equal ends the joined occurrence keeps the same end either way
                 if (occurrence.End > last.End)
                     joined[^1] = last with { End = occurrence.End };
             }

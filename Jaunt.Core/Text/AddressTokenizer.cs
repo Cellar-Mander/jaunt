@@ -73,7 +73,8 @@ internal static class AddressTokenizer
             }
         }
 
-        Add(tokens, gap, TokenKind.End, "", "");
+        var none = ""; // End has no text, as written or folded
+        Add(tokens, gap, TokenKind.End, none, none);
         return tokens;
     }
 
@@ -113,6 +114,7 @@ internal static class AddressTokenizer
         while (pos < run.Length)
         {
             var length = 1; // an unknown character is a token of its own
+            // Stryker disable once Equality : a one-character word is length 1, the default, so trying it changes nothing
             for (var l = Math.Min(maxWordLength, run.Length - pos); l > 1; l--)
             {
                 if (lookup.Contains(run.Slice(pos, l)))
