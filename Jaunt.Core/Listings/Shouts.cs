@@ -41,16 +41,15 @@ public static class Shouts
     public static CachedListing? Record(ListingCache cache, AddressParser parser, string id, string text, string? heardOn, DateTimeOffset now) =>
         IsAdvert(parser, text, heardOn) ? cache.SeenAd(ListingSource.Shout, id, WithoutAdTag(text), heardOn, now) : null;
 
-    private const string AdTag = "VENUEAD";
-
     /// <summary>
     /// The shout without the "VENUEAD" tag some shouters start each part with so players can filter
-    /// venue adverts out of chat: "VENUEAD:", "VENUEAD :" or "[VENUEAD]" at the start of a line, with
-    /// the spaces after it. Every recorded shout is an advert, so the tag tells the reader nothing.
+    /// venue adverts out of chat: "VENUEAD:", "VENUEAD :", "[VENUEAD]" or "[VENUE AD]" at the start of
+    /// a line, with the spaces after it. Every recorded shout is an advert, so the tag tells the reader
+    /// nothing.
     /// </summary>
     internal static string WithoutAdTag(string text)
     {
-        if (!text.Contains(AdTag, StringComparison.Ordinal))
+        if (!text.Contains("VENUE", StringComparison.Ordinal))
             return text;
         return string.Join('\n', text.Split('\n').Select(StripTag));
     }
@@ -58,15 +57,32 @@ public static class Shouts
     private static string StripTag(string line)
     {
         var rest = line.AsSpan().TrimStart();
-        if (rest.StartsWith("[" + AdTag + "]", StringComparison.Ordinal))
-            rest = rest[(AdTag.Length + 2)..];
-        else if (rest.StartsWith(AdTag, StringComparison.Ordinal) && (rest.Length == AdTag.Length || !char.IsLetterOrDigit(rest[AdTag.Length])))
-            rest = rest[AdTag.Length..];
-        else
+        var bracketed = rest.StartsWith('[');
+        var tag = TagLength(bracketed ? rest[1..] : rest);
+        if (tag == 0)
             return line;
+        if (bracketed)
+        {
+            if (!rest[(tag + 1)..].StartsWith(']'))
+                return line;
+            rest = rest[(tag + 2)..];
+        }
+        else if (rest.Length > tag && char.IsLetterOrDigit(rest[tag]))
+            return line;
+        else
+            rest = rest[tag..];
         rest = rest.TrimStart();
         if (rest.StartsWith(':'))
             rest = rest[1..].TrimStart();
         return rest.ToString();
+    }
+
+    /// <summary>The length of the "VENUEAD" or "VENUE AD" the text starts with, or 0 when it starts with neither.</summary>
+    private static int TagLength(ReadOnlySpan<char> text)
+    {
+        if (!text.StartsWith("VENUE", StringComparison.Ordinal))
+            return 0;
+        var gap = text[5..].StartsWith(' ') ? 1 : 0;
+        return text[(5 + gap)..].StartsWith("AD", StringComparison.Ordinal) ? 7 + gap : 0;
     }
 }

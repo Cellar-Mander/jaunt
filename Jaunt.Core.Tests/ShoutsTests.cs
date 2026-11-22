@@ -131,6 +131,7 @@ public class ShoutsTests
     [InlineData("VENUEAD: " + Advert, Advert)]
     [InlineData("VENUEAD :  " + Advert, Advert)]
     [InlineData("[VENUEAD] " + Advert, Advert)]
+    [InlineData("[VENUE AD]  " + Advert, Advert)]
     [InlineData("  VENUEAD:" + Advert, Advert)]
     [InlineData("VENUEAD: Moonlit Lounge Mist W14 P33\nVENUEAD: DJ Saber till 1am", "Moonlit Lounge Mist W14 P33\nDJ Saber till 1am")]
     public void TheVenueAdTagIsLeftOutOfTheRecordedText(string shout, string recorded)
@@ -149,6 +150,10 @@ public class ShoutsTests
     [InlineData("VENUEADS Mist W14 P33")]
     [InlineData("VENUEAD2 Mist W14 P33")]
     [InlineData("[VENUEADS] Mist W14 P33")]
+    [InlineData("[VENUE ADS] Mist W14 P33")]
+    [InlineData("[VENUE  AD] Mist W14 P33")]
+    [InlineData("[VENUE AD Mist W14 P33")]
+    [InlineData("VENUE ADVERT Mist W14 P33")]
     [InlineData("venuead: Mist W14 P33")]
     public void TextThatOnlyLooksLikeTheTagIsKept(string shout)
     {
