@@ -8,6 +8,15 @@ public static partial class OpeningTimes
         "stage", "bar", "mic", "recruitment", "recruiting", "positions", "applications", "auditions", "at", "to",
     };
 
+    /// <summary>
+    /// Words before "open", or before "is" or "are" and "open", that say what is open, not
+    /// that the venue is ("Applications open", "Auditions are open").
+    /// </summary>
+    private static readonly HashSet<string> NotNowBeforeOpen = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "recruitment", "recruiting", "positions", "applications", "application", "auditions", "apps",
+    };
+
     /// <summary>Words after "now" that are about something other than opening.</summary>
     private static readonly HashSet<string> NotNowAfterNow = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -50,6 +59,10 @@ public static partial class OpeningTimes
                 && (next.Value.Text.ToLowerInvariant() is "from" or "tonight" or "tonite" or "today" or "tomorrow"
                     || WeekdayOf(next.Value.Text.ToLowerInvariant()) is not null);
             if (whenFollows)
+                continue;
+
+            var subject = prev is { Kind: Kind.Word } && prev.Value.Text.ToLowerInvariant() is "is" or "are" ? At(tokens, i - 2) : prev;
+            if (IsWordIn(subject, NotNowBeforeOpen))
                 continue;
 
             if (IsWord(prev, "is"))

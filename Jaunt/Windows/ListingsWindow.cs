@@ -1869,8 +1869,11 @@ internal sealed class ListingsWindow : Window
                     var adDetails = Parsed(listing, listing.Description, listing.ListedOn);
                     if (adDetails.Addresses.Count == 0)
                         return null;
+                    var times = AdTimes(listing);
+                    if (Recruitment.OnlyRecruits(adDetails, times))
+                        return null;
                     var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
-                    var schedule = Schedules.ForAd(AdTimes(listing), listing.LastSeen, adRegion, stillListed, now, firstSeen: listing.FirstSeen);
+                    var schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, firstSeen: listing.FirstSeen);
                     return new Row(listing, listing.Title, adDetails, adDetails.Addresses[0].World ?? listing.ListedOn, schedule, About(listing));
                 }
 
