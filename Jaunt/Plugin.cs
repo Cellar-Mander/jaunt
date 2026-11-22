@@ -35,8 +35,8 @@ public sealed class Plugin : IDalamudPlugin
 
     private const string CommandName = "/jaunt";
 
-    // Often enough to catch a short visit, and the list is rebuilt at most this often while away from the browser
-    private static readonly TimeSpan VisitCheckInterval = TimeSpan.FromSeconds(5);
+    // Reading where the player is is cheap, so arriving somewhere is noticed quickly; AutoVisits.Due paces the entry checks
+    private static readonly TimeSpan AddressCheckInterval = TimeSpan.FromSeconds(5);
 
     public Configuration Configuration { get; init; }
 
@@ -55,7 +55,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ImageStore imageStore;
     private readonly PlayerAddress playerAddress;
     private readonly AutoVisits autoVisits = new();
-    private DateTimeOffset nextVisitCheck;
+    private DateTimeOffset nextAddressCheck;
 
     public readonly WindowSystem WindowSystem = new("Jaunt");
     private ConfigWindow ConfigWindow { get; init; }
@@ -135,14 +135,17 @@ public sealed class Plugin : IDalamudPlugin
         listingCacheStore.Dispose();
     }
 
-    /// <summary>Every few seconds, marks visited what is open where the player is, when Settings → Listings says to.</summary>
+    /// <summary>
+    /// Marks visited what is open where the player is, when Settings → Listings says to: on arriving at a
+    /// plot or apartment, then every <see cref="AutoVisits.CheckInterval"/> while there.
+    /// </summary>
     private void CheckVisits(IFramework framework)
     {
         var now = DateTimeOffset.UtcNow;
-        if (now < nextVisitCheck)
+        if (now < nextAddressCheck)
             return;
-        nextVisitCheck = now + VisitCheckInterval;
-        if (Configuration.AutoMarkVisited && autoVisits.At(playerAddress.Get()))
+        nextAddressCheck = now + AddressCheckInterval;
+        if (Configuration.AutoMarkVisited && autoVisits.Due(playerAddress.Get(), now))
             ListingsWindow.CheckVisits(autoVisits, now);
     }
 

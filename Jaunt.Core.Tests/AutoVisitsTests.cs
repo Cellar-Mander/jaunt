@@ -285,4 +285,61 @@ public class AutoVisitsTests
         Assert.Null(AutoVisits.Inside("Siren", District.Mist, 2, true, 0, 0, 0, false));
         Assert.Null(AutoVisits.Inside("Siren", District.Mist, 2, false, 0, 4, 0x3FF, true));
     }
+
+    [Fact]
+    public void ArrivingIsDueACheckAtOnce()
+    {
+        Assert.True(visits.Due(Tavern, Now));
+        Assert.Equal(Tavern, visits.Here);
+    }
+
+    [Fact]
+    public void DuringAStayChecksAreDueOncePerInterval()
+    {
+        visits.Due(Tavern, Now);
+
+        Assert.False(visits.Due(Tavern, Now.AddSeconds(5)));
+        Assert.False(visits.Due(Tavern, Now + AutoVisits.CheckInterval - TimeSpan.FromTicks(1)));
+        Assert.True(visits.Due(Tavern, Now + AutoVisits.CheckInterval));
+        Assert.False(visits.Due(Tavern, Now + AutoVisits.CheckInterval + TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public void MovingToAnotherAddressIsDueACheckAtOnce()
+    {
+        visits.Due(Tavern, Now);
+
+        Assert.True(visits.Due(NextDoor, Now.AddSeconds(5)));
+    }
+
+    [Fact]
+    public void ComingBackIsDueACheckAtOnce()
+    {
+        visits.Due(Tavern, Now);
+        Assert.False(visits.Due(null, Now.AddSeconds(5)));
+
+        Assert.True(visits.Due(Tavern, Now.AddSeconds(10)));
+    }
+
+    [Fact]
+    public void NowhereIsNeverDue()
+    {
+        Assert.False(visits.Due(null, Now));
+        Assert.False(visits.Due(TavernWard, Now + AutoVisits.CheckInterval));
+    }
+
+    [Fact]
+    public void ADueCheckStartsANewStayOnArriving()
+    {
+        var entry = Entry(Tavern, Venue());
+        visits.Due(Tavern, Now);
+        PlaceMark? place = null;
+        Assert.True(Check(entry, OpenNow, ref place));
+        EntryMarks.Toggle(cache, entry, ref place, EntryMark.Visited);
+
+        visits.Due(null, Now.AddSeconds(5));
+        visits.Due(Tavern, Now.AddSeconds(10));
+
+        Assert.True(Check(entry, OpenNow, ref place));
+    }
 }

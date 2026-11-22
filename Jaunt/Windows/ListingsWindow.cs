@@ -94,6 +94,8 @@ internal sealed class ListingsWindow : Window
     // Each listed row by its listing, for the detail pane; a listing listed twice (open now and next) is one row
     private readonly Dictionary<(ListingSource, string), Row> rowsByKey = [];
     private DateTimeOffset nextRebuild;
+    // When the list was last built for a character, or MinValue while there is none
+    private DateTimeOffset builtAt = DateTimeOffset.MinValue;
     private bool loggedOut;
     private int emptyLine = -1;
     private bool aboutExpanded;
@@ -1053,12 +1055,13 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
-    /// Marks visited each entry open now at the player's address (<see cref="AutoVisits.Check"/>),
-    /// rebuilding the list first if it is due, which it is whenever the window is closed long enough.
+    /// Marks visited each entry open now at the player's address (<see cref="AutoVisits.Check"/>) in the
+    /// list last built, rebuilding it only when there is none or it is older than
+    /// <see cref="AutoVisits.ListMaxAge"/>, as a rebuild is too slow to run on every check.
     /// </summary>
     internal void CheckVisits(AutoVisits visits, DateTimeOffset now)
     {
-        if (now >= nextRebuild)
+        if (now - builtAt >= AutoVisits.ListMaxAge)
         {
             Rebuild(now);
             nextRebuild = now + RebuildInterval;
@@ -1573,6 +1576,7 @@ internal sealed class ListingsWindow : Window
         unfilteredKeys.Clear();
         var travel = region();
         loggedOut = travel is null;
+        builtAt = travel is null ? DateTimeOffset.MinValue : now;
         if (travel is null)
         {
             rowsByKey.Clear();
