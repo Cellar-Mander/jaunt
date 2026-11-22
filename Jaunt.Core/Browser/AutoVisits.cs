@@ -12,7 +12,14 @@ namespace Jaunt.Core.Browser;
 /// </summary>
 public sealed class AutoVisits
 {
+    /// <summary>How often <see cref="Due"/> asks for entries to be checked during a stay, after the check on arriving.</summary>
+    public static readonly TimeSpan CheckInterval = TimeSpan.FromMinutes(1);
+
+    /// <summary>How old the list of entries checked may get before it is rebuilt for a check.</summary>
+    public static readonly TimeSpan ListMaxAge = TimeSpan.FromMinutes(15);
+
     private AddressKey? here;
+    private DateTimeOffset nextCheck;
     private readonly HashSet<CachedListing> handled = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Where the player is now, as last told.</summary>
@@ -34,6 +41,21 @@ public sealed class AutoVisits
         }
 
         return here is not null;
+    }
+
+    /// <summary>
+    /// Tells it where the player is (<see cref="At"/>), and whether entries are due a check: on arriving
+    /// at a plot or apartment, then every <see cref="CheckInterval"/> while there.
+    /// </summary>
+    public bool Due(AddressKey? address, DateTimeOffset now)
+    {
+        var before = here;
+        if (!At(address))
+            return false;
+        if (here == before && now < nextCheck)
+            return false;
+        nextCheck = now + CheckInterval;
+        return true;
     }
 
     /// <summary>

@@ -784,7 +784,9 @@ right, under a line of search and filters.
     plugin reads where the player is from the game's housing manager: the plot they stand on, the
     house they are inside (any room counts as its plot) or the apartment they are in (not the lobby).
     An entry with that plot or apartment among its addresses and an opening in progress is marked
-    visited as its button would, whether or not the browser is open. Entries naming only the ward, and
+    visited as its button would, whether or not the browser is open. Entries are checked on arriving,
+    then once a minute while there, against the list as last built; it is rebuilt for a check only
+    when it is more than 15 minutes old, as a rebuild is too slow for the game thread to run often. Entries naming only the ward, and
     places outside housing, never count. Each entry is marked at most once per stay at an address, so
     one marked not visited while the player is still there stays unmarked; leaving starts a new stay.
   - **Hide**: listings are merged before hidden ones are left out, and an entry whose place or any
