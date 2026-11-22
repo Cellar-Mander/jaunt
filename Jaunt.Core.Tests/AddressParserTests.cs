@@ -141,6 +141,24 @@ public class AddressParserTests
     }
 
     [Theory]
+    [InlineData("Mist W5 P12 qq qq qq qq Twin", "TWIN Mist 5.12")] // a full name anywhere, even one two worlds share
+    [InlineData("Lic Light Mist W5 P12", "Odin? Mist 5.12")] // a data centre from the game where the world would be
+    [InlineData("Lic Dyn Mist W5 P12", "Odin? Mist 5.12")] // and one players use
+    [InlineData("Mists W5 P12", "Odin? Mist 5.12")] // a district name players use
+    [InlineData("Exl Mist W5 P12", "Excalibur Mist 5.12")] // and a world name
+    public void TheGazetteerKnowsFullNamesDataCentresAndAliases(string text, string expected)
+    {
+        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
+        // A new gazetteer, since the shared one is built before a mutant is switched on
+        var parser = new AddressParser(new Gazetteer(
+            [new GameWorld("Twin", "Primal", "NA"), new GameWorld("TWIN", "Light", "EU"), new GameWorld("Odin", "Light", "EU"), new GameWorld("Lich", "Light", "EU"),
+                new GameWorld("Excalibur", "Primal", "NA")],
+            [new(District.Mist, "Mist")]));
+
+        Assert.Equal(expected, Short(Assert.Single(parser.Parse(text, "Odin"))));
+    }
+
+    [Theory]
     [InlineData("Lich LB W20 P28", "Lich LavenderBeds 20.28")]
     [InlineData("Odin /Goblet /Ward27 /Plot36", "Odin Goblet 27.36")]
     [InlineData("Alpha Emp W:27P:43", "Alpha Empyreum 27.43")]
