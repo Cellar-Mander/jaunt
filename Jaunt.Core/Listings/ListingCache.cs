@@ -27,9 +27,10 @@ public sealed partial class ListingCache
     private bool fetchTimesChanged;
 
     /// <summary>
-    /// Counts changes to the listings and marks (not fetch times), so a reader can tell whether what it
-    /// worked out from them is still current by keeping the count it saw. Recording a listing counts, and
-    /// sources set its fields straight after, so the count covers those too when read between updates.
+    /// Counts changes to the listings and marks (not fetch times), only ever up, so a reader can tell
+    /// whether what it worked out from them is still current by keeping the count it saw. Recording a
+    /// listing counts, and sources set its fields straight after, so the count covers those too when
+    /// read between updates.
     /// </summary>
     public int Changes { get; private set; }
 

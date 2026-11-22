@@ -21,10 +21,9 @@ public static class ListChanges
             next = Earliest(next, occurrence.Start, now);
             next = Earliest(next, occurrence.End, now);
             // "Until" drops the date once the closing time is strictly less than a day away, which
-            // matters only while open
+            // matters only while open, so not before the start (counted already)
             var dropsDate = occurrence.End - StatusText.UntilDateAfter + TimeSpan.FromTicks(1);
-            if (occurrence.Start is null || dropsDate > occurrence.Start)
-                next = Earliest(next, dropsDate, now);
+            next = Earliest(next, occurrence.Start is { } start ? Later(dropsDate, start) : dropsDate, now);
             if (schedule.OneOff)
                 next = Earliest(next, occurrence.Start - Schedules.OneOffHorizon, now);
         }
@@ -44,6 +43,15 @@ public static class ListChanges
     }
 
     /// <summary>The earlier of <paramref name="next"/> and <paramref name="at"/>, counting <paramref name="at"/> only when after <paramref name="now"/>.</summary>
-    public static DateTimeOffset? Earliest(DateTimeOffset? next, DateTimeOffset? at, DateTimeOffset now) =>
-        at is { } time && time > now && (next is null || time < next) ? time : next;
+    /// <remarks>Comparisons only: the result may be in UTC rather than the offset it was given in.</remarks>
+    public static DateTimeOffset? Earliest(DateTimeOffset? next, DateTimeOffset? at, DateTimeOffset now)
+    {
+        if (at is not { } time || time <= now)
+            return next;
+        return next is { } soonest ? new DateTimeOffset(Math.Min(time.UtcTicks, soonest.UtcTicks), TimeSpan.Zero) : time;
+    }
+
+    // The later of the two, or null with no first; by ticks so a tie needs no comparison to settle
+    private static DateTimeOffset? Later(DateTimeOffset? at, DateTimeOffset floor) =>
+        at is { } time ? new DateTimeOffset(Math.Max(time.UtcTicks, floor.UtcTicks), TimeSpan.Zero) : null;
 }

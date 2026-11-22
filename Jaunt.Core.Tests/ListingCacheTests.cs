@@ -10,7 +10,8 @@ public class ListingCacheTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
 
-    // Changes: the browser rebuilds its list only when the count moves
+    // Changes: the browser rebuilds its list only when the count moves. It only goes up, so a change of
+    // one kind can never undo the count of another
 
     [Fact]
     public void RecordingAListingIsAChange()
@@ -21,8 +22,8 @@ public class ListingCacheTests
         var afterSeen = cache.Changes;
         cache.SeenAd(ListingSource.InGamePartyFinder, "2", "Moonlit Lounge  Mist W14 P33", null, Now);
 
-        Assert.NotEqual(before, afterSeen);
-        Assert.NotEqual(afterSeen, cache.Changes);
+        Assert.True(afterSeen > before);
+        Assert.True(cache.Changes > afterSeen);
     }
 
     [Fact]
@@ -35,7 +36,7 @@ public class ListingCacheTests
         cache.SeenElsewhere(listing, Now);
         Assert.Equal(before, cache.Changes);
         cache.SeenElsewhere(listing, Now.AddMinutes(1));
-        Assert.NotEqual(before, cache.Changes);
+        Assert.True(cache.Changes > before);
     }
 
     [Fact]
@@ -48,8 +49,8 @@ public class ListingCacheTests
         var afterListing = cache.Changes;
         cache.Place(new AddressKey("SIREN", District.Mist, 3, 7, null, false)).Favourite = true;
 
-        Assert.NotEqual(before, afterListing);
-        Assert.NotEqual(afterListing, cache.Changes);
+        Assert.True(afterListing > before);
+        Assert.True(cache.Changes > afterListing);
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public class ListingCacheTests
 
         cache.Move(place, new AddressKey("SIREN", District.Mist, 3, 8, null, false));
 
-        Assert.NotEqual(before, cache.Changes);
+        Assert.True(cache.Changes > before);
     }
 
     [Fact]
@@ -76,7 +77,7 @@ public class ListingCacheTests
         cache.Seen(ListingSource.FfxivVenues, "2", "Other", Now);
         var afterSeen = cache.Changes;
         Assert.Equal(1, cache.ClearUnmarked());
-        Assert.NotEqual(afterSeen, cache.Changes);
+        Assert.True(cache.Changes > afterSeen);
     }
 
     [Fact]
