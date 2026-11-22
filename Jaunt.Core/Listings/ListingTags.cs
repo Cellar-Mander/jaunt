@@ -307,7 +307,7 @@ public static class ListingTags
     }
 
     /// <summary>Reads a listing's text, Party Finder glyphs included, for keywords and SFW, NSFW and age words.</summary>
-    internal static TextSignals Read(string raw) => raw.Length == 0 ? default : Read(PartyFinderText.Normalise(raw));
+    internal static TextSignals Read(string raw) => Read(PartyFinderText.Normalise(raw));
 
     /// <summary>As <see cref="Read(string)"/>, from text already normalised (<see cref="PartyFinderText.Normalise(string)"/>).</summary>
     internal static TextSignals Read(NormalisedText normalised)

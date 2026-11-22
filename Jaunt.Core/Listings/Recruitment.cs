@@ -30,7 +30,7 @@ public static class Recruitment
         details.Recruits && times.Count == 0;
 
     /// <summary>Whether an ad's text, as the game sends it, recruits.</summary>
-    public static bool Recruits(string adText) => adText.Length > 0 && Recruits(PartyFinderText.Normalise(adText));
+    public static bool Recruits(string adText) => Recruits(PartyFinderText.Normalise(adText));
 
     /// <summary>Whether an ad recruits, from its text already normalised (<see cref="PartyFinderText.Normalise(string)"/>).</summary>
     public static bool Recruits(NormalisedText normalised)
