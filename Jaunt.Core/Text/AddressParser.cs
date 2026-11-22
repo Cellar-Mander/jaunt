@@ -39,9 +39,14 @@ public sealed class AddressParser(Gazetteer gazetteer)
     /// <summary>Reads every address in one ad.</summary>
     /// <param name="adText">The ad's text as the game sends it, glyphs included.</param>
     /// <param name="listedOn">The world the ad is listed on: the fallback when the text names none.</param>
-    public IReadOnlyList<HousingAddress> Parse(string adText, string? listedOn)
+    public IReadOnlyList<HousingAddress> Parse(string adText, string? listedOn) => Parse(PartyFinderText.Normalise(adText), listedOn);
+
+    /// <summary>Reads every address in one ad, from its text already normalised.</summary>
+    /// <param name="normalised">The ad's text after <see cref="PartyFinderText.Normalise(string)"/>.</param>
+    /// <param name="listedOn">The world the ad is listed on: the fallback when the text names none.</param>
+    public IReadOnlyList<HousingAddress> Parse(NormalisedText normalised, string? listedOn)
     {
-        var text = PartyFinderText.Normalise(adText).Text;
+        var text = normalised.Text;
         var tokens = AddressTokenizer.Tokenize(text, gazetteer.CjkWords, gazetteer.MaxCjkWordLength);
         return new Run(gazetteer, tokens, listedOn).Parse();
     }

@@ -16,19 +16,32 @@ public sealed record ListingDetails(IReadOnlyList<HousingAddress> Addresses, IRe
 
     /// <summary>Parses an ad's text, as the game sends it.</summary>
     /// <param name="listedOn">The world the ad is listed on, for addresses that name none.</param>
-    public static ListingDetails Parse(AddressParser parser, string adText, string? listedOn)
+    public static ListingDetails Parse(AddressParser parser, string adText, string? listedOn) =>
+        Parse(parser, adText, PartyFinderText.Normalise(adText), listedOn);
+
+    /// <summary>Parses an ad's text, as the game sends it, with that text already normalised.</summary>
+    /// <param name="normalised"><paramref name="adText"/> after <see cref="PartyFinderText.Normalise(string)"/>.</param>
+    /// <param name="listedOn">The world the ad is listed on, for addresses that name none.</param>
+    public static ListingDetails Parse(AddressParser parser, string adText, NormalisedText normalised, string? listedOn)
     {
-        var links = WebLinks.Find(adText);
-        return new(parser.Parse(adText, listedOn), links) { Performers = Text.Performers.Find(adText, links), Recruits = Recruitment.Recruits(adText) };
+        var links = WebLinks.Find(normalised);
+        return new(parser.Parse(normalised, listedOn), links)
+        {
+            Performers = Text.Performers.Find(adText, links),
+            Recruits = Recruitment.Recruits(normalised),
+        };
     }
 
     /// <summary>
     /// A title for an ad, which has none of its own: the first line of its normalised text, cut to
     /// <see cref="MaxTitleLength"/> characters with "…" at the end when longer. Empty for an empty ad.
     /// </summary>
-    public static string Title(string adText)
+    public static string Title(string adText) => Title(PartyFinderText.Normalise(adText));
+
+    /// <summary>As <see cref="Title(string)"/>, from the ad's text already normalised.</summary>
+    public static string Title(NormalisedText normalised)
     {
-        var text = PartyFinderText.Normalise(adText).Text;
+        var text = normalised.Text;
         var lineEnd = text.IndexOf('\n', StringComparison.Ordinal);
         // Stryker disable once Equality : normalised text is trimmed, so it never starts with a line break and lineEnd is never 0
         var line = lineEnd < 0 ? text : text[..lineEnd];

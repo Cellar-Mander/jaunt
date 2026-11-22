@@ -240,7 +240,7 @@ public static class ListingTags
 
             default:
                 {
-                    var text = Read(listing.Description);
+                    var text = Read(listing.Normalised);
                     return new Tagging(text.Interests, text.Nsfw ?? text.AgeRestricted);
                 }
         }
@@ -307,12 +307,12 @@ public static class ListingTags
     }
 
     /// <summary>Reads a listing's text, Party Finder glyphs included, for keywords and SFW, NSFW and age words.</summary>
-    internal static TextSignals Read(string raw)
-    {
-        if (raw.Length == 0)
-            return default;
+    internal static TextSignals Read(string raw) => raw.Length == 0 ? default : Read(PartyFinderText.Normalise(raw));
 
-        var text = PartyFinderText.Normalise(raw).Text.ToLowerInvariant();
+    /// <summary>As <see cref="Read(string)"/>, from text already normalised (<see cref="PartyFinderText.Normalise(string)"/>).</summary>
+    internal static TextSignals Read(NormalisedText normalised)
+    {
+        var text = normalised.Text.ToLowerInvariant();
         var words = Split(text);
         var interests = Interests.None;
         bool sfw = false, nsfw = false, club = false, otherClub = false;

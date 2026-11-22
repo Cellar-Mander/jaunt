@@ -10,6 +10,8 @@ public sealed class CachedListing
     private string? titledFrom;
     // Stryker disable once String : titledFrom starts null, so adTitle is always assigned before it is read
     private string adTitle = "";
+    // One reference, so a reader on another thread never pairs one text with another's normalisation
+    private Normalisation? normalised;
     private bool favourite;
     private bool visited;
     private bool hidden;
@@ -33,7 +35,7 @@ public sealed class CachedListing
                 return title;
             if (!ReferenceEquals(titledFrom, Description))
             {
-                adTitle = ListingDetails.Title(Description);
+                adTitle = ListingDetails.Title(Normalised);
                 titledFrom = Description;
             }
 
@@ -53,6 +55,28 @@ public sealed class CachedListing
 
     /// <summary>The ad's text as the source last sent it, glyphs included, for the parsers.</summary>
     public string Description { get; set; } = "";
+
+    /// <summary>
+    /// <see cref="Description"/> after <see cref="Text.PartyFinderText.Normalise(string)"/>, worked out on
+    /// first read after the text changes, so each parser of an ad reads the same normalisation.
+    /// </summary>
+    public Text.NormalisedText Normalised
+    {
+        get
+        {
+            var description = Description;
+            var memo = normalised;
+            if (memo is null || !ReferenceEquals(memo.From, description))
+            {
+                memo = new Normalisation(description, Text.PartyFinderText.Normalise(description));
+                normalised = memo;
+            }
+
+            return memo.Text;
+        }
+    }
+
+    private sealed record Normalisation(string From, Text.NormalisedText Text);
 
     /// <summary>The world the source last listed it on, if it says; addresses that name no world use it.</summary>
     public string? ListedOn { get; set; }

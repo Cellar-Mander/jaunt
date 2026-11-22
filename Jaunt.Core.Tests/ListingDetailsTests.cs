@@ -38,4 +38,27 @@ public class ListingDetailsTests
         Assert.Equal(new HousingAddress("Siren", WorldSource.Listing, District.Mist, 5, 12), address);
         Assert.Equal(new Uri("https://discord.gg/velvet"), Assert.Single(details.Links).Uri);
     }
+
+    [Fact]
+    public void AnAdIsNormalisedOncePerText()
+    {
+        var ad = new CachedListing { Source = ListingSource.Xivpf, Id = "1", Description = "\uE071\uE072 Bar\rMist W5 P12" };
+
+        var first = ad.Normalised;
+        Assert.Equal("AB Bar\nMist W5 P12", first.Text);
+        Assert.Same(first, ad.Normalised);
+        Assert.Equal("AB Bar", ad.Title);
+    }
+
+    [Fact]
+    public void AnAdIsNormalisedAgainWhenItsTextChanges()
+    {
+        var ad = new CachedListing { Source = ListingSource.Xivpf, Id = "1", Description = "Old Bar" };
+        _ = ad.Normalised;
+
+        ad.Description = "New \uE072ar";
+
+        Assert.Equal("New Bar", ad.Normalised.Text);
+        Assert.Equal("New Bar", ad.Title);
+    }
 }
