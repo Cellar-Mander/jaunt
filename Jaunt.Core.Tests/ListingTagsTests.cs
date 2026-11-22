@@ -111,7 +111,11 @@ public class ListingTagsTests
     [InlineData("Supper club", Interests.None)]
     [InlineData("Members club", Interests.None)]
     [InlineData("Fighting club", Interests.Games)]
-    public void ClubMeansANightclubUnlessTheTextSaysAnotherKind(string text, Interests expected) => Assert.Equal(expected, InterestsOf(text));
+    public void ClubMeansANightclubUnlessTheTextSaysAnotherKind(string text, Interests expected)
+    {
+        // revert-check: not revert-sensitive (kills a surviving mutant: pins existing behaviour)
+        Assert.Equal(expected, InterestsOf(text));
+    }
 
     [Theory]
     [InlineData("Come party with us", true)]
