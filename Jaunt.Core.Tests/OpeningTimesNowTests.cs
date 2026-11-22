@@ -34,6 +34,9 @@ public class OpeningTimesNowTests
     [InlineData("open Fridays 9pm", "fri 21:00-")]
     [InlineData("Open Stage Open Bar Open Mic", "")]
     [InlineData("Open Recruitment, open to all", "")]
+    [InlineData("Applications open for staff", "")] // a word before open says what is open
+    [InlineData("Auditions are open!", "")]
+    [InlineData("Recruitment is open", "")]
     [InlineData("the full experience starts now", "")]
     [InlineData("doors start now", "")]
     [InlineData("is now hiring", "")]

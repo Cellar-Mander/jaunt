@@ -403,7 +403,7 @@ public static class ListingTags
     /// The text's words: runs of letters and digits, with "/" between digits ("24/7", "50/50") and "+"
     /// next to one ("18+", "+18") kept, so "bar/club" and links ("twitch.tv/name") split into words.
     /// </summary>
-    private static List<string> Split(string text)
+    internal static List<string> Split(string text)
     {
         var words = new List<string>();
         var start = -1;

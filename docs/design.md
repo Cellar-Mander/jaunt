@@ -13,8 +13,8 @@ instants. `OpeningTimesCorpusTests` checks every labelled corpus ad (`Corpus/REA
 
 - **Open now**: "open now", "now open", "is open", a bare "NOW", 営業中 and similar. A bare "open"
   doesn't count when a time, "from", "tonight", a weekday and the like follow it, or a word says
-  what is open ("Open Stage", "Open Recruitment", "open to all"). "starts now" and "now hiring"
-  don't count. A closing time with no start ("open until 1am") belongs to the now opening.
+  what is open ("Open Stage", "Open Recruitment", "open to all", "Applications open", "Auditions are
+  open"). "starts now" and "now hiring" don't count. A closing time with no start ("open until 1am") belongs to the now opening.
 - **Always**: "24/7" and "always open". 24/7 is never a date.
 - **Times** need AM/PM, a zone, minutes or 時 after the hour; a bare number ("Gob 14-35", "W30") is
   not a time. Bare hours 1–11 read as evening ("8-12" is 20:00–00:00); a leading zero, an hour over
@@ -113,6 +113,21 @@ normalises it), in the order written. `WebLinksTests` checks every labelled corp
   (`javascript:`, `ftp:`) are never links.
 - Each link keeps the text as written and gets a URI to open: always http or https, https when the
   ad gives no scheme. A link that can't form a valid URI ("canvas..site") is left out.
+
+### Recruitment ads
+
+`Recruitment` decides which ads only recruit, for a free company, linkshell or venue staff. The
+listing browser doesn't list a Party Finder ad (in-game or xivpf) or shout that recruits and states
+no opening (no time, day, "open now" or 24/7, as read above). It stays in the cache, so a change to
+the rules reaches it without fetching. `RecruitmentTests` checks every labelled corpus ad with a housing
+address: it is dropped exactly when its `kind` is `recruiting`.
+
+- **Recruits** when the text has "recruiting", "recruitment", "recruit", "hiring", "apply",
+  "application", "staff" or "member" as a whole word (or with an "s"), in any case; or "FC", "CWLS",
+  "linkshell", "LS" or "free company" and "join" anywhere ("Join Silly Gang FC"); or メンバー募集,
+  スタッフ募集, キャスト募集 or 募集中. A bare 募集 doesn't count, since ads use it for the party's own
+  slots (募集ロール).
+- A venue ad that is also hiring stays when it states an opening ("tonight 9pm ST, now hiring").
 
 ### Performers in ad text
 

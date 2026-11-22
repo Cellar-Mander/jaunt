@@ -8,6 +8,9 @@ public sealed record ListingDetails(IReadOnlyList<HousingAddress> Addresses, IRe
     /// <summary>The performers the ad names (<see cref="Text.Performers.Find"/>); empty for listings that aren't ads.</summary>
     public IReadOnlyList<Performer> Performers { get; init; } = [];
 
+    /// <summary>Whether the ad recruits (<see cref="Recruitment.Recruits"/>); false for listings that aren't ads.</summary>
+    public bool Recruits { get; init; }
+
     /// <summary>The longest title taken from an ad, in characters, before it is cut with an ellipsis.</summary>
     public const int MaxTitleLength = 60;
 
@@ -16,7 +19,7 @@ public sealed record ListingDetails(IReadOnlyList<HousingAddress> Addresses, IRe
     public static ListingDetails Parse(AddressParser parser, string adText, string? listedOn)
     {
         var links = WebLinks.Find(adText);
-        return new(parser.Parse(adText, listedOn), links) { Performers = Text.Performers.Find(adText, links) };
+        return new(parser.Parse(adText, listedOn), links) { Performers = Text.Performers.Find(adText, links), Recruits = Recruitment.Recruits(adText) };
     }
 
     /// <summary>
