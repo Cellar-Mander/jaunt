@@ -682,9 +682,11 @@ right, under a line of search and filters.
   width: the status, the title in a font a quarter larger than the default, and the world dimmed. The status is "Open now · until 23:00" in green
   ("until Mon 16 Nov 23:00" when it closes more than a day ahead), "Open now" when the end isn't
   known, "Open now · 24h", or for a later opening its times ("20:00–23:00", or "20:00" without an end).
-  Rows out of view are spaced, not drawn. The list is rebuilt every second. An opening that ends
-  before then shows "Closed" in the row and detail pane, and is left out when the list is next
-  grouped (on the rebuild or a filter change).
+  Rows out of view are spaced, not drawn. The list is rebuilt only when it can change: when the
+  cache (a fetch, an ad seen, a mark), the character's region, the cooldown or the time and date
+  formats change, at local midnight, and when an opening it could list starts, ends, comes within
+  30 days (one-offs) or within a day of closing, or an ad stops counting as listed. An opening that
+  has ended before the list is next grouped shows "Closed" in the row and detail pane.
 - **Detail pane**, top to bottom, each part only when the listing has it: the splash image band
   (see "Icons and splash images"); the title in the larger font; the status as in the rows, but a later opening with its date ("Sat 21 Nov
   20:00–23:00"); the world;
@@ -785,8 +787,8 @@ right, under a line of search and filters.
     house they are inside (any room counts as its plot) or the apartment they are in (not the lobby).
     An entry with that plot or apartment among its addresses and an opening in progress is marked
     visited as its button would, whether or not the browser is open. Entries are checked on arriving,
-    then once a minute while there, against the list as last built; it is rebuilt for a check only
-    when it is more than 15 minutes old, as a rebuild is too slow for the game thread to run often. Entries naming only the ward, and
+    then once a minute while there, against the list as last built, rebuilt first only if it has
+    changed since (as above), as a rebuild is too slow for the game thread to run often. Entries naming only the ward, and
     places outside housing, never count. Each entry is marked at most once per stay at an address, so
     one marked not visited while the player is still there stays unmarked; leaving starts a new stay.
   - **Hide**: listings are merged before hidden ones are left out, and an entry whose place or any
@@ -1008,7 +1010,7 @@ Caps on user-configurable lists and text, and how input from other players or th
   whether the game also sent an ad is one cache lookup.
 - A Partake fetch is at most 5 pages of 200 events, read off the game thread. Each event's location
   is parsed once per text, like an ad; its title, world and links are worked out once per rebuild
-  of the list (once a second), about 150 events.
+  of the list, about 150 events.
 - An FFXIV Venues fetch is at most one request per data centre in the region (4 for North America and
   Japan, 2 for Europe, 1 for Oceania), each read in one pass over its venues, off the game thread; a venue's links
   are two plus any invites in its description, and titles are cut to 60 characters when shown. The list (about 750 of 1,400 venues,

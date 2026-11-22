@@ -98,7 +98,8 @@ public sealed class Plugin : IDalamudPlugin
             new CalendarOpener(Path.Combine(PluginInterface.ConfigDirectory.FullName, "calendar"), NotificationManager, Log));
         WindowSystem.AddWindow(ListingsWindow);
         playerAddress = new PlayerAddress(PlayerState, ClientState, Log);
-        Framework.Update += CheckVisits;
+        // On drawing rather than Framework.Update, as a check may rebuild the list, which needs an ImGui frame
+        PluginInterface.UiBuilder.Draw += CheckVisits;
         SelfTestRegistry.RegisterTestSteps(new SelfTests(ConfigWindow, ListingsWindow, Configuration, gazetteer).Steps());
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -115,7 +116,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         // Unhook from Dalamud first, so no command or draw call reaches a disposed component
         CommandManager.RemoveHandler(CommandName);
-        Framework.Update -= CheckVisits;
+        PluginInterface.UiBuilder.Draw -= CheckVisits;
         PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
@@ -139,7 +140,7 @@ public sealed class Plugin : IDalamudPlugin
     /// Marks visited what is open where the player is, when Settings → Listings says to: on arriving at a
     /// plot or apartment, then every <see cref="AutoVisits.CheckInterval"/> while there.
     /// </summary>
-    private void CheckVisits(IFramework framework)
+    private void CheckVisits()
     {
         var now = DateTimeOffset.UtcNow;
         if (now < nextAddressCheck)

@@ -35,8 +35,6 @@ namespace Jaunt.Windows;
 /// </summary>
 internal sealed class ListingsWindow : Window
 {
-    private static readonly TimeSpan RebuildInterval = TimeSpan.FromSeconds(1);
-
     /// <summary>Shown when there is nothing to list; one is picked each time the list becomes empty.</summary>
     private static readonly string[] EmptyLines =
     [
@@ -92,9 +90,14 @@ internal sealed class ListingsWindow : Window
     private int listingCount;
     // Each listed row by its listing, for the detail pane; a listing listed twice (open now and next) is one row
     private readonly Dictionary<(ListingSource, string), Row> rowsByKey = [];
+    // While the list is worked out, the soonest time the clock changes it
+    private DateTimeOffset nextChange;
+    // The list is worked out again when the clock reaches this (ListChanges), or MinValue to force it;
+    // or when the cache, the character's region or a setting it reads changes from what it was built from
     private DateTimeOffset nextRebuild;
-    // When the list was last built for a character, or MinValue while there is none
-    private DateTimeOffset builtAt = DateTimeOffset.MinValue;
+    private int builtChanges;
+    private TravelRegion? builtRegion;
+    private (int CooldownMinutes, TimeFormat Time, DateFormat Date) builtSettings;
     private bool loggedOut;
     private int emptyLine = -1;
     private bool aboutExpanded;
@@ -106,7 +109,7 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<(string Text, int Width, int FontSize), string> fitted = [];
     private readonly Dictionary<(string Text, int Width), string> aboutCuts = [];
 
-    // Worked out once each time the list is worked out (at most once a second) rather than every
+    // Worked out once each time the list is worked out (see Stale) rather than every
     // frame, as formatting allocates: each day's heading, each row's status line on its first draw,
     // the count, and what the detail pane shows of the selected entry
     private readonly List<(string Main, string Dimmed)> headings = [];
@@ -324,11 +327,8 @@ internal sealed class ListingsWindow : Window
         titleFont.BeginFrame();
         iconFont.BeginFrame();
         var now = DateTimeOffset.UtcNow;
-        if (now >= nextRebuild)
-        {
+        if (Stale(now))
             Rebuild(now);
-            nextRebuild = now + RebuildInterval;
-        }
 
         if (loggedOut)
         {
@@ -624,7 +624,7 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>The icon, then the status line, the title cut to fit and the world.</summary>
-    /// <remarks>The status line is worked out on the row's first draw after the list is, so it may lag the clock by up to <see cref="RebuildInterval"/>.</remarks>
+    /// <remarks>The status line is worked out on the row's first draw after the list is, which happens whenever it could change (<see cref="ListChanges"/>).</remarks>
     private void DrawRow(BrowserEntry<Row> entry, (ListingSource, string)? selected, float rowHeight, DateTimeOffset now, CultureInfo locale)
     {
         var row = entry.Item;
@@ -1055,16 +1055,13 @@ internal sealed class ListingsWindow : Window
 
     /// <summary>
     /// Marks visited each entry open now at the player's address (<see cref="AutoVisits.Check"/>) in the
-    /// list last built, rebuilding it only when there is none or it is older than
-    /// <see cref="AutoVisits.ListMaxAge"/>, as a rebuild is too slow to run on every check.
+    /// list last built, rebuilding it first only if it is out of date (<see cref="Stale"/>). Call inside
+    /// an ImGui frame, as rebuilding fits titles to the current font.
     /// </summary>
     internal void CheckVisits(AutoVisits visits, DateTimeOffset now)
     {
-        if (now - builtAt >= AutoVisits.ListMaxAge)
-        {
+        if (Stale(now))
             Rebuild(now);
-            nextRebuild = now + RebuildInterval;
-        }
 
         var marked = false;
         foreach (var row in unfiltered)
@@ -1564,9 +1561,20 @@ internal sealed class ListingsWindow : Window
     }
 
     /// <summary>
+    /// Whether the list must be worked out again: the clock reached a time it could change at, or the
+    /// cache, the character's region or a setting it reads changed since it was.
+    /// </summary>
+    private bool Stale(DateTimeOffset now) =>
+        now >= nextRebuild
+        || cache.Changes != builtChanges
+        || !ReferenceEquals(region(), builtRegion)
+        || builtSettings != (configuration.RefreshCooldownMinutes, configuration.TimeFormat, configuration.DateFormat);
+
+    /// <summary>
     /// Works out the listed rows and groups them by day, parsing only ad text, locations and venue and
-    /// event fields that changed. An xivpf ad the game has also sent shows once, as the in-game copy.
-    /// Forgets the selection when its listing is no longer listed, whatever the filters.
+    /// event fields that changed, and when the clock next changes them (<see cref="ListChanges"/>). An
+    /// xivpf ad the game has also sent shows once, as the in-game copy. Forgets the selection when its
+    /// listing is no longer listed, whatever the filters.
     /// </summary>
     private void Rebuild(DateTimeOffset now)
     {
@@ -1574,15 +1582,20 @@ internal sealed class ListingsWindow : Window
         unfiltered.Clear();
         unfilteredKeys.Clear();
         var travel = region();
+        builtRegion = travel;
+        builtSettings = (configuration.RefreshCooldownMinutes, configuration.TimeFormat, configuration.DateFormat);
         loggedOut = travel is null;
-        builtAt = travel is null ? DateTimeOffset.MinValue : now;
         if (travel is null)
         {
             rowsByKey.Clear();
             listingCount = 0;
             groups = [];
+            nextRebuild = DateTimeOffset.MaxValue;
+            builtChanges = cache.Changes;
             return;
         }
+
+        nextChange = ListChanges.NextDay(now, TimeZoneInfo.Local);
 
         var adRegion = travel.DataCentres.Select(Schedules.RegionOf).FirstOrDefault(r => r is not null) ?? PartyFinderRegion.Europe;
         var rows = new List<(Row Row, AddressKey? Address)>();
@@ -1600,6 +1613,7 @@ internal sealed class ListingsWindow : Window
         var candidates = new List<MergeCandidate<Row>>(rows.Count);
         foreach (var (row, address) in WithAddressZones(rows, adRegion, now))
         {
+            ChangesAt(ListChanges.Next(row.Schedule, now), now);
             var listed = Schedules.Listed(row.Schedule, now);
             if (listed.Count > 0)
                 candidates.Add(new MergeCandidate<Row>(row, address, row.Schedule, listed, row.Listing.Source.IsAd() ? row.Listing.Description : null));
@@ -1634,7 +1648,13 @@ internal sealed class ListingsWindow : Window
 
         ApplyFilters(now);
         Forget();
+        nextRebuild = nextChange;
+        // Counted last, so marks matched above don't make the list out of date
+        builtChanges = cache.Changes;
     }
+
+    /// <summary>Brings <see cref="nextChange"/> forward to <paramref name="at"/> if that is sooner and after <paramref name="now"/>.</summary>
+    private void ChangesAt(DateTimeOffset? at, DateTimeOffset now) => nextChange = ListChanges.Earliest(nextChange, at, now) ?? nextChange;
 
     /// <summary>
     /// Lists the entries the search and filters let through, grouped by day, with their headings and
@@ -1872,6 +1892,9 @@ internal sealed class ListingsWindow : Window
                     var times = AdTimes(listing);
                     var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
                     var schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, firstSeen: listing.FirstSeen);
+                    // It changes when it stops counting as listed, and one listing nothing now may list a time once it comes within range
+                    ChangesAt(Schedules.ListedUntil(listing.Source, listing.LastSeen, configuration.RefreshCooldownMinutes), now);
+                    ChangesAt(ListChanges.Next(schedule, now), now);
                     // Most cached ads are no longer listed, so this spares parsing their addresses
                     if (Duplicates.ListsNothingAnywhere(times, schedule, now))
                         return null;

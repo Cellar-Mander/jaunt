@@ -31,7 +31,7 @@ public class DayGroupsTests
         Assert.Equal(new DateOnly(2026, 11, 16), groups[3].Date);
     }
 
-    // Openings are listed once a second and grouped again on each filter change, so one can end in between
+    // Openings are grouped again on each filter change, against a list worked out earlier, so one can end in between
     [Fact]
     public void OpeningsThatHaveEndedAreLeftOut()
     {
