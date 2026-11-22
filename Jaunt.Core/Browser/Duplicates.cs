@@ -136,7 +136,7 @@ public static class Duplicates
     /// <param name="starts">Starts listed at the address by venues and events, in UTC.</param>
     public static TimeZoneInfo? UnstatedZone(IReadOnlyList<OpeningTime> times, DateTimeOffset seen, TimeZoneInfo? venueZone, IReadOnlyCollection<DateTimeOffset> starts)
     {
-        var unzoned = times.Where(t => t.Start is not null && OpeningTimeResolver.Written(t.Zone) is null).ToList();
+        var unzoned = times.Where(Unzoned).ToList();
         if (unzoned.Count == 0)
             return null;
         if (venueZone is not null)
@@ -155,6 +155,19 @@ public static class Duplicates
 
         return null;
     }
+
+    /// <summary>
+    /// Whether an ad whose schedule lists nothing at <paramref name="now"/> would list nothing at any
+    /// address: none of its start times lacks a zone, so <see cref="UnstatedZone"/> can't move them.
+    /// The browser drops such an ad before parsing its addresses.
+    /// </summary>
+    /// <param name="times">The ad's opening times as written.</param>
+    /// <param name="schedule">Its schedule in the region's default zone (<see cref="Schedules.ForAd(IReadOnlyList{OpeningTime}, DateTimeOffset, PartyFinderRegion, bool, DateTimeOffset, TimeZoneInfo?, DateTimeOffset?)"/>).</param>
+    public static bool ListsNothingAnywhere(IReadOnlyList<OpeningTime> times, ListingSchedule schedule, DateTimeOffset now) =>
+        Schedules.Listed(schedule, now).Count == 0 && !times.Any(Unzoned);
+
+    // A start time an address's zone would read in place of the region default
+    private static bool Unzoned(OpeningTime time) => time.Start is not null && OpeningTimeResolver.Written(time.Zone) is null;
 
     /// <summary>
     /// A merged entry's links: each member's in turn, the same URI once. The FFXIV RP Event Calendar's
