@@ -45,7 +45,15 @@ public class RecruitmentTests
     [InlineData("Applications: discord.gg/x")]
     [InlineData("Join our CWLS")]
     [InlineData("Linkshell: join via tell")] // join anywhere in the text
+    [InlineData("Join us, join our FC")] // join twice
+    [InlineData("Join our LS")]
+    [InlineData("Open Recruitment")]
+    [InlineData("We recruit crafters")]
+    [InlineData("Apply via tell")]
     public void RecruitmentWordsAreRead(string text) => Assert.True(Recruitment.Recruits(text));
+
+    [Fact]
+    public void OnlyAFinalSIsLeftOffAWord() => Assert.False(Recruitment.Recruits("A staffy came to the cafe"));
 
     [Fact]
     public void AListingThatIsntAnAdNeverRecruits() =>

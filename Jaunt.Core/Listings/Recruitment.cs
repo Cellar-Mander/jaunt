@@ -45,7 +45,8 @@ public static class Recruitment
         bool group = text.Contains("free company", StringComparison.Ordinal), join = false;
         foreach (var word in ListingTags.Split(text))
         {
-            if (Words.Contains(word) || (word.Length > 1 && word[^1] == 's' && Words.Contains(word[..^1])))
+            // For the word "s" the rest is empty, which is no keyword
+            if (Words.Contains(word) || (word[^1] == 's' && Words.Contains(word[..^1])))
                 return true;
             group |= Groups.Contains(word);
             join |= word == "join";

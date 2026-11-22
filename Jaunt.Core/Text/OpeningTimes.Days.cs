@@ -120,8 +120,13 @@ public static partial class OpeningTimes
         var d = 0;
         foreach (var span in spans)
         {
-            while (d + 1 < dates.Count && dates[d + 1].First <= span.First)
+            while (d + 1 < dates.Count)
+            {
+                // Stryker disable once Equality : a span never starts on a date's first token: N.NN is a clock only with AM/PM right after, which isn't a date, and N/N is never a clock
+                if (dates[d + 1].First > span.First)
+                    break;
                 d++;
+            }
             result[span] = dates[d].Date;
         }
 

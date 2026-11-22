@@ -105,6 +105,12 @@ public class ListingTagsTests
     [InlineData("Book clubs on Sunday", Interests.None)]
     [InlineData("Fight club tonight", Interests.Games)]
     [InlineData("Social club with a DJ", Interests.Clubs)] // other club words still count
+    [InlineData("A nightclub, the best club in Mist", Interests.Clubs)] // "club" and another club word
+    [InlineData("Gentlemen club", Interests.None)]
+    [InlineData("Strip club", Interests.None)]
+    [InlineData("Supper club", Interests.None)]
+    [InlineData("Members club", Interests.None)]
+    [InlineData("Fighting club", Interests.Games)]
     public void ClubMeansANightclubUnlessTheTextSaysAnotherKind(string text, Interests expected) => Assert.Equal(expected, InterestsOf(text));
 
     [Theory]
