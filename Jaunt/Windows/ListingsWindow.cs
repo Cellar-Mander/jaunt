@@ -1870,14 +1870,17 @@ internal sealed class ListingsWindow : Window
                 {
                     if (Xivpf.ShownInGame(cache, listing) || Xivpf.ShownFromXivpf(cache, listing))
                         return null;
+                    var times = AdTimes(listing);
+                    var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
+                    var schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, firstSeen: listing.FirstSeen);
+                    // Most cached ads are no longer listed, so this spares parsing their addresses
+                    if (Duplicates.ListsNothingAnywhere(times, schedule, now))
+                        return null;
                     var adDetails = Parsed(listing, listing.Description, listing.ListedOn);
                     if (adDetails.Addresses.Count == 0)
                         return null;
-                    var times = AdTimes(listing);
                     if (Recruitment.OnlyRecruits(adDetails, times))
                         return null;
-                    var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
-                    var schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, firstSeen: listing.FirstSeen);
                     return new Row(listing, listing.Title, adDetails, adDetails.Addresses[0].World ?? listing.ListedOn, schedule, About(listing));
                 }
 

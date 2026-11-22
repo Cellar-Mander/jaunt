@@ -382,6 +382,44 @@ public class DuplicatesTests
         Assert.Equal(new DateTimeOffset(2026, 11, 6, 19, 0, 0, TimeSpan.Zero), Assert.Single(schedule.Occurrences).Start);
     }
 
+    // ListsNothingAnywhere
+
+    private static bool ListsNothingAnywhere(string ad, bool listed, DateTimeOffset now)
+    {
+        var times = Schedules.ParseAd(ad, OrchidSeen);
+        return Duplicates.ListsNothingAnywhere(times, Schedules.ForAd(times, OrchidSeen, PartyFinderRegion.Europe, listed, now), now);
+    }
+
+    [Theory]
+    [InlineData("Open now! Mist W1 P1")]
+    [InlineData("Mist W1 P1")]
+    [InlineData("Tonight 7pm-9pm ST Mist W1 P1")]
+    public void AnAdNoLongerListedWhoseTimesHavePassedOrStateNoneListsNothingAnywhere(string ad)
+    {
+        Assert.True(ListsNothingAnywhere(ad, listed: false, OrchidSeen.AddHours(2)));
+    }
+
+    [Fact]
+    public void AnAdStillListedOrWithAnOpeningAheadListsSomething()
+    {
+        Assert.False(ListsNothingAnywhere("Open now! Mist W1 P1", listed: true, OrchidSeen));
+        Assert.False(ListsNothingAnywhere("Tomorrow 7pm ST Mist W1 P1", listed: false, OrchidSeen.AddHours(2)));
+    }
+
+    [Fact]
+    public void AnAdWhosePassedStartStatesNoZoneMayStillBeListedAtAVenueAddress()
+    {
+        // 7pm passed in London, but at a New York venue it is still to come
+        var now = OrchidSeen.AddMinutes(30);
+        var times = Schedules.ParseAd(OrchidAd, OrchidSeen);
+        var european = Schedules.ForAd(times, OrchidSeen, PartyFinderRegion.Europe, listed: false, now);
+        var atVenue = Schedules.ForAd(times, OrchidSeen, PartyFinderRegion.Europe, listed: false, now, Duplicates.UnstatedZone(times, OrchidSeen, NewYork, []));
+
+        Assert.Empty(Schedules.Listed(european, now));
+        Assert.NotEmpty(Schedules.Listed(atVenue, now));
+        Assert.False(Duplicates.ListsNothingAnywhere(times, european, now));
+    }
+
     // Links
 
     private static WebLink Link(string url) => new(url, new Uri(url));
