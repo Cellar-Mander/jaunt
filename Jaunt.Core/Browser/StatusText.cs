@@ -6,6 +6,9 @@ namespace Jaunt.Core.Browser;
 /// <summary>A listed opening's status line, in local time and the Settings formats.</summary>
 public static class StatusText
 {
+    /// <summary>How far ahead an open opening's closing time is for "until" to give its date.</summary>
+    public static readonly TimeSpan UntilDateAfter = TimeSpan.FromDays(1);
+
     /// <summary>
     /// For a list row, under a day divider that already gives the date: "Open now · 24h", "Open now",
     /// "Open now · until 23:00" (with the date when it closes after the next 24 hours), or the times,
@@ -48,7 +51,7 @@ public static class StatusText
 
         var local = Local(end, zone);
         var time = DisplayFormats.FormatTime(local, timeFormat, locale);
-        return end - now < TimeSpan.FromDays(1)
+        return end - now < UntilDateAfter
             ? $"Open now · until {time}"
             : $"Open now · until {DisplayFormats.FormatDate(local, dateFormat, locale)} {time}";
     }

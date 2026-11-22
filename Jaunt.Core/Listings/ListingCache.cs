@@ -26,6 +26,13 @@ public sealed partial class ListingCache
     private bool marksChanged;
     private bool fetchTimesChanged;
 
+    /// <summary>
+    /// Counts changes to the listings and marks (not fetch times), so a reader can tell whether what it
+    /// worked out from them is still current by keeping the count it saw. Recording a listing counts, and
+    /// sources set its fields straight after, so the count covers those too when read between updates.
+    /// </summary>
+    public int Changes { get; private set; }
+
     public int Count => listings.Values.Sum(bySource => bySource.Count);
 
     public IEnumerable<CachedListing> Listings => listings.Values.SelectMany(bySource => bySource.Values);
@@ -79,6 +86,7 @@ public sealed partial class ListingCache
             return;
         listing.LastSeen = now;
         changedSources.Add(listing.Source);
+        Changes++;
     }
 
     private CachedListing Touch(ListingSource source, string id, DateTimeOffset now)
@@ -95,6 +103,7 @@ public sealed partial class ListingCache
         if (now > listing.LastSeen)
             listing.LastSeen = now;
         changedSources.Add(source);
+        Changes++;
         return listing;
     }
 
@@ -149,6 +158,7 @@ public sealed partial class ListingCache
             return place;
         places.Remove(place.Address);
         marksChanged = true;
+        Changes++;
         if (!places.TryGetValue(to, out var there))
         {
             place.Address = to;
@@ -218,7 +228,11 @@ public sealed partial class ListingCache
             }
 
             if (doomed.Count > 0)
+            {
                 changedSources.Add(source);
+                Changes++;
+            }
+
             removed += doomed.Count;
         }
 
@@ -255,7 +269,11 @@ public sealed partial class ListingCache
     public bool ShouldFetch(ListingSource source, int settingMinutes, DateTimeOffset now, string? dataCentre = null) =>
         RefreshPolicy.ShouldFetch(source, settingMinutes, LastFetched(source, dataCentre), now);
 
-    internal void MarksChanged() => marksChanged = true;
+    internal void MarksChanged()
+    {
+        marksChanged = true;
+        Changes++;
+    }
 
     /// <summary>Whether a mark changed since the last save, so a caller that changes them without a click knows to save.</summary>
     public bool MarksUnsaved => marksChanged;

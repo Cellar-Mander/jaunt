@@ -10,6 +10,86 @@ public class ListingCacheTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
 
+    // Changes: the browser rebuilds its list only when the count moves
+
+    [Fact]
+    public void RecordingAListingIsAChange()
+    {
+        var cache = new ListingCache();
+        var before = cache.Changes;
+        cache.Seen(ListingSource.Partake, "1", "Gala", Now, oneOff: true);
+        var afterSeen = cache.Changes;
+        cache.SeenAd(ListingSource.InGamePartyFinder, "2", "Moonlit Lounge  Mist W14 P33", null, Now);
+
+        Assert.NotEqual(before, afterSeen);
+        Assert.NotEqual(afterSeen, cache.Changes);
+    }
+
+    [Fact]
+    public void ASightingElsewhereIsAChangeOnlyWhenLater()
+    {
+        var cache = new ListingCache();
+        var listing = cache.Seen(ListingSource.Xivpf, "1", "Ad", Now);
+        var before = cache.Changes;
+
+        cache.SeenElsewhere(listing, Now);
+        Assert.Equal(before, cache.Changes);
+        cache.SeenElsewhere(listing, Now.AddMinutes(1));
+        Assert.NotEqual(before, cache.Changes);
+    }
+
+    [Fact]
+    public void MarkingAListingOrPlaceIsAChange()
+    {
+        var cache = new ListingCache();
+        var listing = cache.Seen(ListingSource.FfxivVenues, "1", "Venue", Now);
+        var before = cache.Changes;
+        listing.Hidden = true;
+        var afterListing = cache.Changes;
+        cache.Place(new AddressKey("SIREN", District.Mist, 3, 7, null, false)).Favourite = true;
+
+        Assert.NotEqual(before, afterListing);
+        Assert.NotEqual(afterListing, cache.Changes);
+    }
+
+    [Fact]
+    public void MovingAPlaceIsAChange()
+    {
+        var cache = new ListingCache();
+        var place = cache.Place(new AddressKey("SIREN", District.Mist, 3, 7, null, false));
+        var before = cache.Changes;
+
+        cache.Move(place, new AddressKey("SIREN", District.Mist, 3, 8, null, false));
+
+        Assert.NotEqual(before, cache.Changes);
+    }
+
+    [Fact]
+    public void RemovingListingsIsAChangeOnlyWhenOneGoes()
+    {
+        var cache = new ListingCache();
+        cache.Seen(ListingSource.FfxivVenues, "1", "Venue", Now).Favourite = true;
+        var before = cache.Changes;
+
+        Assert.Equal(0, cache.ClearUnmarked());
+        Assert.Equal(before, cache.Changes);
+        cache.Seen(ListingSource.FfxivVenues, "2", "Other", Now);
+        var afterSeen = cache.Changes;
+        Assert.Equal(1, cache.ClearUnmarked());
+        Assert.NotEqual(afterSeen, cache.Changes);
+    }
+
+    [Fact]
+    public void AFetchTimeIsNotAChange()
+    {
+        var cache = new ListingCache();
+        var before = cache.Changes;
+
+        cache.Fetched(ListingSource.Partake, Now);
+
+        Assert.Equal(before, cache.Changes);
+    }
+
     [Fact]
     public void SeeingAListingAgainUpdatesItInsteadOfAddingOne()
     {
