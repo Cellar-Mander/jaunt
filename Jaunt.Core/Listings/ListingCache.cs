@@ -199,7 +199,7 @@ public sealed partial class ListingCache
         if (ad.LastSeen > since)
             return false;
         // Read as no longer listed; the grace covers any zone the browser might read its times in
-        var schedule = Schedules.ForAd(Schedules.ParseAd(ad.Description, ad.LastSeen), ad.LastSeen, PartyFinderRegion.Europe,
+        var schedule = Schedules.ForAd(Schedules.ParseAd(ad.Normalised, ad.LastSeen), ad.LastSeen, PartyFinderRegion.Europe,
             listed: false, since, firstSeen: ad.FirstSeen);
         return !schedule.Occurrences.Any(o => (o.End ?? o.Start) > since);
     }

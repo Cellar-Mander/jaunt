@@ -26,7 +26,11 @@ public sealed record ListingSchedule(bool AlwaysOpen, bool OneOff, IReadOnlyList
         OneOff: false,
         Occurrences: []);
 
-    public static readonly ListingSchedule Always = new(true, false, []);
+    public static readonly ListingSchedule Always = new(
+        AlwaysOpen: true,
+        // Stryker disable once Boolean : every reader checks AlwaysOpen before OneOff (Listed, and the merge in Duplicates), so Always's OneOff is never read
+        OneOff: false,
+        Occurrences: []);
 }
 
 /// <summary>
@@ -132,6 +136,7 @@ public static class Schedules
         {
             if (joined.Count > 0 && joined[^1] is var last && occurrence.Start <= last.End)
             {
+                // Stryker disable once Equality : on equal ends the joined occurrence keeps the same end either way
                 if (occurrence.End > last.End)
                     joined[^1] = last with { End = occurrence.End };
             }
@@ -159,8 +164,11 @@ public static class Schedules
 
     /// <summary>The opening times an ad's text states, for <see cref="ForAd(IReadOnlyList{OpeningTime}, DateTimeOffset, PartyFinderRegion, bool, DateTimeOffset)"/>.</summary>
     /// <param name="seen">When the ad was last seen; its UTC date picks the year and reading of a date like 7/11.</param>
-    public static IReadOnlyList<OpeningTime> ParseAd(string adText, DateTimeOffset seen) =>
-        OpeningTimes.Parse(PartyFinderText.Normalise(adText).Text, DateOnly.FromDateTime(seen.UtcDateTime));
+    public static IReadOnlyList<OpeningTime> ParseAd(string adText, DateTimeOffset seen) => ParseAd(PartyFinderText.Normalise(adText), seen);
+
+    /// <summary>As <see cref="ParseAd(string, DateTimeOffset)"/>, from the ad's text already normalised (<see cref="PartyFinderText.Normalise(string)"/>).</summary>
+    public static IReadOnlyList<OpeningTime> ParseAd(NormalisedText normalised, DateTimeOffset seen) =>
+        OpeningTimes.Parse(normalised.Text, DateOnly.FromDateTime(seen.UtcDateTime));
 
     /// <summary>As <see cref="ForAd(string, DateTimeOffset, PartyFinderRegion, bool, DateTimeOffset)"/>, from times already parsed with <see cref="ParseAd"/>.</summary>
     /// <param name="unstatedZone">

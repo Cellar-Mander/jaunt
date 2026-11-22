@@ -39,9 +39,14 @@ public sealed class AddressParser(Gazetteer gazetteer)
     /// <summary>Reads every address in one ad.</summary>
     /// <param name="adText">The ad's text as the game sends it, glyphs included.</param>
     /// <param name="listedOn">The world the ad is listed on: the fallback when the text names none.</param>
-    public IReadOnlyList<HousingAddress> Parse(string adText, string? listedOn)
+    public IReadOnlyList<HousingAddress> Parse(string adText, string? listedOn) => Parse(PartyFinderText.Normalise(adText), listedOn);
+
+    /// <summary>Reads every address in one ad, from its text already normalised.</summary>
+    /// <param name="normalised">The ad's text after <see cref="PartyFinderText.Normalise(string)"/>.</param>
+    /// <param name="listedOn">The world the ad is listed on: the fallback when the text names none.</param>
+    public IReadOnlyList<HousingAddress> Parse(NormalisedText normalised, string? listedOn)
     {
-        var text = PartyFinderText.Normalise(adText).Text;
+        var text = normalised.Text;
         var tokens = AddressTokenizer.Tokenize(text, gazetteer.CjkWords, gazetteer.MaxCjkWordLength);
         return new Run(gazetteer, tokens, listedOn).Parse();
     }
@@ -71,7 +76,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         public List<HousingAddress> Parse()
         {
             var lower = 0;
-            for (var i = 0; i < t.Count;)
+            for (var i = 0; Within(i);)
             {
                 if (TryCore(i) is { } core)
                 {
@@ -94,8 +99,9 @@ public sealed class AddressParser(Gazetteer gazetteer)
             var m = MatchAt(i);
             if (m.District is { } d && DistrictLed(i, m.Length, d) is { } byDistrict)
                 return byDistrict;
-            if (m.World is { } w && m.Length > 0 && WorldLed(i, m.Length, w) is { } byWorld)
+            if (m.World is { } w && WorldLed(i, m.Length, w) is { } byWorld)
                 return byWorld;
+            // Stryker disable once NullCoalescing : a ward needs w, ward or a number at i and a plot needs p or plot there, so at most one is found
             return WardFirst(i) ?? PlotFirst(i);
         }
 
@@ -156,7 +162,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         {
             if (WardSpec(i) is not ({ } ward, var k))
                 return null;
-            var core = new Core { Start = i, Ward = ward, WardExplicit = true };
+            var core = new Core { Start = i, Ward = ward };
             if (PlotMarker(k) is { } plot)
             {
                 core.Plot = plot;
@@ -182,7 +188,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         {
             if (PlotMarker(i) is not { } plot || WardSpec(i + 2) is not ({ } ward, var k))
                 return null;
-            var core = new Core { Start = i, Ward = ward, Plot = plot, WardExplicit = true };
+            var core = new Core { Start = i, Ward = ward, Plot = plot };
             core.End = Tail(k, core);
             return core;
         }
@@ -209,11 +215,12 @@ public sealed class AddressParser(Gazetteer gazetteer)
         private int Tail(int k, Core core)
         {
             var apartmentBuilding = false;
-            for (var steps = 0; k < t.Count && steps < TailReach; steps++)
+            for (var steps = 0; Within(k) && steps < TailReach; steps++)
             {
                 if (OpensBracket(t[k].Gap))
                 {
                     var close = ClosingBracket(k);
+                    // Stryker disable once Equality : close is -1 or a token after k, never 0
                     if (close < 0)
                         break;
                     Bracketed(k, close, core);
@@ -252,6 +259,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
                     continue;
                 }
 
+                // Stryker disable once Statement : nothing at k matched, so going round again repeats the same checks until the step limit
                 break;
             }
 
@@ -317,7 +325,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         private static bool OpensBracket(string gap)
         {
             var open = gap.AsSpan().LastIndexOfAny(OpeningBrackets);
-            return open >= 0 && gap.AsSpan(open).IndexOfAny(ClosingBrackets) < 0;
+            return open >= 0 && !gap.AsSpan(open).ContainsAny(ClosingBrackets);
         }
 
         // ---- Finding the district and world ----
@@ -393,7 +401,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         private void ScanForward(int k, ref District? district, ref GameWorld? world)
         {
             var skipped = 0;
-            while (k < t.Count && skipped <= ForwardReach && (district is null || world is null))
+            while (Within(k) && skipped <= ForwardReach && (district is null || world is null))
             {
                 var m = MatchAt(k);
                 if (district is null && m.District is { } d)
@@ -417,7 +425,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
 
         private GameWorld? FullNameAnywhere()
         {
-            for (var i = 0; i < t.Count; i++)
+            for (var i = 0; Within(i); i++)
             {
                 if (MatchAt(i) is { FullName: true, World: { } w })
                     return w;
@@ -431,6 +439,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         /// <summary>The longest name starting at <paramref name="s"/>.</summary>
         private Match MatchAt(int s)
         {
+            // Stryker disable once Linq,Equality : no name is longer than MaxNameTokens or empty, so longer or zero lengths find nothing
             for (var length = Math.Min(g.MaxNameTokens, t.Count - s); length > 0; length--)
             {
                 if (Lookup(s, length) is { Length: > 0 } m)
@@ -443,6 +452,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
         /// <summary>The longest name ending at <paramref name="e"/> and starting no earlier than <paramref name="lower"/>.</summary>
         private Match MatchEndingAt(int e, int lower)
         {
+            // Stryker disable once Equality : no name is empty, so length 0 finds nothing
             for (var length = Math.Min(g.MaxNameTokens, e - lower + 1); length > 0; length--)
             {
                 if (Lookup(e - length + 1, length) is { Length: > 0 } m)
@@ -454,8 +464,6 @@ public sealed class AddressParser(Gazetteer gazetteer)
 
         private Match Lookup(int s, int length)
         {
-            if (s < 0 || s + length > t.Count)
-                return default;
             for (var j = s + 1; j < s + length; j++)
             {
                 if (!IsNameGap(t[j].Gap))
@@ -471,16 +479,25 @@ public sealed class AddressParser(Gazetteer gazetteer)
             return new Match(length, entry?.District, world, entry?.DataCenter ?? false, entry?.FullName ?? false, entry?.Keyword ?? Gazetteer.Keyword.None);
         }
 
-        private bool Is(int k, Gazetteer.Keyword keyword) => k < t.Count && MatchAt(k).Keyword == keyword;
+        /// <summary>
+        /// Whether <paramref name="k"/> is a token: the loops' bound, and the guard on reading one. The last
+        /// token is End, which no step moves past, so readers only ever ask about a token or one past End.
+        /// </summary>
+        private bool Within(int k) => k < t.Count;
 
-        private int? Number(int k) => k >= 0 && k < t.Count && t[k].Kind == TokenKind.Number ? t[k].Value : null;
+        private bool Is(int k, Gazetteer.Keyword keyword) => Within(k) && MatchAt(k).Keyword == keyword;
 
-        private string? Word(int k) => k >= 0 && k < t.Count && t[k].Kind == TokenKind.Word ? t[k].Text : null;
+        // Stryker disable once Logical : callers never pass a negative k, nor one past End (see Within), so only the kind decides
+        private int? Number(int k) => k >= 0 && Within(k) && t[k].Kind == TokenKind.Number ? t[k].Value : null;
+
+        // Stryker disable once Logical,Conditional : k is always a token here (see Number), and only a word can spell what callers look for: numbers are digits, other runs are letters past U+024F, End is empty
+        private string? Word(int k) => k >= 0 && Within(k) && t[k].Kind == TokenKind.Word ? t[k].Text : null;
 
         /// <summary>Whether the token at <paramref name="k"/> makes the numbers before it a time ("8-11pm", "19-5 18時").</summary>
         private bool LooksLikeTime(int k)
         {
-            if (k >= t.Count)
+            if (!Within(k))
+                // Stryker disable once Boolean : unreachable; callers pass the token after a number, which is at most End
                 return false;
             if (t[k].Kind == TokenKind.Number)
                 return t[k].Gap.StartsWith(':');
@@ -493,6 +510,7 @@ public sealed class AddressParser(Gazetteer gazetteer)
 
         private static bool IsDash(string gap) => gap.Trim() is "-" or "‐" or "‑" or "–" or "—" or "~";
 
+        // Stryker disable once Equality : two numbers never touch, since the tokenizer joins adjacent digits, so the gap is never empty
         private static bool IsDashOrSpace(string gap) => IsDash(gap) || (gap.Length > 0 && string.IsNullOrWhiteSpace(gap));
     }
 }

@@ -76,7 +76,6 @@ internal sealed class ListingsWindow : Window
     // drawing doesn't re-parse every frame
     private readonly Dictionary<(ListingSource, string), (string Text, string? ListedOn, ListingDetails Details)> parsed = [];
     private readonly Dictionary<(ListingSource, string), (string Text, DateOnly Seen, IReadOnlyList<OpeningTime> Times)> adTimes = [];
-    private readonly Dictionary<(ListingSource, string), (string Text, string About)> abouts = [];
     private readonly Dictionary<string, (string Name, FfxivVenues.Fields? Fields, FfxivVenues.Shown Shown)> shownVenues = [];
     private readonly Dictionary<string, (CalendarFields Fields, RpEventCalendar.Shown Shown)> shownEvents = [];
     private readonly Dictionary<(ListingSource, string), (TaggedFields Fields, Tagging Tagging)> taggings = [];
@@ -1002,7 +1001,7 @@ internal sealed class ListingsWindow : Window
             else if (member.Event is { } item)
                 named = places.InLocation(item.Location, item.World);
             else if (member.Listing.Source.IsAd())
-                named = places.InAd(PartyFinderText.Normalise(member.Listing.Description).Text, member.Listing.ListedOn);
+                named = places.InAd(member.Listing.Normalised.Text, member.Listing.ListedOn);
             else
                 continue;
 
@@ -1894,7 +1893,6 @@ internal sealed class ListingsWindow : Window
     {
         ForgetMissing(parsed);
         ForgetMissing(adTimes);
-        ForgetMissing(abouts);
         ForgetMissing(taggings);
         if (shownVenues.Count > cache.Count)
         {
@@ -1926,7 +1924,7 @@ internal sealed class ListingsWindow : Window
         {
             entry = (text, listedOn, listing.Source == ListingSource.Partake
                 ? new ListingDetails(Partake.Addresses(text, listedOn ?? "", parser), [])
-                : ListingDetails.Parse(parser, text, listedOn));
+                : ListingDetails.Parse(parser, text, ReferenceEquals(text, listing.Description) ? listing.Normalised : PartyFinderText.Normalise(text), listedOn));
             parsed[key] = entry;
         }
 
@@ -1940,25 +1938,15 @@ internal sealed class ListingsWindow : Window
         var seen = DateOnly.FromDateTime(listing.LastSeen.UtcDateTime);
         if (!adTimes.TryGetValue(key, out var entry) || entry.Seen != seen || !string.Equals(entry.Text, listing.Description, StringComparison.Ordinal))
         {
-            entry = (listing.Description, seen, Schedules.ParseAd(listing.Description, listing.LastSeen));
+            entry = (listing.Description, seen, Schedules.ParseAd(listing.Normalised, listing.LastSeen));
             adTimes[key] = entry;
         }
 
         return entry.Times;
     }
 
-    /// <summary>An ad's text for About, with the game's glyphs decoded, worked out once per text.</summary>
-    private string About(CachedListing listing)
-    {
-        var key = (listing.Source, listing.Id);
-        if (!abouts.TryGetValue(key, out var entry) || !string.Equals(entry.Text, listing.Description, StringComparison.Ordinal))
-        {
-            entry = (listing.Description, PartyFinderText.Normalise(listing.Description).Text);
-            abouts[key] = entry;
-        }
-
-        return ShownText.Fold(entry.About);
-    }
+    /// <summary>An ad's text for About, with the game's glyphs decoded.</summary>
+    private static string About(CachedListing listing) => ShownText.Fold(listing.Normalised.Text);
 
     /// <summary>A venue's or event's description for About, as the font can draw it; null when it has none.</summary>
     private static string? Described(CachedListing listing) => listing.About is { } about ? ShownText.Fold(about.Text) : null;

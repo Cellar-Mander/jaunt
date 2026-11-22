@@ -32,9 +32,13 @@ public static class WebLinks
 
     /// <summary>Finds every link in one ad, in the order written.</summary>
     /// <param name="adText">The ad's text as the game sends it, glyphs included.</param>
-    public static IReadOnlyList<WebLink> Find(string adText)
+    public static IReadOnlyList<WebLink> Find(string adText) => Find(PartyFinderText.Normalise(adText));
+
+    /// <summary>Finds every link in one ad, from its text already normalised, in the order written.</summary>
+    /// <param name="normalised">The ad's text after <see cref="PartyFinderText.Normalise(string)"/>.</param>
+    public static IReadOnlyList<WebLink> Find(NormalisedText normalised)
     {
-        var text = PartyFinderText.Normalise(adText).Text;
+        var text = normalised.Text;
         var links = new List<WebLink>();
         var start = 0;
         for (var i = 0; i <= text.Length; i++)

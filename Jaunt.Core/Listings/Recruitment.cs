@@ -30,12 +30,12 @@ public static class Recruitment
         details.Recruits && times.Count == 0;
 
     /// <summary>Whether an ad's text, as the game sends it, recruits.</summary>
-    public static bool Recruits(string adText)
-    {
-        if (adText.Length == 0)
-            return false;
+    public static bool Recruits(string adText) => Recruits(PartyFinderText.Normalise(adText));
 
-        var text = PartyFinderText.Normalise(adText).Text.ToLowerInvariant();
+    /// <summary>Whether an ad recruits, from its text already normalised (<see cref="PartyFinderText.Normalise(string)"/>).</summary>
+    public static bool Recruits(NormalisedText normalised)
+    {
+        var text = normalised.Text.ToLowerInvariant();
         foreach (var keyword in Japanese)
         {
             if (text.Contains(keyword, StringComparison.Ordinal))
