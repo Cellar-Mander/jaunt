@@ -143,7 +143,8 @@ public sealed class Plugin : IDalamudPlugin
     private void CheckVisits()
     {
         var now = DateTimeOffset.UtcNow;
-        if (now < nextAddressCheck)
+        // Warms the browser's first list a little each frame from login, and holds visits back till then
+        if (!ListingsWindow.Warm(now) || now < nextAddressCheck)
             return;
         nextAddressCheck = now + AddressCheckInterval;
         if (Configuration.AutoMarkVisited && autoVisits.Due(playerAddress.Get(), now))
