@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Jaunt.Core.Browser;
 using Jaunt.Core.Text;
 
 namespace Jaunt.Core.Tests;
@@ -45,6 +46,22 @@ public class PartyFinderTextTests
     [InlineData("", "LT ST ET")] // German
     [InlineData("", "LT ST ET")] // Japanese
     public void TimeGlyphsReadAsWords(string raw, string expected) => Assert.Equal(expected, N(raw));
+
+    [Theory]
+    [InlineData("", "10PM-3AM ET")] // Glacial Embrace, bug 8df8aa49
+    [InlineData("9pm2am", "9pm-2am")]
+    [InlineData("", "10-12")]
+    [InlineData("07.00pm ST  Lich", "07.00pm ST Lich")] // a pointer, not a range (pf-0045)
+    [InlineData("10PM EST  10m gil", "10PM EST 10m gil")] // pf-0296
+    [InlineData("10PM  2AM", "10PM 2AM")] // spaced, it may point at anything
+    [InlineData("stuff! Raiden", "stuff! Raiden")] // pf-0026
+    [InlineData("W12Raiden", "W12 Raiden")] // a number but no time after it
+    [InlineData("Nam2am", "Nam 2am")] // a time but no time before it
+    public void ArrowRightBetweenTimesIsARange(string raw, string expected) => Assert.Equal(expected, N(raw));
+
+    [Fact]
+    public void ArrowRightRangeParsesAsOneOpening() =>
+        Assert.Equal("22:00-03:00 ET", OpeningTimesFormat.Describe(Schedules.ParseAd("", new DateTimeOffset(2026, 11, 23, 3, 32, 0, TimeSpan.Zero))));
 
     [Theory]
     [InlineData("", "MON")] // Circle between boxed letters (pf-0236)
