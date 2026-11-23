@@ -64,6 +64,7 @@ public class PartyFinderTextTests
     public void ArrowRightRangeIsNotBoxed()
     {
         // Boxed 10, the arrow, boxed 1 and 2: the dash comes from no boxed glyph, so it splits the run
+        // revert-check: not revert-sensitive (kills a surviving mutant: pins existing behaviour)
         var result = PartyFinderText.Normalise("");
         Assert.Equal(["10", "12"], result.Boxed.Select(r => result.Text[r]));
     }
