@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
+using System.Threading.Tasks;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
@@ -77,6 +79,20 @@ internal sealed class ListingsWindow : Window
     private readonly Dictionary<string, (string Name, FfxivVenues.Fields? Fields, FfxivVenues.Shown Shown)> shownVenues = [];
     private readonly Dictionary<string, (CalendarFields Fields, RpEventCalendar.Shown Shown)> shownEvents = [];
     private readonly Dictionary<(ListingSource, string), (TaggedFields Fields, Tagging Tagging)> taggings = [];
+    // The ads parsed off the game's thread for the first list, as parsing a full cache in one frame
+    // stalls the game (AdParses); started on the first draw with a character logged in
+    private Task? firstParse;
+    private volatile IReadOnlyList<AdParses.Parse>? firstParses;
+    // Then each listing's row, worked out a few milliseconds a frame to warm the memos, and how many have been
+    private List<CachedListing>? warming;
+    private int warmed;
+    private bool firstBuilt;
+    private int warmFrame = -1;
+    private const int WarmMillisecondsPerFrame = 4;
+    // Ads that list nothing, until when they go on doing so, by the fields that would change were they
+    // seen again; for the region and cooldown in quietFor. Most cached ads are such, so a rebuild passes them by
+    private readonly Dictionary<(ListingSource, string), (string Text, DateTimeOffset LastSeen, DateTimeOffset? FirstSeen, DateTimeOffset Until)> quietAds = [];
+    private (PartyFinderRegion, int)? quietFor;
 
     // Every entry listed before the filters, hidden ones too, and the keys of their listings
     private readonly List<Row> unfiltered = [];
@@ -327,6 +343,12 @@ internal sealed class ListingsWindow : Window
         titleFont.BeginFrame();
         iconFont.BeginFrame();
         var now = DateTimeOffset.UtcNow;
+        if (!Warm(now))
+        {
+            ImGui.TextUnformatted("Loading listings...");
+            return;
+        }
+
         if (Stale(now))
             Rebuild(now);
 
@@ -1060,6 +1082,8 @@ internal sealed class ListingsWindow : Window
     /// </summary>
     internal void CheckVisits(AutoVisits visits, DateTimeOffset now)
     {
+        if (!Warm(now))
+            return;
         if (Stale(now))
             Rebuild(now);
 
@@ -1597,7 +1621,8 @@ internal sealed class ListingsWindow : Window
 
         nextChange = ListChanges.NextDay(now, TimeZoneInfo.Local);
 
-        var adRegion = travel.DataCentres.Select(Schedules.RegionOf).FirstOrDefault(r => r is not null) ?? PartyFinderRegion.Europe;
+        var adRegion = AdRegion(travel);
+        QuietFor(adRegion, configuration.RefreshCooldownMinutes);
         var rows = new List<(Row Row, AddressKey? Address)>();
         foreach (var listing in cache.Listings)
         {
@@ -1652,6 +1677,117 @@ internal sealed class ListingsWindow : Window
         // Counted last, so marks matched above don't make the list out of date
         builtChanges = cache.Changes;
     }
+
+    /// <summary>The region whose default zone reads the times of ads seen from <paramref name="travel"/>.</summary>
+    private static PartyFinderRegion AdRegion(TravelRegion travel) =>
+        travel.DataCentres.Select(Schedules.RegionOf).FirstOrDefault(r => r is not null) ?? PartyFinderRegion.Europe;
+
+    /// <summary>
+    /// Whether the first list can be worked out without a frame long enough to stall the game: true once
+    /// the ads <see cref="Rebuild"/> would read are parsed off the game's thread (<see cref="AdParses"/>)
+    /// and every listing's row has been worked out once, a few milliseconds a frame, so the memos it fills
+    /// are warm; or while no character is logged in, as the list is then empty. The parse reads copies of
+    /// the ads' fields; an ad whose text, world or times seen have changed since misses the memos and is
+    /// parsed again as usual.
+    /// </summary>
+    /// <remarks>
+    /// Call every frame until true, inside an ImGui frame: from the window, and from the visit check even
+    /// while the window is closed, so the list is warm by the time it opens.
+    /// </remarks>
+    internal bool Warm(DateTimeOffset now) => firstBuilt || FirstBuildReady(now);
+
+    private bool FirstBuildReady(DateTimeOffset now)
+    {
+        // Called from the window and the visit check, but warming only once a frame
+        var frame = ImGui.GetFrameCount();
+        if (frame == warmFrame)
+            return false;
+        warmFrame = frame;
+
+        // With no character logged in the list is empty; warming picks up where it was once one is
+        if (region() is not { } travel)
+            return true;
+
+        var adRegion = AdRegion(travel);
+        var cooldown = configuration.RefreshCooldownMinutes;
+        QuietFor(adRegion, cooldown);
+        if (warming is null)
+        {
+            if (firstParse is null)
+            {
+                var ads = new List<AdParses.Ad>();
+                foreach (var listing in cache.Listings)
+                {
+                    if (listing.Source.IsAd() && travel.Includes(listing)
+                        && !Xivpf.ShownInGame(cache, listing) && !Xivpf.ShownFromXivpf(cache, listing))
+                        ads.Add(AdParses.Ad.Of(listing));
+                }
+
+                firstParse = Task.Run(() => firstParses = AdParses.Run(ads, parser, adRegion, cooldown, now));
+                return false;
+            }
+
+            if (!firstParse.IsCompleted)
+                return false;
+
+            if (firstParses is { } parses)
+                Remember(parses);
+            else
+                Plugin.Log.Warning(firstParse.Exception?.GetBaseException(), "Parsing the cached ads for the first list failed; parsing them as it is worked out");
+            firstParses = null;
+            warming = [.. cache.Listings];
+            return false;
+        }
+
+        // Rows only fill the memos here; the list is worked out once all are warm
+        var stop = Stopwatch.GetTimestamp() + (Stopwatch.Frequency * WarmMillisecondsPerFrame / 1000);
+        while (warmed < warming.Count && Stopwatch.GetTimestamp() < stop)
+        {
+            var listing = warming[warmed++];
+            if ((listing.Source == ListingSource.FfxivVenues || travel.Includes(listing)) && RowFor(listing, travel, adRegion, now) is not null)
+                TaggingOf(listing);
+        }
+
+        if (warmed < warming.Count)
+            return false;
+        warming = null;
+        firstParse = null;
+        return firstBuilt = true;
+    }
+
+    /// <summary>Puts what <see cref="AdParses.Run"/> parsed in the memos <see cref="RowFor"/> reads.</summary>
+    private void Remember(IReadOnlyList<AdParses.Parse> parses)
+    {
+        foreach (var (ad, times, details, quietUntil) in parses)
+        {
+            var key = (ad.Source, ad.Id);
+            adTimes[key] = (ad.Description, DateOnly.FromDateTime(ad.LastSeen.UtcDateTime), times);
+            if (details is not null)
+                parsed[key] = (ad.Description, ad.ListedOn, details);
+            if (quietUntil is { } until)
+                quietAds[key] = (ad.Description, ad.LastSeen, ad.FirstSeen, until);
+        }
+    }
+
+    /// <summary>Forgets the quiet ads when the region or cooldown they were worked out for changes.</summary>
+    private void QuietFor(PartyFinderRegion adRegion, int cooldown)
+    {
+        if (quietFor == (adRegion, cooldown))
+            return;
+        quietAds.Clear();
+        quietFor = (adRegion, cooldown);
+    }
+
+    /// <summary>
+    /// Until when the ad goes on listing nothing, as last worked out (<see cref="AdParses.QuietUntil"/>),
+    /// or null when that has passed, was never worked out, or the ad has been seen again since.
+    /// </summary>
+    private DateTimeOffset? QuietUntil(CachedListing listing, DateTimeOffset now) =>
+        quietAds.TryGetValue((listing.Source, listing.Id), out var quiet) && now < quiet.Until
+        && quiet.LastSeen == listing.LastSeen && quiet.FirstSeen == listing.FirstSeen
+        && string.Equals(quiet.Text, listing.Description, StringComparison.Ordinal)
+            ? quiet.Until
+            : null;
 
     /// <summary>Brings <see cref="nextChange"/> forward to <paramref name="at"/> if that is sooner and after <paramref name="now"/>.</summary>
     private void ChangesAt(DateTimeOffset? at, DateTimeOffset now) => nextChange = ListChanges.Earliest(nextChange, at, now) ?? nextChange;
@@ -1889,6 +2025,12 @@ internal sealed class ListingsWindow : Window
                 {
                     if (Xivpf.ShownInGame(cache, listing) || Xivpf.ShownFromXivpf(cache, listing))
                         return null;
+                    if (QuietUntil(listing, now) is { } quiet)
+                    {
+                        ChangesAt(quiet, now);
+                        return null;
+                    }
+
                     var times = AdTimes(listing);
                     var stillListed = Schedules.StillListed(listing.Source, listing.LastSeen, now, configuration.RefreshCooldownMinutes);
                     var schedule = Schedules.ForAd(times, listing.LastSeen, adRegion, stillListed, now, firstSeen: listing.FirstSeen);
@@ -1897,7 +2039,12 @@ internal sealed class ListingsWindow : Window
                     ChangesAt(ListChanges.Next(schedule, now), now);
                     // Most cached ads are no longer listed, so this spares parsing their addresses
                     if (Duplicates.ListsNothingAnywhere(times, schedule, now))
+                    {
+                        quietAds[(listing.Source, listing.Id)] = (listing.Description, listing.LastSeen, listing.FirstSeen,
+                            AdParses.QuietUntil(listing.Source, listing.LastSeen, configuration.RefreshCooldownMinutes, schedule, now));
                         return null;
+                    }
+
                     var adDetails = Parsed(listing, listing.Description, listing.ListedOn);
                     if (adDetails.Addresses.Count == 0)
                         return null;
@@ -1916,6 +2063,7 @@ internal sealed class ListingsWindow : Window
     {
         ForgetMissing(parsed);
         ForgetMissing(adTimes);
+        ForgetMissing(quietAds);
         ForgetMissing(taggings);
         if (shownVenues.Count > cache.Count)
         {
