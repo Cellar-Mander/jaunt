@@ -27,6 +27,7 @@ public static class PartyFinderText
     private const int PrivateUseLast = 0xF8FF;
     private const int BoxedNumber10 = 0xE099;
     private const int BoxedNumber31 = 0xE0AE;
+    private const int ArrowRight = 0xE06F;
 
     /// <summary>Normalises one ad's text.</summary>
     public static NormalisedText Normalise(string raw) => Normalise(raw, false);
@@ -109,6 +110,11 @@ public static class PartyFinderText
                 if (Rune.IsLetterOrDigit(next) || Boxed(next.Value) is not null)
                     output.Space(' ');
             }
+            else if (o == ArrowRight && EndsInTime(output) && StartsNumber(next))
+            {
+                // "10PM→3AM" is a range; spaced or elsewhere the arrow points at what follows
+                output.Append('-', false);
+            }
             else if (o == '\r' || o == 0xE035) // ArrowDown is used as a line break
             {
                 output.Space('\n');
@@ -184,6 +190,21 @@ public static class PartyFinderText
         },
         _ => null,
     };
+
+    /// <summary>Whether the output so far ends in a time: a digit, or a digit then AM or PM.</summary>
+    private static bool EndsInTime(Marked output)
+    {
+        var text = output.Text;
+        var n = text.Length;
+        if (n > 0 && char.IsAsciiDigit(text[n - 1]))
+            return true;
+        return n >= 3 && char.IsAsciiDigit(text[n - 3]) && char.ToUpperInvariant(text[n - 1]) == 'M'
+            && char.ToUpperInvariant(text[n - 2]) is 'A' or 'P';
+    }
+
+    /// <summary>Whether a rune is a digit, plain or as a glyph.</summary>
+    private static bool StartsNumber(Rune r) =>
+        Rune.IsDigit(r) || (Boxed(r.Value) is { } b && char.IsAsciiDigit(b[0])) || (Plain(r.Value) is { } p && char.IsAsciiDigit(p));
 
     private static bool IsLetterOrLetterGlyph(Rune r) =>
         Rune.IsLetter(r) || (Boxed(r.Value) is { } b && char.IsLetter(b[0])) || LetterLike(r.Value) is not null;
