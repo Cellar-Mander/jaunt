@@ -57,7 +57,16 @@ public class PartyFinderTextTests
     [InlineData("stuff! Raiden", "stuff! Raiden")] // pf-0026
     [InlineData("W12Raiden", "W12 Raiden")] // a number but no time after it
     [InlineData("Nam2am", "Nam 2am")] // a time but no time before it
+    [InlineData("2am", "2am")] // nothing before it at all
     public void ArrowRightBetweenTimesIsARange(string raw, string expected) => Assert.Equal(expected, N(raw));
+
+    [Fact]
+    public void ArrowRightRangeIsNotBoxed()
+    {
+        // Boxed 10, the arrow, boxed 1 and 2: the dash comes from no boxed glyph, so it splits the run
+        var result = PartyFinderText.Normalise("");
+        Assert.Equal(["10", "12"], result.Boxed.Select(r => result.Text[r]));
+    }
 
     [Fact]
     public void ArrowRightRangeParsesAsOneOpening() =>
