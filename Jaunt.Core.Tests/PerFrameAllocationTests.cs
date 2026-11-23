@@ -13,6 +13,7 @@ public class PerFrameAllocationTests
 {
     // The first runs allocate while the JIT compiles the code, so they don't count
     private const int WarmUpRuns = 3;
+    private const int MeasuredRuns = 3;
     private const int Frames = 100_000;
 
     private static readonly DateTimeOffset Now = new(2026, 11, 14, 20, 0, 0, TimeSpan.Zero);
@@ -144,11 +145,21 @@ public class PerFrameAllocationTests
             runFrames();
         }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        var result = runFrames();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        // Code that allocates per frame allocates in every run of Frames frames. A one-off allocation
+        // by the runtime on this thread can land in any single run (ebd 71fbbb1f: 2632 bytes once in a
+        // full run, never reproduced), so only a run that allocated nothing passes
+        var allocated = new long[MeasuredRuns];
+        for (var i = 0; i < MeasuredRuns; i++)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var result = runFrames();
+            allocated[i] = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.True(result > 0, "the measured frames should reach the code under test");
-        Assert.Equal(0, allocated);
+            Assert.True(result > 0, "the measured frames should reach the code under test");
+            if (allocated[i] == 0)
+                return;
+        }
+
+        Assert.Fail($"every measured run allocated: {string.Join(", ", allocated)} bytes");
     }
 }
