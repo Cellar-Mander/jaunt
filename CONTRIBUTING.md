@@ -178,6 +178,8 @@ dotnet buildingway release publish 0.1.2.0 --testing
 
 The workflow (channel `testing`) tags `main` `v0.1.2.0-rc1`, creates a prerelease and opens the `repo.json` PR. That PR sets only the testing fields (`TestingAssemblyVersion`, `TestingDalamudApiLevel`, `DownloadLinkTesting`, `TestingChangelog`); check that the stable fields are unchanged, then merge it and check it with `dotnet buildingway release verify 0.1.2.0-rc1`. Its notes are the version's CHANGELOG section with any Unreleased entries above it.
 
+The first build can go out for testing before any stable release. With no `repo.json` on `main` yet, the PR creates it with one entry marked `IsTestingExclusive`, which only installs with "Get plugin testing builds" ticked see. It has the testing fields and no stable download links. Installing it from the Available Plugins tab opts that install in to testing versions, so it gets later testing builds without the right-click step. The first stable release replaces the entry, as it does any testing build.
+
 Dalamud updates an install only to a higher version than it has, so each testing build needs its own `<Version>`: one already out for testing is refused. To fix something found in testing, merge the fix to `main` as usual (its CHANGELOG entry goes under Unreleased), then bump the fourth number and publish that:
 
 ```bash
