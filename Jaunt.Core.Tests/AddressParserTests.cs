@@ -277,6 +277,17 @@ public class AddressParserTests
     public void RoomsAndApartments(string text, string expected) => Assert.Equal(expected, P(text));
 
     [Theory]
+    [InlineData("Gob S W4 A15", "Lich? Goblet 4._ sub apt15")]
+    [InlineData("Gob W4 A15", "Lich? Goblet 4._ apt15")]
+    [InlineData("Gob S W4 P5", "Lich? Goblet 4.5 sub")]
+    [InlineData("Gob S/W4 P5", "Lich? Goblet 4.5")] // only a space may come between S and the ward
+    [InlineData("Mist's W4 P5", "Lich? Mist 4.5")] // a possessive s is not the subdivision
+    [InlineData("Gob W4 P5 A15", "Lich? Goblet 4.5")] // a house has no apartment
+    [InlineData("Gob W4 A 15", "Lich? Goblet 4._")] // the A must touch its number
+    [InlineData("Gob W4 A15-3", "Lich? Goblet 4._ apt3")] // building then room, as after Apt
+    public void SingleLetterSubdivisionAndApartment(string text, string expected) => Assert.Equal(expected, P(text));
+
+    [Theory]
     [InlineData("Ward 2", "-")] // a ward alone needs a district
     [InlineData("Lavender Beds - x10 y15 - Ward 2 - Omega", "Omega LavenderBeds 2._")]
     [InlineData("W5 P3", "Lich? null 5.3")]
