@@ -48,6 +48,7 @@ public class ListingTagsTests
     [InlineData("☆The Nightmare Before Starlight☆ theater♢music", Interests.LiveShows)]
     [InlineData("Community theatre tonight", Interests.LiveShows)]
     [InlineData("Gamba, DRT and a raffle", Interests.Gambling)]
+    [InlineData("Spicy Black Jack | Fun times", Interests.Gambling)]
     [InlineData("Bingo and trivia, prizes to win", Interests.Games)]
     [InlineData("50/50 at midnight", Interests.Gambling)]
     [InlineData("Heavy RP, walk-ins welcome", Interests.Roleplay)]
