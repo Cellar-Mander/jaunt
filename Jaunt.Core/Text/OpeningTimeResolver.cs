@@ -134,7 +134,7 @@ public static class OpeningTimeResolver
     /// <param name="zone">The zone its times are in, from <see cref="Zone"/>.</param>
     /// <remarks>
     /// An undated start is today's in <paramref name="zone"/>, unless yesterday's opening is still
-    /// running (9PM-2AM seen at 1AM). A weekday is the next one, counting today. A closing time on
+    /// running (9PM-2AM seen at 1AM); the same goes for "tonight" with an overnight end. A weekday is the next one, counting today. A closing time on
     /// its own is the next one after <paramref name="seen"/>, unless one passed at most
     /// <see cref="JustClosed"/> before it, which it then is; with a day, one before 06:00 falls after
     /// that day's midnight ("tonight until 2am"). An end at or before the start is the next day.
@@ -151,6 +151,14 @@ public static class OpeningTimeResolver
             OpeningDay.Date => time.Date,
             _ => null,
         };
+
+        // "Tonight 9pm to 2am" or "tonight until 2am" seen before 2am means last night's, still running
+        if (time.Day == OpeningDay.Today && time.End is { } overnightEnd
+            && (time.Start is { } overnightStart ? overnightEnd < overnightStart : overnightEnd < new TimeOnly(6, 0))
+            && seen < Instant(today, overnightEnd, zone))
+        {
+            day = today.AddDays(-1);
+        }
 
         if (time.Start is not null)
         {
