@@ -157,12 +157,19 @@ public sealed class AddressParser(Gazetteer gazetteer)
             return core;
         }
 
-        /// <summary>"W20 P28", "Ward 27 Plot 44", "W2/30", "P29/30", "W 22 Apt 28", "Ward 2".</summary>
+        /// <summary>"W20 P28", "Ward 27 Plot 44", "W2/30", "P29/30", "W 22 Apt 28", "Ward 2", "S W4 A15".</summary>
         private Core? WardFirst(int i)
         {
             if (WardSpec(i) is not ({ } ward, var k))
                 return null;
             var core = new Core { Start = i, Ward = ward };
+            // "S W4": a lone S just before the ward is the subdivision
+            if (Word(i - 1) == "s" && string.IsNullOrWhiteSpace(t[i - 1].Gap) && string.IsNullOrWhiteSpace(t[i].Gap))
+            {
+                core.Subdivision = true;
+                core.Start = i - 1;
+            }
+
             if (PlotMarker(k) is { } plot)
             {
                 core.Plot = plot;
@@ -256,6 +263,13 @@ public sealed class AddressParser(Gazetteer gazetteer)
                 {
                     RoomNumber(k, core, apartmentBuilding);
                     k += 2;
+                    continue;
+                }
+
+                // "W4 A15": an A touching a number, after a ward with no plot, is an apartment
+                if (core.Plot is null && Word(k) == "a" && Number(k + 1) is >= 0 && t[k + 1].Gap.Length == 0)
+                {
+                    k = ApartmentNumber(k + 1, core);
                     continue;
                 }
 
