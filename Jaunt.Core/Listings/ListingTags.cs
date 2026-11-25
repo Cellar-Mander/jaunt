@@ -81,7 +81,7 @@ public static class ListingTags
             "fighting ring", "fighting arena", "fighting venue", "sparring ring", "brawl", "brawling", "wrestling",
             "duel", "bloodsport", "deathmatch", "giveaway", "prize", "ビンゴ"),
         .. Each(Interests.Gambling,
-            "gamba", "gambling", "gamble", "casino", "blackjack", "bj", "deathroll", "drt", "roulette", "poker",
+            "gamba", "gambling", "gamble", "casino", "blackjack", "black jack", "bj", "deathroll", "drt", "roulette", "poker",
             "holdem", "raffle", "50/50", "カジノ", "ギャンブル"),
         .. Each(Interests.Roleplay,
             "rp", "roleplay", "role play", "rper", "ic", "in character", "ロールプレイ"),
