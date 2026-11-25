@@ -32,7 +32,8 @@ instants. `OpeningTimesCorpusTests` checks every labelled corpus ad (`Corpus/REA
   year is never written, so the nearest year is used.
 - **Resolving**: an undated start is today's in the ad's zone on the day the ad was first seen with
   its text, so "from 9pm" still listed after midnight is the opening under way, unless yesterday's
-  overnight opening is still running. The first sighting starts again when the ad is seen after it
+  overnight opening is still running. Likewise "tonight" with an end after midnight (before its
+  start, or alone before 06:00) seen before that end is last night's, still running. The first sighting starts again when the ad is seen after it
   stopped counting as listed. A weekday is the next one, counting today. A closing time alone is the next one
   after the ad was first seen with its text, so it stays put while the ad stays listed, unless one
   passed at most 6 hours before that sighting: the ad went up before it closed, so it is over; with a day,
