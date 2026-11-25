@@ -142,6 +142,26 @@ public class OpeningTimeResolverTests
     public void AnUndatedOvernightOpeningStillRunningIsYesterdays(string seen, string start) =>
         Assert.Equal(Utc(start), Resolve(Time(start: "21:00", end: "02:00", zone: "EST"), seen).Start);
 
+    [Theory]
+    [InlineData("2026-11-24T06:35Z", "2026-11-24T02:00Z", 23)] // 01:35 in New York: last night's "tonight 9pm to 2am" is still on
+    [InlineData("2026-11-24T07:00Z", "2026-11-25T02:00Z", 24)] // 02:00: it has ended, so tonight's
+    [InlineData("2026-11-24T15:00Z", "2026-11-25T02:00Z", 24)] // 10:00: tonight's
+    public void TonightsOvernightOpeningStillRunningIsLastNights(string seen, string start, int day)
+    {
+        var w = Resolve(Time(OpeningDay.Today, "21:00", "02:00", zone: "EST"), seen);
+
+        Assert.Equal(Utc(start), w.Start);
+        Assert.Equal(Utc(start).AddHours(5), w.End);
+        Assert.Equal(new DateOnly(2026, 11, day), w.Day);
+    }
+
+    [Theory]
+    [InlineData("02:00", "2026-11-24T06:35Z", "2026-11-24T07:00Z")] // 01:35 in New York: last night's "tonight until 2am" is still on
+    [InlineData("02:00", "2026-11-24T07:00Z", "2026-11-25T07:00Z")] // 02:00: it has ended, so tonight's
+    [InlineData("06:00", "2026-11-24T10:00Z", "2026-11-24T11:00Z")] // 05:00: "until 6am" is the same day, so today's, not last night's
+    public void TonightUntilAfterMidnightStillRunningIsLastNights(string closing, string seen, string end) =>
+        Assert.Equal(Utc(end), Resolve(Time(OpeningDay.Today, end: closing, zone: "EST"), seen).End);
+
     [Fact]
     public void AnUndatedDaytimeOpeningIsToday()
     {
