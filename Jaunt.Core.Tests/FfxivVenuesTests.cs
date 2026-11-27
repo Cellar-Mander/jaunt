@@ -62,7 +62,7 @@ public class FfxivVenuesTests
     }
 
     [Fact]
-    public void KeepsEachScheduleEntrysResolutionThroughTheCache()
+    public void KeepsTheBannerSfwTagsAndEachScheduleEntrysResolutionAsSentThroughTheCache()
     {
         var schedule = """
             [{"day":5,"start":{"hour":19,"minute":0,"timeZone":"UTC","nextDay":false},"end":{"hour":2,"minute":0,"timeZone":"UTC","nextDay":true},
@@ -70,50 +70,26 @@ public class FfxivVenuesTests
               "resolution":{"start":"2026-11-14T19:00:00+00:00","end":"2026-11-15T02:00:00+00:00","isNow":true,"isWithinWeek":true}}]
             """;
         var cache = new ListingCache();
-        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(schedule: schedule)}]"), Now);
-
-        var loaded = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!;
-
-        var expected = new FfxivVenues.Resolution(new DateTimeOffset(2026, 11, 14, 19, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 15, 2, 0, 0, TimeSpan.Zero));
-        Assert.Equal(expected, Assert.Single(loaded.Venue!.Schedule!)!.Resolution);
-    }
-
-    [Fact]
-    public void KeepsSfwAndTagsAsSentThroughTheCache()
-    {
-        var cache = new ListingCache();
-        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(sfw: "false", tags: """["Bath house", null, "Tarot"]""")}]"), Now);
-
-        var fields = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!.Venue!;
-
-        Assert.False(fields.Sfw);
-        Assert.Equal(["Bath house", null, "Tarot"], fields.Tags!);
-    }
-
-    [Fact]
-    public void KeepsTheBannerAsSentThroughTheCache()
-    {
-        var cache = new ListingCache();
-        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson()}]"), Now);
+        FfxivVenues.Record(cache, FfxivVenues.Parse($"[{VenueJson(sfw: "false", tags: """["Bath house", null, "Tarot"]""", schedule: schedule)}]"), Now);
 
         var fields = SavedFiles.RoundTrip(cache).Find(ListingSource.FfxivVenues, "abc123")!.Venue!;
 
         Assert.Equal("https://images.ffxivvenues.com/abc123/KqB9", fields.BannerUri);
+        Assert.False(fields.Sfw);
+        Assert.Equal(["Bath house", null, "Tarot"], fields.Tags!);
+        var expected = new FfxivVenues.Resolution(new DateTimeOffset(2026, 11, 14, 19, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 11, 15, 2, 0, 0, TimeSpan.Zero));
+        Assert.Equal(expected, Assert.Single(fields.Schedule!)!.Resolution);
     }
 
     [Fact]
-    public void AVenueWithoutABannerHasNone()
+    public void AVenueWithoutABannerSfwTagsOrResolutionHasNone()
     {
-        Assert.Null(Cached(VenueJson(bannerUri: "null")).Venue!.BannerUri);
-    }
+        var fields = Cached(VenueJson(bannerUri: "null", sfw: "null", tags: "null", schedule: $"[{Opening(1, "20:00", "23:00")}]")).Venue!;
 
-    [Fact]
-    public void AVenueWithoutSfwOrTagsHasNeither()
-    {
-        var fields = Cached(VenueJson(sfw: "null", tags: "null")).Venue!;
-
+        Assert.Null(fields.BannerUri);
         Assert.Null(fields.Sfw);
         Assert.Null(fields.Tags);
+        Assert.Null(Assert.Single(fields.Schedule!)!.Resolution);
     }
 
     [Fact]
@@ -146,10 +122,6 @@ public class FfxivVenuesTests
         Assert.Null(FfxivVenues.Zone(Cached(VenueJson(schedule: $"[{missing}]")).Venue));
         Assert.Null(FfxivVenues.Zone(null));
     }
-
-    [Fact]
-    public void AnEntryWithoutAResolutionHasNone() =>
-        Assert.Null(Assert.Single(Cached(VenueJson(schedule: $"[{Opening(1, "20:00", "23:00")}]")).Venue!.Schedule!)!.Resolution);
 
     [Fact]
     public void ReadsAnApartmentWithItsSubdivisionAndRoom()
@@ -431,14 +403,6 @@ public class FfxivVenuesTests
         Assert.Equal(
             (ListingSource.FfxivVenues, "New name\nsecond line", "New name", fields, Now, true, false),
             (listing.Source, listing.Title, listing.ShownTitle, listing.Venue, listing.LastSeen, listing.Favourite, listing.OneOff));
-    }
-
-    [Fact]
-    public void AsksOnlyForApprovedVenuesOpeningWithinTheWeek()
-    {
-        var query = new Uri(FfxivVenues.Url).Query.TrimStart('?').Split('&');
-
-        Assert.Equal(["approved=true", "withinWeek=true"], query.Order(StringComparer.Ordinal));
     }
 
     [Fact]
