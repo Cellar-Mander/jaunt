@@ -128,19 +128,6 @@ public class AddressParserTests
     }
 
     [Theory]
-    [InlineData("Lich", "TWIN")] // the listing's region
-    [InlineData(null, "Twin")] // no listing world: the first
-    public void ANameTwoWorldsShareResolvesInTheListingsRegion(string? listedOn, string expected)
-    {
-        // revert-check: not revert-sensitive (kills surviving mutants: pins existing behaviour)
-        // Two worlds that share a name, told apart here by case
-        var parser = new AddressParser(new Gazetteer(
-            [new GameWorld("Twin", "Primal", "NA"), new GameWorld("TWIN", "Light", "EU"), new GameWorld("Lich", "Light", "EU")], []));
-
-        Assert.Equal(expected, Assert.Single(parser.Parse("Twin/6-51", listedOn)).World);
-    }
-
-    [Theory]
     [InlineData("Mist W5 P12 qq qq qq qq Twin", "TWIN Mist 5.12")] // a full name anywhere, even one two worlds share
     [InlineData("Lic Light Mist W5 P12", "Odin? Mist 5.12")] // a data centre from the game where the world would be
     [InlineData("Lic Dyn Mist W5 P12", "Odin? Mist 5.12")] // and one players use

@@ -75,19 +75,12 @@ public class PartakeTests
     }
 
     [Fact]
-    public void AsksForTheAgeRatingAndTags()
-    {
-        var query = JsonDocument.Parse(Partake.RequestBody(Now, 0)).RootElement.GetProperty("query").GetString()!;
-
-        Assert.Contains(" ageRating tags", query, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AsksForTheDescription()
+    public void AsksForTheDescriptionAgeRatingAndTags()
     {
         var query = JsonDocument.Parse(Partake.RequestBody(Now, 0)).RootElement.GetProperty("query").GetString()!;
 
         Assert.Contains(" description ", query, StringComparison.Ordinal);
+        Assert.Contains(" ageRating tags", query, StringComparison.Ordinal);
     }
 
     [Fact]
