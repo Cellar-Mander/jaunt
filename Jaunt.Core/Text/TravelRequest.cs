@@ -20,14 +20,15 @@ public sealed record TravelRequest(string World, string District, string Ward, s
     /// </summary>
     public static TravelRequest? From(HousingAddress address)
     {
-        if (address.World is not { Length: > 0 } world || address.District is not { } district)
+        if (string.IsNullOrEmpty(address.World) || !address.District.HasValue)
             return null;
 
+        var district = AddressText.Name(address.District.Value);
         var ward = address.Ward.ToString(CultureInfo.InvariantCulture);
-        if (address.Plot is { } plot)
-            return new(world, AddressText.Name(district), ward, plot.ToString(CultureInfo.InvariantCulture), IsApartment: false, IsSubdivision: false);
-        if (address.Apartment is { } apartment)
-            return new(world, AddressText.Name(district), ward, apartment.ToString(CultureInfo.InvariantCulture), IsApartment: true, IsSubdivision: address.Subdivision == true);
+        if (address.Plot.HasValue)
+            return new(address.World, district, ward, address.Plot.Value.ToString(CultureInfo.InvariantCulture), IsApartment: false, IsSubdivision: false);
+        if (address.Apartment.HasValue)
+            return new(address.World, district, ward, address.Apartment.Value.ToString(CultureInfo.InvariantCulture), IsApartment: true, IsSubdivision: address.Subdivision == true);
         return null;
     }
 }

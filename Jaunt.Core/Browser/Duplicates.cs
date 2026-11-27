@@ -18,18 +18,20 @@ public readonly record struct AddressKey(string World, District District, int Wa
 
     // The generated one prints every property, and InWard has an InWard, without end
     public override string ToString() =>
-        $"{World} {District} W{Ward}" + (Plot is { } plot ? $" P{plot}" : "") + (Apartment is { } apartment ? $" A{apartment}{(Subdivision ? " sub" : "")}" : "");
+        $"{World} {District} W{Ward}" + (Plot.HasValue ? $" P{Plot.Value}" : "") + (Apartment.HasValue ? $" A{Apartment.Value}{(Subdivision ? " sub" : "")}" : "");
 
     /// <summary>The key for an address, or null when it lacks a world or a district.</summary>
     public static AddressKey? Of(HousingAddress address)
     {
-        if (address.World is not { } world || address.District is not { } district)
+        if (address.World is null || !address.District.HasValue)
             return null;
-        if (address.Plot is { } plot)
+        var world = address.World;
+        var district = address.District.Value;
+        if (address.Plot.HasValue)
             // Stryker disable once Boolean : every plot key has the same Subdivision, so its value never tells two apart
-            return new AddressKey(world.ToUpperInvariant(), district, address.Ward, plot, null, false);
-        if (address.Apartment is { } apartment)
-            return new AddressKey(world.ToUpperInvariant(), district, address.Ward, null, apartment, address.Subdivision == true);
+            return new AddressKey(world.ToUpperInvariant(), district, address.Ward, address.Plot.Value, null, false);
+        if (address.Apartment.HasValue)
+            return new AddressKey(world.ToUpperInvariant(), district, address.Ward, null, address.Apartment.Value, address.Subdivision == true);
         return new AddressKey(world.ToUpperInvariant(), district, address.Ward, null, null, false);
     }
 }
@@ -74,12 +76,16 @@ public static class Duplicates
         for (var i = 0; i < candidates.Count; i++)
         {
             parent[i] = i;
-            if (candidates[i].AdText is { } text && !string.IsNullOrWhiteSpace(text) && !byText.TryAdd(text, i))
+            var text = candidates[i].AdText;
+            if (!string.IsNullOrWhiteSpace(text) && !byText.TryAdd(text, i))
                 parent[Root(parent, i)] = Root(parent, byText[text]);
 
-            if (candidates[i].Address is not { } key)
+            var address = candidates[i].Address;
+            if (!address.HasValue)
                 continue;
-            if (!byAddress.TryGetValue(key, out var others))
+            var key = address.Value;
+            var others = byAddress.GetValueOrDefault(key);
+            if (others is null)
                 byAddress[key] = others = [];
 
             foreach (var j in others)
@@ -98,7 +104,8 @@ public static class Duplicates
         for (var i = 0; i < candidates.Count; i++)
         {
             var root = Root(parent, i);
-            if (!members.TryGetValue(root, out var group))
+            var group = members.GetValueOrDefault(root);
+            if (group is null)
             {
                 members[root] = group = [];
                 order.Add(root);
@@ -148,7 +155,8 @@ public static class Duplicates
         {
             foreach (var time in unzoned)
             {
-                if (OpeningTimeResolver.Resolve(time, seen, zone).Start is { } start && starts.Contains(start))
+                var start = OpeningTimeResolver.Resolve(time, seen, zone).Start;
+                if (start.HasValue && starts.Contains(start.Value))
                     return zone;
             }
         }
@@ -312,7 +320,7 @@ public static class Duplicates
     /// <summary>Two overlapping openings as one: the earlier start (unknown if either is) and the later end.</summary>
     private static Occurrence Union(Occurrence a, Occurrence b)
     {
-        DateTimeOffset? start = a.Start is { } aStart && b.Start is { } bStart ? Utc(Math.Min(aStart.UtcTicks, bStart.UtcTicks)) : null;
+        DateTimeOffset? start = a.Start.HasValue && b.Start.HasValue ? Utc(Math.Min(a.Start.Value.UtcTicks, b.Start.Value.UtcTicks)) : null;
         DateTimeOffset? end = (a.End, b.End) switch
         {
             ({ } aEnd, { } bEnd) => Utc(Math.Max(aEnd.UtcTicks, bEnd.UtcTicks)),
