@@ -91,6 +91,15 @@ A suppression covers every mutant of that kind in the code that follows it, so k
 
 It does tell PR runs to ignore changes to test data (`since.ignore-changes-in`: `Fixtures/` and `Corpus/`). Without that, Stryker treats any non-C# file changed in the test project as touching everything and tests all mutants, about 25 minutes in CI. The tests that read those files still run on every PR. Manual and labelled runs don't use `--since`, so they still test everything.
 
+### Adding and dropping tests
+
+Every test should catch a fault no other test catches, or pin behaviour that [the design](docs/design.md) states:
+
+- **Add** a test only when it kills a mutant no existing test kills, such as a survivor, or pins behaviour named in the design.
+- **Simplify instead** when the mutant sits in code the design doesn't need: remove or simplify that code rather than writing a test to hold it in place.
+- **Prefer a row** in an existing theory to a new method.
+- **Drop** a test when it kills no mutant that another test doesn't also kill, and another test already pins the behaviour it checks. Find these with the per-test kill data (each mutant's `killedBy`) in a full run's JSON report. A test that kills nothing is not chaff yet: its mutants may not compile, so check them first. Label a PR that drops tests `mutation`, so its run covers everything the dropped tests killed.
+
 ## Per-frame code
 
 Code that runs on every frame, such as a window's `Draw` or a framework update handler, must not allocate: the garbage collector pauses to clean up after it, and the pauses show up as hitches in the game. LINQ, string interpolation into a `string`, lambdas that capture variables, boxing, `foreach` over an `IReadOnlyList` or `IEnumerable` (its enumerator is boxed) and `new` of a class all allocate. Dalamud's ImGui calls take `ImU8String`, so interpolating straight into one, as in `ImGui.SetTooltip($"…")` or `Scoped.Id($"…")`, doesn't. Some Dalamud helpers allocate on every call: `ImRaii.PushId`, `PushStyle`, `PushColor`, `Disabled` and `PushIndent` (use `Scoped` instead), `IFontHandle.Push` (use `HeldFont`), and `ImGuiComponents.HelpMarker` (use `ConfigWindow.HelpMarker`). `ImRaii.Child` and `Popup` don't.
